@@ -2,9 +2,16 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { Sprout } from "lucide-react";
+import { useStore } from "@/lib/store";
+import { useEffect } from "react";
 
 export default function Welcome() {
   const [, setLocation] = useLocation();
+  const userId = useStore((s) => s.userId);
+
+  useEffect(() => {
+    if (userId) setLocation("/home");
+  }, [userId]);
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-green-50 to-background">
@@ -42,6 +49,7 @@ export default function Welcome() {
         className="w-full max-w-xs"
       >
         <Button 
+          data-testid="button-begin"
           size="lg" 
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-full h-14 text-lg shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
           onClick={() => setLocation("/assessment")}

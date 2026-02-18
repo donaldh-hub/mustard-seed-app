@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ArrowRight, Check } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { api } from "@/lib/api";
 
 const questions = [
   {
@@ -36,33 +37,39 @@ export default function Assessment() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [, setLocation] = useLocation();
-  const updateProfile = useStore((state) => state.updateProfile);
-  const completeOnboarding = useStore((state) => state.completeOnboarding);
+  const setUserId = useStore((s) => s.setUserId);
+  const [saving, setSaving] = useState(false);
 
   const currentQ = questions[step];
 
-  const handleNext = (value: any) => {
+  const handleNext = async (value: any) => {
     const newAnswers = { ...answers, [currentQ.id]: value };
     setAnswers(newAnswers);
 
     if (step < questions.length - 1) {
       setStep(step + 1);
     } else {
-      // Finish
-      updateProfile({
-        name: newAnswers.name,
-        goals: [newAnswers.goal],
-        struggles: typeof newAnswers.struggle === 'string' ? [newAnswers.struggle] : [],
-        commitmentLevel: 'serious', // Simplification for prototype
-      });
-      completeOnboarding();
-      setLocation("/home");
+      setSaving(true);
+      try {
+        const commitMap: Record<string, string> = { "Curious 🌱": "casual", "Serious 🌿": "serious", "All in 🌳": "intense" };
+        const user = await api.createUser({
+          name: newAnswers.name,
+          goals: [newAnswers.goal],
+          struggles: [newAnswers.struggle],
+          commitmentLevel: commitMap[newAnswers.commitment] || "serious",
+          isOnboarded: 1,
+        });
+        setUserId(user.id);
+        setLocation("/home");
+      } catch (e) {
+        console.error(e);
+        setSaving(false);
+      }
     }
   };
 
   return (
     <div className="h-full flex flex-col p-8 bg-background relative overflow-hidden">
-      {/* Progress Bar */}
       <div className="absolute top-0 left-0 w-full h-1 bg-muted">
         <motion.div 
           className="h-full bg-primary"
@@ -98,9 +105,10 @@ export default function Assessment() {
                   className="w-full bg-transparent border-b-2 border-primary/30 text-2xl py-2 focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50 font-medium"
                   placeholder={currentQ.placeholder}
                   autoComplete="off"
+                  data-testid={`input-${currentQ.id}`}
                 />
-                <Button type="submit" className="mt-8 w-full rounded-full" size="lg">
-                  Next <ArrowRight className="ml-2 w-4 h-4" />
+                <Button type="submit" className="mt-8 w-full rounded-full" size="lg" disabled={saving} data-testid="button-next">
+                  {saving ? "Saving..." : "Next"} <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </form>
             )}
@@ -111,6 +119,8 @@ export default function Assessment() {
                   <button
                     key={opt}
                     onClick={() => handleNext(opt)}
+                    disabled={saving}
+                    data-testid={`option-${opt}`}
                     className="w-full p-4 text-left rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-all group flex items-center justify-between"
                   >
                     <span className="text-lg font-medium">{opt}</span>
