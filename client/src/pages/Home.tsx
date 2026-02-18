@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Send, Sparkles } from "lucide-react";
 import { processJaeResponse } from "@/lib/heartbeat"; 
 import { motion, AnimatePresence } from "framer-motion";
+import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 export default function Home() {
   const { messages, addMessage, isTyping } = useStore();
@@ -35,8 +36,8 @@ export default function Home() {
     <div className="h-full flex flex-col bg-background relative">
       {/* Header / Jae Presence */}
       <header className="p-4 border-b border-border/40 bg-white/50 backdrop-blur-sm sticky top-0 z-10 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm">
-          <Sparkles className="w-5 h-5 text-primary" />
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm overflow-hidden">
+          <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
         </div>
         <div>
           <h1 className="font-serif font-semibold text-lg">Jae</h1>
@@ -61,8 +62,8 @@ export default function Home() {
               className={`flex items-end gap-2 mb-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {msg.sender === 'jae' && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1">
-                  <Sparkles className="w-4 h-4 text-primary" />
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1 overflow-hidden">
+                  <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
                 </div>
               )}
 
