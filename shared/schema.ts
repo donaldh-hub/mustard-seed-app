@@ -38,9 +38,29 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 
+export const goals = pgTable("goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  title: text("title").notNull(),
+  goalType: text("goal_type").notNull().default("untargeted"),
+  metricType: text("metric_type").notNull().default("actions"),
+  targetDate: text("target_date"),
+  weeklyTarget: integer("weekly_target").notNull().default(3),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type Goal = typeof goals.$inferSelect;
+
 export const entries = pgTable("entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
+  goalId: varchar("goal_id"),
   date: text("date").notNull(), // YYYY-MM-DD
   summary: text("summary").notNull(),
   mood: text("mood").notNull(), // 'happy' | 'neutral' | 'sad'

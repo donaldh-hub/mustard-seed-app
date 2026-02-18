@@ -1,0 +1,94 @@
+We are upgrading the Growth screen to support multiple active goals simultaneously.
+
+A user may have:
+- one targeted goal active
+- one untargeted goal active
+at the same time.
+
+This means the Growth screen must show TWO separate “seed growth” tracks (“two trees”).
+
+CRITICAL RULE:
+Water Level and Seed Stage must be computed PER GOAL (goalId), not globally.
+
+--------------------------------------------
+DATA MODEL CHANGES
+--------------------------------------------
+
+1) Add goalId (nullable) to action sources:
+- Memory entries
+- Log entries
+- Check-ins / progress entries
+
+If goalId is null:
+- counts toward general growth only (optional)
+If goalId is present:
+- counts ONLY toward that goal’s Water Level + Seed Stage
+
+2) Create a new server endpoint:
+
+GET /api/users/:id/garden-summary
+
+Return:
+{
+  goals: [
+    {
+      goalId,
+      title,
+      goalType,           // targeted | untargeted
+      metricType,
+      targetDate,         // targeted only
+      weeklyWaterLevelPercent,
+      weeklyActiveDays,   // 0-7
+      lifetimeActiveDays,
+      seedStageName,
+      seedStageDescription,
+      seedStageIconKey,
+      // targeted only:
+      paceStatus,         // On pace | Behind | No data yet
+      weeklyPaceNeeded,
+      weeklyPaceActual,
+      daysRemaining,
+      // untargeted only:
+      weeklyCompletion,   // e.g. 2 of 3
+      weeklyTarget        // 3
+    }
+  ]
+}
+
+All calculations must use ONLY data tied to that goalId.
+No fabrication.
+
+--------------------------------------------
+GROWTH SCREEN UI (Garden View)
+--------------------------------------------
+
+Update Growth.tsx:
+
+1) Replace single-tree layout with a list of Goal Cards.
+
+Each Goal Card shows:
+- title
+- badge: TARGETED / UNTARGETED
+- seed stage (name + 1-line description)
+- water level (XX/100 + X/7)
+- targeted status (paceStatus + daysRemaining)
+- untargeted status (weeklyCompletion)
+
+Buttons:
+- Targeted: "Log Progress" and "View Goal"
+- Untargeted: "Log Action" and "View Goal"
+
+2) Charts:
+- Targeted goal card includes chart (Actual vs Target line)
+- Untargeted goal card includes weekly completion chart (simple bars or streak blocks)
+
+DO NOT merge different goal types into a single chart.
+
+--------------------------------------------
+OUTPUT REQUIRED
+--------------------------------------------
+
+- Server endpoint: /api/users/:id/garden-summary
+- Updated Growth.tsx implementing Garden View
+- Any required updates to Memory/Log/Check-in creation so a goalId can be attached
+- Confirmation: calculations are per-goal, not global

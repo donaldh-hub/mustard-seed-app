@@ -2,10 +2,11 @@ import {
   type User, type InsertUser, users,
   type Message, type InsertMessage, messages,
   type Entry, type InsertEntry, entries,
-  type Assessment, type InsertAssessment, assessments
+  type Assessment, type InsertAssessment, assessments,
+  type Goal, type InsertGoal, goals
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and } from "drizzle-orm";
 import pg from "pg";
 
 export interface IStorage {
@@ -17,7 +18,13 @@ export interface IStorage {
   createMessage(msg: InsertMessage): Promise<Message>;
 
   getEntries(userId: string): Promise<Entry[]>;
+  getEntriesByGoalId(goalId: string): Promise<Entry[]>;
   createEntry(entry: InsertEntry): Promise<Entry>;
+
+  getGoals(userId: string): Promise<Goal[]>;
+  getGoal(id: string): Promise<Goal | undefined>;
+  createGoal(data: InsertGoal): Promise<Goal>;
+  updateGoal(id: string, data: Partial<InsertGoal>): Promise<Goal | undefined>;
 
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   createAssessment(data: InsertAssessment): Promise<Assessment>;
@@ -55,9 +62,32 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(entries).where(eq(entries.userId, userId)).orderBy(desc(entries.createdAt));
   }
 
+  async getEntriesByGoalId(goalId: string): Promise<Entry[]> {
+    return db.select().from(entries).where(eq(entries.goalId, goalId)).orderBy(desc(entries.createdAt));
+  }
+
   async createEntry(entry: InsertEntry): Promise<Entry> {
     const [e] = await db.insert(entries).values(entry).returning();
     return e;
+  }
+
+  async getGoals(userId: string): Promise<Goal[]> {
+    return db.select().from(goals).where(and(eq(goals.userId, userId), eq(goals.isActive, 1))).orderBy(desc(goals.createdAt));
+  }
+
+  async getGoal(id: string): Promise<Goal | undefined> {
+    const [g] = await db.select().from(goals).where(eq(goals.id, id));
+    return g;
+  }
+
+  async createGoal(data: InsertGoal): Promise<Goal> {
+    const [g] = await db.insert(goals).values(data).returning();
+    return g;
+  }
+
+  async updateGoal(id: string, data: Partial<InsertGoal>): Promise<Goal | undefined> {
+    const [g] = await db.update(goals).set(data).where(eq(goals.id, id)).returning();
+    return g;
   }
 
   async getLatestAssessment(userId: string): Promise<Assessment | undefined> {
