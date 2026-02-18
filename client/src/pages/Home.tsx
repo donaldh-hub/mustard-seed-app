@@ -9,6 +9,8 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
+const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
+
 export default function Home() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
@@ -19,6 +21,12 @@ export default function Home() {
   useEffect(() => {
     if (!userId) setLocation("/");
   }, [userId]);
+
+  const { data: assessment } = useQuery({
+    queryKey: ["assessment", userId],
+    queryFn: () => api.getAssessment(userId!),
+    enabled: !!userId,
+  });
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ["messages", userId],
@@ -57,10 +65,18 @@ export default function Home() {
           <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
         </div>
         <div>
-          <h1 className="font-serif font-semibold text-lg">Jae</h1>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            Online
+          <h1 className="font-serif font-semibold text-lg" data-testid="text-jae-name">Jae M. Seed</h1>
+          <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-current-stage">
+            {assessment ? (
+              <>
+                Current Stage: {assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)} {stageEmoji[assessment.stage] || ""}
+              </>
+            ) : (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Online
+              </>
+            )}
           </p>
         </div>
       </header>

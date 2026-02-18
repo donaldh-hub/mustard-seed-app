@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateJaeResponse } from "./heartbeat";
-import { insertUserSchema } from "@shared/schema";
+import { generateJaeResponse, getWeakestHeartbeat } from "./heartbeat";
+import { insertUserSchema, assessments } from "@shared/schema";
+import type { InsertAssessment, Assessment } from "@shared/schema";
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
@@ -67,6 +68,39 @@ export async function registerRoutes(
       const textLower = rawText.toLowerCase();
       let jaeText = "";
       let shouldWater = false;
+
+      const asksStage = /what('?s| is) my stage/i.test(textLower) || /my stage/i.test(textLower) || /current stage/i.test(textLower);
+      const asksFocus = /what should i focus/i.test(textLower) || /focus.*week/i.test(textLower) || /what should i do today/i.test(textLower);
+      const asksWeakest = /weakest.*heartbeat/i.test(textLower) || /which heartbeat/i.test(textLower) || /where.*weakest/i.test(textLower);
+      const asksSmallStep = /one small step/i.test(textLower) || /small step.*today/i.test(textLower) || /give me.*step/i.test(textLower);
+
+      if (asksStage || asksFocus || asksWeakest || asksSmallStep) {
+        const assessment = await storage.getLatestAssessment(userId);
+        if (assessment) {
+          const answers = assessment.answers as number[];
+          if (asksStage) {
+            const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
+            jaeText = `${greeting}your current stage is **${assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)}** ${stageEmoji[assessment.stage] || ""}.\n\n${assessment.motivationalMessage}`;
+          } else if (asksFocus) {
+            const weakest = getWeakestHeartbeat(answers);
+            jaeText = `${greeting}based on your check-in, your weakest area is **${weakest.label}** (avg score: ${weakest.score.toFixed(1)}/5).\n\nI'd suggest focusing there this week. Small, consistent effort in ${weakest.label.toLowerCase()} will compound.`;
+          } else if (asksWeakest) {
+            const weakest = getWeakestHeartbeat(answers);
+            jaeText = `${greeting}your weakest heartbeat is **${weakest.label}** with an average score of ${weakest.score.toFixed(1)}/5.\n\nThis is where the most growth potential lives. Let's work on it.`;
+          } else if (asksSmallStep) {
+            const weakest = getWeakestHeartbeat(answers);
+            const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
+            jaeText = `${greeting}you're in the ${assessment.stage} ${stageEmoji[assessment.stage] || ""} stage, and your weakest area is ${weakest.label}.\n\nHere's one small step for today: focus on one action related to ${weakest.label.toLowerCase()}. Even 5 minutes counts. What will you choose?`;
+          }
+
+          const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+          return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+        } else {
+          jaeText = `${greeting}I don't have your assessment yet. Take the Self Check-In first so I can give you personalized guidance.`;
+          const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+          return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+        }
+      }
 
       const asksGoal =
         /repeat.*goal/i.test(textLower) ||
@@ -152,6 +186,7 @@ export async function registerRoutes(
         jaeText = `${greeting}logged and locked in.\n\n${goalRef}\n${obstacleRef}\n\nWhat's the next small step you can repeat tomorrow?`;
 
       } else {
+        const latestAssessment = await storage.getLatestAssessment(userId);
         const result = generateJaeResponse(rawText, {
           name,
           goal,
@@ -159,6 +194,8 @@ export async function registerRoutes(
           streak,
           treeStage,
           waterLevel,
+          stage: latestAssessment?.stage,
+          assessmentAnswers: latestAssessment?.answers as number[] | undefined,
         });
         jaeText = result.text;
 
@@ -196,6 +233,50 @@ export async function registerRoutes(
   app.get("/api/users/:userId/entries", async (req, res) => {
     const list = await storage.getEntries(req.params.userId);
     return res.json(list);
+  });
+
+  app.get("/api/users/:userId/assessment", async (req, res) => {
+    const assessment = await storage.getLatestAssessment(req.params.userId);
+    return res.json(assessment || null);
+  });
+
+  app.post("/api/users/:userId/assessment", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { answers } = req.body;
+      if (!Array.isArray(answers) || answers.length !== 10) {
+        return res.status(400).json({ message: "answers must be an array of 10 numbers" });
+      }
+      const totalScore = answers.reduce((sum: number, v: number) => sum + v, 0);
+
+      let stage: string;
+      if (totalScore <= 15) stage = "seed";
+      else if (totalScore <= 30) stage = "sprout";
+      else if (totalScore <= 45) stage = "growth";
+      else stage = "bloom";
+
+      const motivationalMessages: Record<string, string> = {
+        seed: "You're planting new habits. Focus on clarity and one small daily action. Every tree starts small.",
+        sprout: "You're building consistency. Keep watering your routines and refining your mindset. Consistency feeds the seed.",
+        growth: "You're growing strong roots. Stay flexible and keep adapting. Growth isn't comfortable — it's movement.",
+        bloom: "You're thriving. Keep nurturing what's working and share your growth with others. Your effort is showing.",
+      };
+
+      const motivationalMessage = motivationalMessages[stage];
+
+      const assessment = await storage.createAssessment({
+        userId,
+        answers,
+        totalScore,
+        stage,
+        motivationalMessage,
+      });
+
+      return res.json(assessment);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
   });
 
   return httpServer;

@@ -134,6 +134,74 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+const STAGE_CONTEXT: Record<string, { tone: string[]; phrases: string[]; prompts: string[] }> = {
+  seed: {
+    tone: ["Grounding", "gentle start", "self-acceptance"],
+    phrases: ["Every tree starts small.", "Don't rush the roots.", "You showed up, that's step one."],
+    prompts: ["What one thing feels clear to you right now?", "Let's plant something small today.", "Stillness is progress too."]
+  },
+  sprout: {
+    tone: ["Momentum", "reassurance", "steady"],
+    phrases: ["Keep watering what's working.", "Consistency feeds the seed.", "You're learning your rhythm."],
+    prompts: ["What routine felt good this week?", "Where did you notice progress, even small?", "Keep tending your seed — growth is happening."]
+  },
+  growth: {
+    tone: ["Challenge", "reflection", "adaptability"],
+    phrases: ["Growth isn't comfortable — it's movement.", "You've built roots, now stretch higher.", "Progress lives in the tension."],
+    prompts: ["What did you learn from what didn't work?", "Where are you being stretched lately?", "You're not stuck — you're strengthening."]
+  },
+  bloom: {
+    tone: ["Celebration", "mastery", "humility"],
+    phrases: ["You're in bloom — share what you've grown.", "Your effort is showing.", "Keep your soil rich with gratitude."],
+    prompts: ["Who can you pour into next?", "What's still teaching you even in success?", "Keep growing forward — every season matters."]
+  }
+};
+
+// Q1 (clear picture) → Clarity
+// Q2 (small action daily) → Consistency (Small Steps)
+// Q3 (consistent when motivation dips) → Consistency
+// Q4 (effort > talent) → Mindset
+// Q5 (adjust instead of quit) → Adaptation
+// Q6 (face discomfort) → Courage
+// Q7 (grace when fall short) → Mindset
+// Q8 (track/reflect progress) → Adaptation
+// Q9 (accountability tools/people) → Consistency
+// Q10 (proud of showing up) → Courage
+
+const QUESTION_HEARTBEAT_MAP: { heartbeat: string; label: string }[] = [
+  { heartbeat: "clarity", label: "Clarity" },
+  { heartbeat: "consistency", label: "Consistency (Small Steps)" },
+  { heartbeat: "consistency", label: "Consistency" },
+  { heartbeat: "mindset", label: "Mindset" },
+  { heartbeat: "adaptation", label: "Adaptation" },
+  { heartbeat: "courage", label: "Courage" },
+  { heartbeat: "mindset", label: "Mindset" },
+  { heartbeat: "adaptation", label: "Adaptation" },
+  { heartbeat: "consistency", label: "Consistency" },
+  { heartbeat: "courage", label: "Courage" },
+];
+
+export function getWeakestHeartbeat(answers: number[]): { heartbeat: string; label: string; score: number } {
+  const totals: Record<string, { sum: number; count: number; label: string }> = {};
+  for (let i = 0; i < Math.min(answers.length, 10); i++) {
+    const mapping = QUESTION_HEARTBEAT_MAP[i];
+    if (!totals[mapping.heartbeat]) {
+      totals[mapping.heartbeat] = { sum: 0, count: 0, label: mapping.label };
+    }
+    totals[mapping.heartbeat].sum += answers[i];
+    totals[mapping.heartbeat].count++;
+  }
+
+  let weakest = { heartbeat: "clarity", label: "Clarity", score: 5 };
+  for (const [key, val] of Object.entries(totals)) {
+    const avg = val.sum / val.count;
+    if (avg < weakest.score) {
+      weakest = { heartbeat: key, label: val.label, score: avg };
+    }
+  }
+  return weakest;
+}
+
 type UserContext = {
   name: string;
   goal: string;
@@ -141,6 +209,8 @@ type UserContext = {
   streak: number;
   treeStage: number;
   waterLevel: number;
+  stage?: string;
+  assessmentAnswers?: number[];
 };
 
 export function generateJaeResponse(userText: string, ctx: UserContext): { text: string; mood: 'happy' | 'neutral' | 'sad' } {
@@ -176,6 +246,16 @@ export function generateJaeResponse(userText: string, ctx: UserContext): { text:
     return {
       text: `${greeting}that's a win.${goalRef}\n\nWhat made it click for you today?`,
       mood: 'happy',
+    };
+  }
+
+  if (ctx.stage && STAGE_CONTEXT[ctx.stage]) {
+    const stageCtx = STAGE_CONTEXT[ctx.stage];
+    const phrase = pick(stageCtx.phrases);
+    const prompt = pick(stageCtx.prompts);
+    return {
+      text: `${greeting}${phrase}\n\n${prompt}`,
+      mood: 'neutral',
     };
   }
 

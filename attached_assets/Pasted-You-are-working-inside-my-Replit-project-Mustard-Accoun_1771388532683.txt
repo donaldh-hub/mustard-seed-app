@@ -1,0 +1,154 @@
+You are working inside my Replit project Mustard Accountability Partner.
+
+I am attaching AssessmentScreen_Canvas.
+
+Your job is to replace/fix the current “assessment” experience so it matches the attachment EXACTLY and so Jae can use the results to give accurate feedback.
+
+1) What’s broken right now (fix this)
+
+The current onboarding questions (“What should I call you?”, “What’s the one big thing…”, “What usually gets in the way?”, “How committed…”) are NOT the real assessment and do not score accurately.
+
+Jae’s replies are still sometimes generic and the assessment data is not consistently driving Five Heartbeats mentoring.
+
+The assessment result MUST update the app UI (banner/header) and be available after refresh.
+
+2) Build the Assessment exactly like the attachment
+
+Create an Assessment / Self Check-In screen with:
+
+Header: “Your Assessment” (or “Self Check-In”)
+
+10 questions, each rated 0–5 (Strongly Disagree → Strongly Agree), exactly as written in the attachment:
+
+Q1–Q10 (Clarity, small action, consistency, mindset, adaptation, discomfort, grace, reflection, accountability, proud of showing up)
+
+UI input per question: slider or buttons (mobile-friendly)
+
+A Submit button that:
+
+sums all 10 answers into a total score (0–50)
+
+calculates the Stage based on ranges:
+
+0–15 Seed
+
+16–30 Sprout
+
+31–45 Growth
+
+46–50 Bloom
+
+generates a motivational message based on stage using the attachment’s Stage Context + Tone Keywords + Example Phrasing
+
+A Result Box after submit:
+
+“Your Score: X”
+
+“Stage: Seed/Sprout/Growth/Bloom”
+
+motivational message (short, clear, Mustard Seed tone)
+
+Retake/Retry button: resets all answers and result.
+
+3) Persist the result (CRITICAL)
+
+When the assessment is submitted, persist it so it survives refresh and drives the app:
+
+Save assessment result in local storage using key: assessmentResult
+
+Also sync/save to the backend storage that the app already uses (same approach as chat/messages/entries).
+
+Store at minimum:
+
+userId
+
+timestamp/date
+
+answers array (10 values)
+
+totalScore
+
+stage
+
+motivationalMessage
+
+4) Wire it into the Mentor (Chat) screen (CRITICAL)
+
+On Mentor/Chat screen:
+
+Show a banner/header area that displays:
+
+Jae avatar + name
+
+“Current Stage: ___” (Seed/Sprout/Growth/Bloom)
+
+This banner must update immediately after assessment submit (no full reload).
+
+Jae’s responses must be stage-aware:
+
+Use the Stage Context + Tone Keywords + Sample Prompts from the attachment as guardrails.
+
+Responses should feel like an accountability partner, not therapy, not generic fluff.
+
+5) Tie the assessment to the Five Heartbeats (make it actually “assess”)
+
+After the user completes the assessment, Jae should be able to interpret it through the Mustard Seed System Five Heartbeats:
+
+Clarity of Vision & Why
+
+Small Steps + Consistency
+
+Mindset over Method
+
+Feedback & Adaptation
+
+Courageous Action
+
+Map the 10 questions to Heartbeats (you choose the mapping, but do it logically and document it in comments or a short internal README note).
+
+Then ensure Jae can answer:
+
+“What’s my stage?”
+
+“What should I focus on this week?”
+
+“Which heartbeat is weakest for me right now?”
+
+“Give me one small step for today.”
+
+6) Remove confusion for users who “don’t know the answers”
+
+The questions are rating-based, so users don’t need to “know answers.”
+Make the UI include a one-line helper under the header:
+
+“No overthinking—answer based on how true this feels TODAY.”
+
+That’s it. Keep it simple and calming.
+
+7) Acceptance tests (you must verify)
+
+After you implement, verify these flows end-to-end:
+
+Complete assessment → result shows score + stage + message
+
+Refresh page → stage/result still present
+
+Chat screen banner shows correct stage immediately after submit
+
+Ask chat: “What’s my stage?” → Jae answers correctly
+
+Ask chat: “What should I do today?” → Jae gives a stage-aware, heartbeat-aware small step
+
+Retake assessment → updates stored result and banner correctly
+
+8) Deliverables
+
+Implemented Assessment screen as per attachment
+
+Persistence working (local + backend)
+
+Mentor banner + stage-aware mentoring working
+
+Quick summary of what you changed and where (file names, key functions)
+
+Do not ask me to edit code manually. Do it.

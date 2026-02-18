@@ -1,7 +1,8 @@
 import { 
   type User, type InsertUser, users,
   type Message, type InsertMessage, messages,
-  type Entry, type InsertEntry, entries 
+  type Entry, type InsertEntry, entries,
+  type Assessment, type InsertAssessment, assessments
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, asc } from "drizzle-orm";
@@ -17,6 +18,9 @@ export interface IStorage {
 
   getEntries(userId: string): Promise<Entry[]>;
   createEntry(entry: InsertEntry): Promise<Entry>;
+
+  getLatestAssessment(userId: string): Promise<Assessment | undefined>;
+  createAssessment(data: InsertAssessment): Promise<Assessment>;
 }
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -54,6 +58,16 @@ export class DatabaseStorage implements IStorage {
   async createEntry(entry: InsertEntry): Promise<Entry> {
     const [e] = await db.insert(entries).values(entry).returning();
     return e;
+  }
+
+  async getLatestAssessment(userId: string): Promise<Assessment | undefined> {
+    const [assessment] = await db.select().from(assessments).where(eq(assessments.userId, userId)).orderBy(desc(assessments.createdAt)).limit(1);
+    return assessment;
+  }
+
+  async createAssessment(data: InsertAssessment): Promise<Assessment> {
+    const [assessment] = await db.insert(assessments).values(data).returning();
+    return assessment;
   }
 }
 

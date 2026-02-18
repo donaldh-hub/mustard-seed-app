@@ -53,3 +53,20 @@ export const insertEntrySchema = createInsertSchema(entries).omit({
 });
 export type InsertEntry = z.infer<typeof insertEntrySchema>;
 export type Entry = typeof entries.$inferSelect;
+
+export const assessments = pgTable("assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  answers: jsonb("answers").notNull(),
+  totalScore: integer("total_score").notNull(),
+  stage: text("stage").notNull(),
+  motivationalMessage: text("motivational_message").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAssessmentSchema = createInsertSchema(assessments).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
+export type Assessment = typeof assessments.$inferSelect;

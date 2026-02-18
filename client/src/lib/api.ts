@@ -27,4 +27,7 @@ export const api = {
     }),
 
   getEntries: (userId: string) => fetchJson<any[]>(`/users/${userId}/entries`),
+
+  getAssessment: (userId: string) => fetchJson<any>(`/users/${userId}/assessment`),
+  submitAssessment: (userId: string, answers: number[]) => fetchJson<any>(`/users/${userId}/assessment`, { method: "POST", body: JSON.stringify({ answers }) }),
 };
