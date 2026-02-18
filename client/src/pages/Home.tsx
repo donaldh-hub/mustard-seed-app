@@ -1,30 +1,59 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Send, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen } from "lucide-react";
+import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
+
+const HEARTBEAT_LABELS: Record<string, string> = {
+  clarity: "Clarity of Vision & Why",
+  consistency: "Small Steps + Consistency",
+  mindset: "Mindset over Method",
+  adaptation: "Feedback & Adaptation",
+  courage: "Courageous Action",
+};
+
+const HEARTBEAT_ORDER = ["clarity", "consistency", "mindset", "adaptation", "courage"];
+
+function focusMessage(weakest: string): string {
+  const map: Record<string, string> = {
+    clarity: "Get clear on your why — everything else follows from it.",
+    consistency: "Small daily reps beat big occasional efforts.",
+    mindset: "Your mindset shapes your results more than your method.",
+    adaptation: "Listen to the feedback. Adjust. Keep moving.",
+    courage: "Take the action you've been avoiding. Growth lives there.",
+  };
+  return map[weakest] || "Keep showing up. Consistency compounds.";
+}
 
 export default function Home() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const qc = useQueryClient();
+  const [heartbeatsOpen, setHeartbeatsOpen] = useState(false);
 
   useEffect(() => {
     if (!userId) setLocation("/");
   }, [userId]);
 
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
+    enabled: !!userId,
+  });
+
   const { data: assessment, isLoading: assessmentLoading } = useQuery({
     queryKey: ["assessment", userId],
     queryFn: () => api.getAssessment(userId!),
+    enabled: !!userId,
+  });
+
+  const { data: entries = [] } = useQuery({
+    queryKey: ["entries", userId],
+    queryFn: () => api.getEntries(userId!),
     enabled: !!userId,
   });
 
@@ -34,153 +63,197 @@ export default function Home() {
     }
   }, [assessment, assessmentLoading, userId]);
 
-  const { data: messages = [], isLoading } = useQuery({
-    queryKey: ["messages", userId],
-    queryFn: () => api.getMessages(userId!),
-    enabled: !!userId,
-  });
+  if (!userId || assessmentLoading) return null;
+  if (!assessment) return null;
 
-  const sendMutation = useMutation({
-    mutationFn: (text: string) => api.sendMessage(userId!, text),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["messages", userId] });
-      qc.invalidateQueries({ queryKey: ["user", userId] });
-      qc.invalidateQueries({ queryKey: ["entries", userId] });
-    },
-  });
+  const userName = user?.name || "there";
+  const stage = assessment.stage
+    ? assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)
+    : "Seed";
+  const emoji = assessment.stage ? (stageEmoji[assessment.stage] || "🌱") : "🌱";
+  const assessmentDate = assessment.createdAt
+    ? new Date(assessment.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "—";
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, sendMutation.isPending]);
+  const heartbeatScores: Record<string, number> = assessment.heartbeatScores || {};
+  const weakest = assessment.weakestHeartbeat || "";
+  const weakestScore = heartbeatScores[weakest] ?? 0;
+  const goal = user?.goals?.[0] || "";
+  const waterLevel = user?.waterLevel ?? 0;
 
-  const handleSend = () => {
-    if (!input.trim() || sendMutation.isPending) return;
-    const text = input;
-    setInput("");
-    sendMutation.mutate(text);
-  };
-
-  if (!userId) return null;
+  const recentEntry = entries.length > 0
+    ? entries.sort((a: any, b: any) => (b.createdAt > a.createdAt ? 1 : -1))[0]
+    : null;
 
   return (
-    <div className="h-full flex flex-col bg-background relative">
-      <header className="p-4 border-b border-border/40 bg-white/50 backdrop-blur-sm sticky top-0 z-10 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm overflow-hidden">
-          <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <h1 className="font-serif font-semibold text-lg" data-testid="text-jae-name">Jae M. Seed</h1>
-          <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-current-stage">
-            {assessment ? (
-              <>
-                Current Stage: {assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)} {stageEmoji[assessment.stage] || ""}
-              </>
-            ) : (
-              <>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                Online
-              </>
-            )}
-          </p>
-        </div>
-      </header>
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex-1 overflow-y-auto pb-24">
+        <header className="p-5 pb-3 bg-gradient-to-b from-primary/5 to-transparent">
+          <h1 className="font-serif font-semibold text-xl" data-testid="text-user-name">{userName}'s Report</h1>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-sm font-medium text-primary" data-testid="text-stage">
+              {emoji} {stage}
+            </span>
+            <span className="text-xs text-muted-foreground">·</span>
+            <span className="text-xs text-muted-foreground" data-testid="text-assessment-date">
+              Assessed {assessmentDate}
+            </span>
+          </div>
+        </header>
 
-      <div 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 pb-32"
-      >
-        {isLoading && (
-          <div className="text-center text-muted-foreground text-sm py-8">Loading messages...</div>
-        )}
-
-        {!isLoading && messages.length === 0 && (
+        <div className="px-5 space-y-4">
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-end gap-2 justify-start"
+            transition={{ delay: 0.05 }}
+            className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+            data-testid="card-focus"
           >
-            <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-              <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+            <div className="flex items-center gap-2 mb-2">
+              <Target className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Focus Area</h2>
             </div>
-            <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-border/50">
-              Hi, I'm Jae. I'm here to help you grow, one small step at a time. Ready to begin?
-            </div>
-          </motion.div>
-        )}
-
-        <AnimatePresence initial={false}>
-          {messages.map((msg: any) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex items-end gap-2 mb-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            <p className="text-base font-medium capitalize" data-testid="text-weakest-heartbeat">{weakest || "—"}</p>
+            <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-weakest-score">Score: {weakestScore} / 5</p>
+            <p className="text-sm text-foreground/80 mt-2 leading-relaxed" data-testid="text-focus-message">{focusMessage(weakest)}</p>
+            <Button
+              onClick={() => setLocation("/chat")}
+              className="mt-3 w-full rounded-full"
+              size="sm"
+              data-testid="button-work-with-jae"
             >
-              {msg.sender === 'jae' && (
-                <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-                  <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
-                </div>
-              )}
-
-              <div 
-                className={`max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.sender === 'user' 
-                    ? 'bg-primary text-primary-foreground rounded-br-sm' 
-                    : 'bg-white text-foreground rounded-bl-sm border border-border/50'
-                }`}
-              >
-                {msg.text}
-              </div>
-
-              {msg.sender === 'user' && (
-                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1">
-                    <div className="w-4 h-4 bg-primary rounded-full opacity-50" />
-                 </div>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {sendMutation.isPending && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 text-muted-foreground text-xs ml-14"
-          >
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce" />
-            </div>
-            Jae is thinking...
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Work with Jae
+            </Button>
           </motion.div>
-        )}
-      </div>
 
-      <div className="absolute bottom-[4.5rem] w-full p-4 flex flex-col gap-3 bg-gradient-to-t from-white via-white/90 to-transparent pt-8">
-        <form 
-          onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-          className="flex gap-2 items-center"
-        >
-          <Input 
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
-            className="rounded-full bg-white border border-border shadow-lg h-12 px-6 focus-visible:ring-1 focus-visible:ring-primary"
-            data-testid="input-chat"
-          />
-          <Button 
-            type="submit" 
-            size="icon" 
-            className="rounded-full h-12 w-12 shrink-0 bg-primary hover:bg-primary/90 shadow-md"
-            disabled={!input.trim() || sendMutation.isPending}
-            data-testid="button-send"
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+            data-testid="card-goal"
           >
-            <Send className="w-5 h-5" />
-          </Button>
-        </form>
+            <div className="flex items-center gap-2 mb-2">
+              <Brain className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Goal</h2>
+            </div>
+            {goal ? (
+              <p className="text-sm text-foreground" data-testid="text-goal">{goal}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No goal saved yet</p>
+            )}
+            <Button
+              onClick={() => setLocation("/chat")}
+              variant="outline"
+              className="mt-3 w-full rounded-full"
+              size="sm"
+              data-testid="button-refine-goal"
+            >
+              Refine Goal
+            </Button>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-white rounded-2xl border border-border/50 shadow-sm overflow-hidden"
+            data-testid="card-heartbeats"
+          >
+            <button
+              onClick={() => setHeartbeatsOpen(!heartbeatsOpen)}
+              className="w-full flex items-center justify-between p-4 text-left"
+              data-testid="button-toggle-heartbeats"
+            >
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Five Heartbeats</h2>
+              </div>
+              {heartbeatsOpen ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+            {heartbeatsOpen && (
+              <div className="px-4 pb-4 space-y-3">
+                {HEARTBEAT_ORDER.map((key) => {
+                  const score = heartbeatScores[key] ?? 0;
+                  const isWeakest = key === weakest;
+                  return (
+                    <div
+                      key={key}
+                      className={`flex items-center justify-between py-2 px-3 rounded-xl ${isWeakest ? "bg-primary/10 border border-primary/30" : "bg-muted/30"}`}
+                      data-testid={`heartbeat-row-${key}`}
+                    >
+                      <span className={`text-sm ${isWeakest ? "font-semibold text-primary" : "text-foreground"}`}>
+                        {HEARTBEAT_LABELS[key]}
+                        {isWeakest && <span className="ml-1 text-xs">(focus)</span>}
+                      </span>
+                      <span className={`text-sm font-mono font-medium ${isWeakest ? "text-primary" : "text-muted-foreground"}`}>
+                        {score.toFixed(1)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+            data-testid="card-recent-memory"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Recent Memory</h2>
+            </div>
+            {recentEntry ? (
+              <div>
+                <p className="text-xs text-muted-foreground" data-testid="text-memory-date">{recentEntry.date}</p>
+                <p className="text-sm text-foreground mt-1" data-testid="text-memory-summary">{recentEntry.summary}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic" data-testid="text-no-memory">No memories yet</p>
+            )}
+            <Button
+              onClick={() => setLocation("/calendar")}
+              variant="outline"
+              className="mt-3 w-full rounded-full"
+              size="sm"
+              data-testid="button-view-memory"
+            >
+              View Memory Bank
+            </Button>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+            data-testid="card-water-level"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Droplets className="w-4 h-4 text-blue-500" />
+              <h2 className="text-sm font-semibold text-foreground">Water Level</h2>
+            </div>
+            <div className="flex items-end gap-2">
+              <span className="text-3xl font-bold text-blue-600" data-testid="text-water-level">{waterLevel}</span>
+              <span className="text-sm text-muted-foreground mb-1">/ 100</span>
+            </div>
+            <div className="mt-2 h-2 bg-blue-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(waterLevel, 100)}%` }}
+              />
+            </div>
+          </motion.div>
+        </div>
       </div>
     </div>
   );

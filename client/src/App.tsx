@@ -8,6 +8,7 @@ import Layout from "@/components/Layout";
 import Welcome from "@/pages/Welcome";
 import Assessment from "@/pages/Assessment";
 import Home from "@/pages/Home";
+import Chat from "@/pages/Chat";
 import ProgressPage from "@/pages/Progress";
 import CalendarPage from "@/pages/Calendar";
 import Profile from "@/pages/Profile";
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/" component={Welcome} />
         <Route path="/assessment" component={Assessment} />
         <Route path="/home" component={Home} />
+        <Route path="/chat" component={Chat} />
         <Route path="/progress" component={ProgressPage} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/profile" component={Profile} />
