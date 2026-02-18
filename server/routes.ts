@@ -8,6 +8,14 @@ function todayStr(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+function stripSmartQuotes(text: string): string {
+  return text
+    .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
+    .replace(/^["'\s]+/, "")
+    .replace(/["'\s]+$/, "");
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -40,7 +48,7 @@ export async function registerRoutes(
   app.post("/api/users/:userId/messages", async (req, res) => {
     try {
       const userId = req.params.userId;
-      const rawText = String(req.body?.text ?? "").trim();
+      const rawText = stripSmartQuotes(String(req.body?.text ?? "").trim());
       if (!rawText) return res.status(400).json({ message: "Text is required" });
 
       const userMsg = await storage.createMessage({ userId, text: rawText, sender: "user" });
@@ -73,7 +81,10 @@ export async function registerRoutes(
         /my struggle/i.test(textLower) ||
         /remind me.*obstacle/i.test(textLower);
 
-      const isSave = /^save:/i.test(textLower) || /save that/i.test(textLower) || /remember this/i.test(textLower);
+      const isSave =
+        /^save:/i.test(textLower) ||
+        /save that/i.test(textLower) ||
+        /remember this/i.test(textLower);
 
       const isLog =
         /^log:/i.test(textLower) ||
