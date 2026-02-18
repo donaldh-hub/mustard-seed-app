@@ -61,6 +61,8 @@ export const assessments = pgTable("assessments", {
   totalScore: integer("total_score").notNull(),
   stage: text("stage").notNull(),
   motivationalMessage: text("motivational_message").notNull(),
+  heartbeatScores: jsonb("heartbeat_scores").notNull().default(sql`'{}'::jsonb`),
+  weakestHeartbeat: text("weakest_heartbeat").notNull().default(''),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

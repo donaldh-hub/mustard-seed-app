@@ -37,6 +37,7 @@ Preferred communication style: Simple, everyday language.
   - `users` — id (UUID), name, goals (text array), struggles (text array), commitmentLevel, isOnboarded, waterLevel, treeStage, streak, createdAt
   - `messages` — id (UUID), userId, text, sender ('user' | 'jae'), createdAt
   - `entries` — id (UUID), userId, date (YYYY-MM-DD string), summary, mood ('happy' | 'neutral' | 'sad'), createdAt
+  - `assessments` — id (UUID), userId, answers (jsonb), totalScore, stage, motivationalMessage, heartbeatScores (jsonb), weakestHeartbeat, createdAt
 - **Migrations**: Use `npm run db:push` (drizzle-kit push) to sync schema to database
 
 ### Shared Code
@@ -52,6 +53,20 @@ Preferred communication style: Simple, everyday language.
 
 ### Required Services
 - **PostgreSQL Database**: Must be provisioned and connected via `DATABASE_URL` environment variable. Used for all persistent data (users, messages, entries).
+
+### Onboarding Flow
+- **First-run**: Welcome → Assessment (required) → Chat HQ. New users cannot access Chat, Progress, Calendar, or Profile until Assessment is submitted.
+- **Returning users**: Automatically skip to Chat HQ if assessment exists. Can retake from Profile page.
+- **Assessment scoring**: 10 questions (0-5 scale), totalScore mapped to stages: Seed (0-15), Sprout (16-30), Growth (31-45), Bloom (46-50)
+- **Heartbeat mapping**: Q1→Clarity, Q2-3,9→Consistency, Q4,7→Mindset, Q5,8→Adaptation, Q6,10→Courage
+- **Data persistence**: Assessment stored in both localStorage (key: assessmentResult) and backend database
+
+### Five Heartbeats Framework
+1. Clarity of Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
 
 ### No External AI Services
 - The Jae coaching system runs entirely locally using keyword matching against a predefined module library. There are no OpenAI, Google AI, or other external AI API calls currently in use (though the build script includes `@google/generative-ai` and `openai` in its bundle allowlist, suggesting potential future integration).

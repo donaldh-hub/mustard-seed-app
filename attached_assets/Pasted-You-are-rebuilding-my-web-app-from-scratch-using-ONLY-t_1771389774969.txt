@@ -1,0 +1,92 @@
+You are rebuilding my web app from scratch using ONLY the attached canvases as the source of truth.
+
+NON-NEGOTIABLES
+1) This is NOT a workout app. It is a DIGITAL ACCOUNTABILITY PARTNER.
+2) The coaching framework is the Mustard Seed System Five Heartbeats (use these exact names, in this exact order):
+   (1) Clarity of Vision & Why
+   (2) Small Steps + Consistency
+   (3) Mindset over Method
+   (4) Feedback & Adaptation
+   (5) Courageous Action
+3) Do not invent screens, questions, scoring, flows, or copy that are not present in the attached canvases.
+   If something is missing, label it clearly as: UNSPECIFIED (missing canvas/source) and stop filling gaps with assumptions.
+
+SOURCE OF TRUTH
+- Use ONLY the attached canvases/spec documents for:
+  - screen layout and UI elements
+  - question wording
+  - scoring rules and stage mapping
+  - routing rules (first run vs returning user)
+  - persistence/storage rules
+  - how Jae should behave (mentor logic)
+
+FIRST-RUN FLOW (MANDATORY)
+Implement a hard gate so the first-time experience is:
+1) Signup/Login → 2) REQUIRED ASSESSMENT → 3) Mentor/Chat HQ → 4) Progress/Garden → 5) Memory Bank → 6) Profile/Settings
+Rules:
+- New users MUST see the Assessment immediately after signup/login.
+- Users cannot access Chat HQ until Assessment is submitted successfully.
+- Returning users must NOT be forced into the Assessment unless they tap “Retake Assessment”.
+
+ASSESSMENT (MANDATORY)
+Build the Assessment screen exactly as the canvas specifies:
+1) Render the exact assessment questions (verbatim) from the canvas.
+2) Use the answer input type from the canvas (e.g., 0–5 scale). Include the legend if specified.
+3) On submit:
+   - compute totalScore
+   - compute stage (Seed/Sprout/Growth/Bloom or as defined in the canvas)
+   - compute heartbeatScores by mapping questions to the Five Heartbeats (use the mapping described in the canvas; if not specified, create a logical mapping and DOCUMENT it in code comments and the final report).
+4) Persist the assessment result:
+   - Store locally (localStorage key: assessmentResult) AND
+   - Store in backend storage tied to userId, including:
+     userId, createdAt, answers, totalScore, stage, heartbeatScores, weakestHeartbeat
+5) Provide Retake Assessment functionality (resets answers + overwrites stored result).
+
+JAE / MENTOR (MANDATORY)
+Refactor Jae so it behaves like a real accountability partner and uses the stored assessment:
+1) Jae must always be stage-aware and heartbeat-aware:
+   - Reads stage + weakestHeartbeat + user context on every reply
+   - Response tone must match the stage guidance from the canvases
+2) Jae must support intent commands (as described in canvases; if not specified use these defaults):
+   - “Save:” or “Save that” → creates a Memory entry and confirms it saved
+   - “Log:” or “Logged:” → creates a Progress entry, updates streak/water/growth, and confirms what changed
+   - “What’s my stage?” → returns stored stage
+   - “Which heartbeat is weakest?” → returns weakestHeartbeat + one small step
+3) Remove generic fallback responses like “I’m listening. Tell me more about that.” unless the canvas explicitly calls for it.
+4) Mentor/Chat screen must display a banner showing:
+   - Jae presence
+   - “Current Stage: ___”
+   - (optional) “Focus Heartbeat: ___” if included in canvas
+
+PROGRESS / GARDEN (MANDATORY)
+Wire Progress/Garden to real data:
+1) Progress reflects:
+   - streak
+   - stage/growth
+   - water/progress meter
+2) “Log:” events from chat must update Progress immediately (no refresh required).
+
+MEMORY BANK (MANDATORY)
+Wire Memory Bank to real data:
+1) “Save:” events from chat create Memory entries immediately.
+2) Memory Bank shows newest-first entries and an empty-state message consistent with canvas tone.
+
+DATA + ROUTES (MANDATORY)
+1) Remove or disable outdated routes, unused onboarding logic, and any duplicate message handlers that conflict with the rebuild.
+2) Ensure only one active handler powers POST /api/users/:userId/messages.
+3) Ensure the running preview reflects the updated logic (no dead code paths).
+
+DELIVERABLES (REQUIRED OUTPUT AT THE END)
+After you finish, output:
+1) ROUTING MAP (first-run vs returning user)
+2) STORAGE SCHEMA (tables/collections/keys used)
+3) ASSESSMENT SCORING + HEARTBEAT MAPPING (explicit)
+4) FILES CHANGED (list of file paths)
+5) MANUAL TEST CHECKLIST (step-by-step clicks):
+   - New user → Assessment gate → Chat banner shows stage → ask “What’s my stage?” → Save → Memory updates → Log → Progress updates → refresh persists
+
+CONSTRAINTS
+- No placeholders.
+- No invented content beyond what is in the canvases (except the documented mapping if missing).
+- Must be production-ready and stable.
+- Do not ask me to edit code manually; implement it fully.

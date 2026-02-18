@@ -22,11 +22,17 @@ export default function Home() {
     if (!userId) setLocation("/");
   }, [userId]);
 
-  const { data: assessment } = useQuery({
+  const { data: assessment, isLoading: assessmentLoading } = useQuery({
     queryKey: ["assessment", userId],
     queryFn: () => api.getAssessment(userId!),
     enabled: !!userId,
   });
+
+  useEffect(() => {
+    if (!assessmentLoading && !assessment && userId) {
+      setLocation("/assessment");
+    }
+  }, [assessment, assessmentLoading, userId]);
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ["messages", userId],

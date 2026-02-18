@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateJaeResponse, getWeakestHeartbeat } from "./heartbeat";
+import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { insertUserSchema, assessments } from "@shared/schema";
 import type { InsertAssessment, Assessment } from "@shared/schema";
 
@@ -264,12 +264,17 @@ export async function registerRoutes(
 
       const motivationalMessage = motivationalMessages[stage];
 
+      const weakest = getWeakestHeartbeat(answers);
+      const heartbeatScores = computeHeartbeatScores(answers);
+
       const assessment = await storage.createAssessment({
         userId,
         answers,
         totalScore,
         stage,
         motivationalMessage,
+        heartbeatScores,
+        weakestHeartbeat: weakest.heartbeat,
       });
 
       return res.json(assessment);

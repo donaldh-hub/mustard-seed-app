@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 const QUESTIONS = [
   "I have a clear picture of what I want to achieve right now.",
@@ -42,8 +43,10 @@ export default function Assessment() {
   const [, setLocation] = useLocation();
   const userId = useStore((s) => s.userId);
   const setUserId = useStore((s) => s.setUserId);
+  const qc = useQueryClient();
 
-  const allAnswered = name.trim().length > 0 && answers.every((a) => a !== null);
+  const isReturningUser = !!userId;
+  const allAnswered = (isReturningUser || name.trim().length > 0) && answers.every((a) => a !== null);
 
   const handleSelect = (qIndex: number, value: number) => {
     const updated = [...answers];
@@ -63,6 +66,8 @@ export default function Assessment() {
         });
         setUserId(user.id);
         currentUserId = user.id;
+      } else if (name.trim()) {
+        await api.updateUser(currentUserId, { name: name.trim() });
       }
 
       const assessmentResult = await api.submitAssessment(
@@ -71,6 +76,9 @@ export default function Assessment() {
       );
       localStorage.setItem("assessmentResult", JSON.stringify(assessmentResult));
       setResult(assessmentResult);
+
+      qc.invalidateQueries({ queryKey: ["assessment", currentUserId] });
+      qc.invalidateQueries({ queryKey: ["user", currentUserId] });
 
       setTimeout(() => {
         setLocation("/home");
@@ -108,6 +116,13 @@ export default function Assessment() {
           <p className="text-muted-foreground leading-relaxed" data-testid="text-motivational">
             {result.motivationalMessage}
           </p>
+
+          {result.weakestHeartbeat && (
+            <p className="text-sm text-orange-600 font-medium" data-testid="text-weakest">
+              Focus Area: {result.weakestHeartbeat.charAt(0).toUpperCase() + result.weakestHeartbeat.slice(1)}
+            </p>
+          )}
+
           <div className="pt-2 text-xs text-muted-foreground/70 border-t border-border/30">
             🌱 Seed 0-15 | 🌿 Sprout 16-30 | 🌳 Growth 31-45 | 🌸 Bloom 46-50
           </div>
@@ -136,20 +151,22 @@ export default function Assessment() {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">
-            What should I call you?
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name..."
-            className="w-full bg-white border border-border rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-            autoComplete="off"
-            data-testid="input-name"
-          />
-        </div>
+        {!isReturningUser && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">
+              What should I call you?
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name..."
+              className="w-full bg-white border border-border rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              autoComplete="off"
+              data-testid="input-name"
+            />
+          </div>
+        )}
 
         <div className="bg-white/80 rounded-xl p-3 border border-border/30 text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 justify-center">
           {SCALE_LABELS.map((label, i) => (

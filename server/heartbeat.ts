@@ -181,6 +181,23 @@ const QUESTION_HEARTBEAT_MAP: { heartbeat: string; label: string }[] = [
   { heartbeat: "courage", label: "Courage" },
 ];
 
+export function computeHeartbeatScores(answers: number[]): Record<string, number> {
+  const totals: Record<string, { sum: number; count: number }> = {};
+  for (let i = 0; i < Math.min(answers.length, 10); i++) {
+    const mapping = QUESTION_HEARTBEAT_MAP[i];
+    if (!totals[mapping.heartbeat]) {
+      totals[mapping.heartbeat] = { sum: 0, count: 0 };
+    }
+    totals[mapping.heartbeat].sum += answers[i];
+    totals[mapping.heartbeat].count++;
+  }
+  const scores: Record<string, number> = {};
+  for (const [key, val] of Object.entries(totals)) {
+    scores[key] = Math.round((val.sum / val.count) * 10) / 10;
+  }
+  return scores;
+}
+
 export function getWeakestHeartbeat(answers: number[]): { heartbeat: string; label: string; score: number } {
   const totals: Record<string, { sum: number; count: number; label: string }> = {};
   for (let i = 0; i < Math.min(answers.length, 10); i++) {
