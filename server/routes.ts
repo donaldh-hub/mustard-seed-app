@@ -768,5 +768,67 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/users/:id/consistency-summary", async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const allEntries = await storage.getEntries(userId);
+
+      const distinctDates = new Set(allEntries.map((e) => e.date));
+
+      const now = new Date();
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      const windowStart = sevenDaysAgo.toISOString().split("T")[0];
+      const todayDate = now.toISOString().split("T")[0];
+
+      let weeklyActiveDays = 0;
+      Array.from(distinctDates).forEach((d) => {
+        if (d >= windowStart && d <= todayDate) weeklyActiveDays++;
+      });
+
+      const weeklyWaterLevelPercent = Math.round(Math.min((weeklyActiveDays / 7) * 100, 100));
+
+      const lifetimeActiveDays = distinctDates.size;
+
+      let seedStageName: string;
+      let seedStageDescription: string;
+      let seedStageIconKey: string;
+
+      if (lifetimeActiveDays <= 7) {
+        seedStageName = "Seed";
+        seedStageDescription = "You've started. Protect the habit.";
+        seedStageIconKey = "seed";
+      } else if (lifetimeActiveDays <= 21) {
+        seedStageName = "Germinating";
+        seedStageDescription = "Roots are forming. Stay steady.";
+        seedStageIconKey = "germinating";
+      } else if (lifetimeActiveDays <= 45) {
+        seedStageName = "Sprout";
+        seedStageDescription = "You're breaking the surface.";
+        seedStageIconKey = "sprout";
+      } else if (lifetimeActiveDays <= 90) {
+        seedStageName = "Growing";
+        seedStageDescription = "Momentum is visible.";
+        seedStageIconKey = "growing";
+      } else {
+        seedStageName = "Rooted";
+        seedStageDescription = "Consistency is part of who you are now.";
+        seedStageIconKey = "rooted";
+      }
+
+      return res.json({
+        weeklyWaterLevelPercent,
+        weeklyActiveDays,
+        lifetimeActiveDays,
+        seedStageName,
+        seedStageDescription,
+        seedStageIconKey,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
   return httpServer;
 }

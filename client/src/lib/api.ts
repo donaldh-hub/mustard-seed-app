@@ -30,4 +30,6 @@ export const api = {
 
   getAssessment: (userId: string) => fetchJson<any>(`/users/${userId}/assessment`),
   submitAssessment: (userId: string, answers: number[]) => fetchJson<any>(`/users/${userId}/assessment`, { method: "POST", body: JSON.stringify({ answers }) }),
+
+  getConsistencySummary: (userId: string) => fetchJson<any>(`/users/${userId}/consistency-summary`),
 };

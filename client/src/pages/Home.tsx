@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen } from "lucide-react";
+import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -57,6 +57,12 @@ export default function Home() {
     enabled: !!userId,
   });
 
+  const { data: consistency } = useQuery({
+    queryKey: ["consistency", userId],
+    queryFn: () => api.getConsistencySummary(userId!),
+    enabled: !!userId,
+  });
+
   useEffect(() => {
     if (!assessmentLoading && !assessment && userId) {
       setLocation("/assessment");
@@ -79,7 +85,6 @@ export default function Home() {
   const weakest = assessment.weakestHeartbeat || "";
   const weakestScore = heartbeatScores[weakest] ?? 0;
   const goal = user?.goals?.[0] || "";
-  const waterLevel = user?.waterLevel ?? 0;
 
   const recentEntry = entries.length > 0
     ? entries.sort((a: any, b: any) => (b.createdAt > a.createdAt ? 1 : -1))[0]
@@ -243,15 +248,48 @@ export default function Home() {
               <h2 className="text-sm font-semibold text-foreground">Water Level</h2>
             </div>
             <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold text-blue-600" data-testid="text-water-level">{waterLevel}</span>
+              <span className="text-3xl font-bold text-blue-600" data-testid="text-water-level">{consistency?.weeklyWaterLevelPercent ?? 0}</span>
               <span className="text-sm text-muted-foreground mb-1">/ 100</span>
             </div>
             <div className="mt-2 h-2 bg-blue-100 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(waterLevel, 100)}%` }}
+                style={{ width: `${Math.min(consistency?.weeklyWaterLevelPercent ?? 0, 100)}%` }}
               />
             </div>
+            <p className="text-xs text-muted-foreground mt-2" data-testid="text-water-days">
+              Days active: {consistency?.weeklyActiveDays ?? 0} / 7
+            </p>
+            <p className="text-[11px] text-muted-foreground/70 mt-1">
+              Based on days you logged at least one action in the last 7 days.
+            </p>
+            {consistency?.weeklyWaterLevelPercent === 100 && (
+              <span className="inline-block mt-2 text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full" data-testid="badge-fully-watered">
+                Fully watered this week.
+              </span>
+            )}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+            data-testid="card-seed-stage"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Sprout className="w-4 h-4 text-green-600" />
+              <h2 className="text-sm font-semibold text-foreground">Seed Stage</h2>
+            </div>
+            <p className="text-lg font-semibold text-foreground" data-testid="text-seed-stage-name">
+              {consistency?.seedStageName ?? "Seed"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-seed-stage-desc">
+              {consistency?.seedStageDescription ?? "You've started. Protect the habit."}
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-2" data-testid="text-lifetime-days">
+              {consistency?.lifetimeActiveDays ?? 0} lifetime active {(consistency?.lifetimeActiveDays ?? 0) === 1 ? "day" : "days"}
+            </p>
           </motion.div>
         </div>
       </div>

@@ -1,0 +1,149 @@
+We are revising the Mustard Seed Water Level and Seed Growth system.
+
+The previous version incorrectly allowed weekly consistency to fully grow the tree in one week.
+
+We are separating:
+
+1) Weekly Water Level (short-term consistency)
+2) Lifetime Seed Growth Stage (long-term development)
+
+These must be independent systems.
+
+--------------------------------------------------
+PART 1: WEEKLY WATER LEVEL (ROLLING 7 DAYS)
+--------------------------------------------------
+
+Water Level represents consistency in the last 7 days only.
+
+Definition:
+Water Level % = (distinct days with at least 1 logged action in last 7 days / 7) * 100
+
+Rules:
+- Count distinct calendar days only.
+- Clamp 0–100.
+- Round to nearest whole number.
+- If no stored actions exist → Water Level = 0%.
+- Do NOT fabricate activity.
+
+Return:
+- weeklyWaterLevelPercent
+- weeklyActiveDays (0–7)
+- windowDays: 7
+
+Display text under Water Level:
+"Based on days you logged at least one action in the last 7 days."
+
+If weeklyWaterLevelPercent == 100:
+Display small badge text:
+"Fully watered this week."
+This does NOT affect seed stage.
+
+--------------------------------------------------
+PART 2: LIFETIME SEED GROWTH STAGE (LONG-TERM)
+--------------------------------------------------
+
+Seed Growth Stage is based on cumulative lifetime distinct active days.
+
+Definition:
+lifetimeActiveDays = total distinct calendar days user has logged at least one action.
+
+Seed Stage Thresholds:
+
+0–7 lifetime active days → "Seed"
+8–21 → "Germinating"
+22–45 → "Sprout"
+46–90 → "Growing"
+90+ → "Rooted"
+
+Descriptions (keep short and grounded):
+
+Seed:
+"You’ve started. Protect the habit."
+
+Germinating:
+"Roots are forming. Stay steady."
+
+Sprout:
+"You’re breaking the surface."
+
+Growing:
+"Momentum is visible."
+
+Rooted:
+"Consistency is part of who you are now."
+
+Return:
+- lifetimeActiveDays
+- seedStageName
+- seedStageDescription
+- seedStageIconKey (enum: seed | germinating | sprout | growing | rooted)
+
+IMPORTANT:
+Seed stage must NEVER be determined by weekly Water Level.
+Seed stage only changes when lifetimeActiveDays crosses threshold.
+
+--------------------------------------------------
+WHAT COUNTS AS AN ACTION
+--------------------------------------------------
+
+Use ONLY real stored data.
+
+Action sources (use what exists in the system):
+1) Memory entries
+2) Logged "Save:" entries
+3) Explicit "Log:" entries
+4) Check-ins stored with dates
+
+Count distinct calendar days across all sources combined.
+
+--------------------------------------------------
+SERVER REQUIREMENTS
+--------------------------------------------------
+
+Create or update endpoint:
+
+GET /api/users/:id/consistency-summary
+
+Return JSON:
+
+{
+  weeklyWaterLevelPercent,
+  weeklyActiveDays,
+  lifetimeActiveDays,
+  seedStageName,
+  seedStageDescription,
+  seedStageIconKey
+}
+
+Client must NOT calculate these values.
+Server computes everything.
+
+--------------------------------------------------
+UI REQUIREMENTS (HOME + PROGRESS)
+--------------------------------------------------
+
+Water Card shows:
+- Water Level: XX / 100
+- Days active: X / 7
+- Helper text
+- Optional badge if 100%
+
+Below that, show:
+
+Seed Stage: <seedStageName>
+Short description line
+Optional icon tied to seedStageIconKey
+
+Do NOT mix weekly and lifetime messaging.
+Do NOT exaggerate growth.
+Do NOT fabricate data.
+
+--------------------------------------------------
+OUTPUT REQUIRED
+--------------------------------------------------
+
+1) Server endpoint implementation
+2) Exact DB queries used
+3) Updated Home.tsx Water + Seed section
+4) Updated Progress.tsx Water + Seed section
+5) Confirmation that thresholds match specification exactly
