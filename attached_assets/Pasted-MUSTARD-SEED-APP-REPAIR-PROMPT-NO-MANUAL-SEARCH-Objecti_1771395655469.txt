@@ -1,0 +1,69 @@
+MUSTARD SEED APP — REPAIR PROMPT (NO MANUAL SEARCH)
+
+Objective:
+The Chat screen is injecting an old fallback goal (“to complete my first 5K”) instead of using the user’s real active goals (e.g., “Lose 15 Pounds in 90 Days”). Fix this by removing ALL hardcoded demo goal text and making the chat system prompt dynamically pull and inject the user’s active Targeted + Untargeted goals every time.
+
+Non-negotiables:
+1) Do NOT tell me to search the repo.
+2) Do NOT ask me to manually edit random places.
+3) You will locate and remove the fallback “first 5K” / “5K” / demo goal injection in code.
+4) Chat must always reflect the actual user’s current active goals.
+5) If no goals exist, chat must say so and prompt to plant one—never use an example goal.
+
+What “fixed” means (Acceptance Tests):
+A) If the user has an active targeted goal titled “Lose 15 Pounds in 90 Days”, the assistant MUST reference that goal (not 5K) in its responses.
+B) If the user has an active identity goal, the assistant MUST reference it correctly.
+C) If one goal exists and the other does not, the assistant must handle that gracefully (reference the existing one, and invite planting the missing one).
+D) If no goals exist, the assistant must say: “You don’t currently have an active goal. Let’s plant one.” (or equivalent) and STOP there—no demo content.
+E) The string “first 5K” must never appear again anywhere in the UI/chat unless the user literally types it.
+
+Implementation Requirements:
+1) Create a single source of truth builder function for chat context:
+   - buildChatContext(userId) (or equivalent)
+   - It must fetch:
+     • active targeted goal (goal_type === "targeted" AND status === "active")
+     • active untargeted goal (goal_type === "untargeted" AND status === "active")
+     • latest check-in / heartbeat averages if available (optional, but must be accurate)
+   - It returns a JSON object: { targetedGoal, untargetedGoal, heartbeatSnapshot }
+
+2) Update the chat API/route that calls the LLM:
+   - BEFORE creating the system prompt, call buildChatContext(userId)
+   - Construct the system prompt using ONLY returned data
+   - Never embed demo examples in the prompt
+   - Never hardcode “first 5K” or any sample goal
+
+3) Purge demo/fallback goal text everywhere it is injected:
+   - Remove any constants like defaultGoal/exampleGoal/sampleGoal/fallbackGoal
+   - Remove any “seed conversation” that contains “5K” unless it is explicitly used in tests only
+   - If there is a fallback path when goals are missing, it must produce a “no active goals” message, not sample goals
+
+4) System Prompt Template (must be implemented exactly in spirit):
+   - Include:
+     • Current Stage (if computed)
+     • Five Heartbeats list (exact)
+     • Active targeted goal block (if present)
+     • Active identity goal block (if present)
+   - If a goal is missing, explicitly say “No active targeted goal” / “No active identity goal”
+   - If both missing, instruct assistant to ask user to plant a goal and do not proceed with coaching.
+
+Use these EXACT Five Heartbeats (do not rename):
+1. Clarity of Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+Output Requirements:
+1) Make the necessary code edits directly (server + any shared prompt builder).
+2) Ensure the UI chat responses stop referencing “first 5K”.
+3) Add a tiny automated guard:
+   - If the outgoing system prompt contains “5K” or “first 5K” AND the user’s goals do not contain those terms, throw an error in dev to prevent regression.
+
+Verification Steps you must run:
+1) Create a test user with targeted goal title “Lose 15 Pounds in 90 Days”
+2) Open chat and send: “What should I focus on today?”
+3) Confirm assistant references “Lose 15 Pounds in 90 Days” and its WHY, not “first 5K”
+4) Remove goals, retest: assistant must ask to plant a goal (no demo)
+5) Commit changes.
+
+Proceed to implement now.

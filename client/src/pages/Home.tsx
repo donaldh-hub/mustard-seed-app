@@ -90,7 +90,7 @@ export default function Home() {
   const heartbeatScores: Record<string, number> = assessment.heartbeatScores || {};
   const weakest = assessment.weakestHeartbeat || "";
   const weakestScore = heartbeatScores[weakest] ?? 0;
-  const goal = user?.goals?.[0] || "";
+  const goal = garden?.targeted?.title || garden?.untargeted?.title || "";
 
   const recentEntry = entries.length > 0
     ? entries.sort((a: any, b: any) => (b.createdAt > a.createdAt ? 1 : -1))[0]
@@ -152,16 +152,16 @@ export default function Home() {
             {goal ? (
               <p className="text-base font-semibold text-foreground truncate" data-testid="text-goal">{goal}</p>
             ) : (
-              <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No goal saved yet</p>
+              <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No active goal yet</p>
             )}
             <Button
-              onClick={() => setLocation("/chat")}
+              onClick={() => setLocation(goal ? "/chat" : "/progress")}
               variant="outline"
               className="mt-3 w-full rounded-full"
               size="sm"
               data-testid="button-refine-goal"
             >
-              Refine Goal
+              {goal ? "Refine Goal" : "Plant a Goal"}
             </Button>
           </motion.div>
 

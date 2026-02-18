@@ -443,6 +443,8 @@ type UserContext = {
   weakestHeartbeat?: string;
   weakestScore?: number;
   assessmentAnswers?: number[];
+  targetedGoalTitle?: string;
+  untargetedGoalTitle?: string;
 };
 
 function buildDataLine(ctx: UserContext, weakLabel: string): string {

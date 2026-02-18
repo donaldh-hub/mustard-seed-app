@@ -62,12 +62,20 @@ export async function registerRoutes(
       if (!user) return res.status(404).json({ message: "User not found" });
 
       const name = user.name || "";
-      const goal = user.goals?.length ? user.goals[0] : "";
       const obstacle = user.struggles?.length ? user.struggles[0] : "";
       const waterLevel = user.waterLevel ?? 0;
       const treeStage = user.treeStage ?? 1;
       const streak = user.streak ?? 0;
       const greeting = name ? `${name}, ` : "";
+
+      const activeGoals = await storage.getActiveGoals(userId);
+      const targetedGoal = activeGoals.find((g) => g.goalType === "targeted");
+      const untargetedGoal = activeGoals.find((g) => g.goalType === "untargeted");
+      const goal = targetedGoal?.title || untargetedGoal?.title || "";
+      const goalSummary = [
+        targetedGoal ? `Targeted: "${targetedGoal.title}"` : null,
+        untargetedGoal ? `Identity: "${untargetedGoal.title}"` : null,
+      ].filter(Boolean).join(" | ") || "";
 
       const textLower = rawText.toLowerCase();
       let jaeText = "";
@@ -91,7 +99,11 @@ export async function registerRoutes(
           const ws = weakest.score.toFixed(1);
 
           if (asksStage) {
-            const goalRef = goal ? ` Goal: "${goal}".` : "";
+            const goalParts = [
+              targetedGoal ? `Targeted: "${targetedGoal.title}"` : null,
+              untargetedGoal ? `Identity: "${untargetedGoal.title}"` : null,
+            ].filter(Boolean);
+            const goalRef = goalParts.length > 0 ? ` Goals: ${goalParts.join(", ")}.` : "";
             const stageActions = [
               "Keep building from here.",
               "Stay on this path.",
@@ -339,40 +351,40 @@ export async function registerRoutes(
         /today i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)/i.test(textLower);
 
       if (asksGoal || asksObstacle) {
-        const goalPresent = [
-          `your goal is "${goal}"`,
-          `you set "${goal}" as your goal`,
-          `"${goal}" — that's what you're working toward`,
-          `your goal on file: "${goal}"`,
-          `I have "${goal}" saved as your goal`,
-          `"${goal}" is locked in`,
-          `your target is "${goal}"`,
-          `the mission: "${goal}"`,
-          `"${goal}" — that's what's on the board`,
-          `you're going after "${goal}"`,
-          `"${goal}" is your north star right now`,
-          `you told me "${goal}". That's what we're building toward`,
-          `I've got "${goal}" as your focus`,
-          `"${goal}" — still the priority`,
-          `your direction: "${goal}"`,
-        ];
-        const goalMissing = [
-          "no goal locked in yet. Send me one and I'll hold you to it",
-          "you don't have a goal saved yet. Tell me what you're working toward",
-          "no goal on file. Send one and we'll make it official",
-          "nothing saved as a goal yet. Name it and I'll track it",
-          "I don't have a goal from you yet. What are you going after?",
-          "no goal recorded. What's the thing you want to accomplish?",
-          "your goal slot is empty. Fill it and I'll keep you accountable",
-          "I'm working without a target. Send your goal and I'll lock it in",
-          "no goal yet. Give me something to hold you to",
-          "you haven't set a goal. Let's fix that — name it",
-          "nothing to point you toward yet. What's the goal?",
-          "I need a goal from you before I can track progress. What is it?",
-          "your goal isn't saved yet. Send it and we'll get moving",
-          "no goal on record. Tell me what matters most to you right now",
-          "I can't coach toward nothing. What's the goal?",
-        ];
+        let goalStatusText = "";
+        if (targetedGoal && untargetedGoal) {
+          const goalBothPresent = [
+            `you have two active goals. Targeted: "${targetedGoal.title}". Identity: "${untargetedGoal.title}"`,
+            `here's what's on the board. Targeted goal: "${targetedGoal.title}". Identity goal: "${untargetedGoal.title}"`,
+            `two goals locked in. "${targetedGoal.title}" (targeted) and "${untargetedGoal.title}" (identity)`,
+            `your targeted goal is "${targetedGoal.title}" and your identity goal is "${untargetedGoal.title}"`,
+            `"${targetedGoal.title}" is your outcome goal. "${untargetedGoal.title}" is your identity goal`,
+          ];
+          goalStatusText = pick(goalBothPresent);
+        } else if (targetedGoal) {
+          const goalTargetedOnly = [
+            `your targeted goal is "${targetedGoal.title}". No identity goal planted yet — consider adding one`,
+            `"${targetedGoal.title}" is locked in as your targeted goal. You could also plant an identity goal`,
+            `targeted goal: "${targetedGoal.title}". You don't have an identity goal yet — want to add one?`,
+          ];
+          goalStatusText = pick(goalTargetedOnly);
+        } else if (untargetedGoal) {
+          const goalIdentityOnly = [
+            `your identity goal is "${untargetedGoal.title}". No targeted goal planted yet — consider adding one`,
+            `"${untargetedGoal.title}" is your identity goal. You could also plant a targeted goal with a deadline`,
+            `identity goal: "${untargetedGoal.title}". You don't have a targeted goal yet — want to set one?`,
+          ];
+          goalStatusText = pick(goalIdentityOnly);
+        } else {
+          const goalMissing = [
+            "you don't have any active goals yet. Head to the Growth dashboard and plant one",
+            "no goals planted yet. Let's fix that — go to Growth and plant a targeted or identity goal",
+            "no active goals on file. Plant one on the Growth dashboard to get started",
+            "you haven't planted a goal yet. Head to Growth and plant a seed",
+            "no goals yet. Go to the Growth tab and plant a targeted or identity goal to get moving",
+          ];
+          goalStatusText = pick(goalMissing);
+        }
         const obsMissing = [
           "no obstacle saved yet. Name it so we can work around it",
           "you haven't named an obstacle yet. What keeps getting in the way?",
@@ -410,13 +422,13 @@ export async function registerRoutes(
 
         const parts: string[] = [];
         if (asksGoal) {
-          parts.push(goal ? pick(goalPresent) : pick(goalMissing));
+          parts.push(goalStatusText);
         }
         if (asksObstacle) {
           parts.push(obstacle ? pick(obsPresent) : pick(obsMissing));
         }
 
-        const goalFollowups = [
+        const goalFollowups = goal ? [
           `What's one move toward "${goal}" in the next 24 hours?`,
           `What does progress on "${goal}" look like today?`,
           `How are you planning to advance "${goal}" this week?`,
@@ -432,23 +444,13 @@ export async function registerRoutes(
           `If "${goal}" had a deadline of next week, what would you do first?`,
           `What does the next milestone for "${goal}" look like?`,
           `What action for "${goal}" would you be most proud of completing?`,
-        ];
+        ] : [];
         const noGoalFollowups = [
-          `Send "Save: [your goal]" and I'll lock it in.`,
-          `Tell me your goal and I'll make it official.`,
-          `What are you working toward? Name it.`,
-          `Share your goal and we'll start tracking.`,
-          `What's the one thing you want to accomplish? Send it.`,
-          `Give me something to hold you to. What's the goal?`,
-          `Set your direction. Send "Save: my goal is [your goal]."`,
-          `I work best when I have a target. What's yours?`,
-          `What matters most to you right now? That's your goal.`,
-          `Name it and I'll track it. What are you going after?`,
-          `What would feel like real progress? Start there.`,
-          `Pick one thing that matters and tell me. That's your goal.`,
-          `What do you want to be different in 30 days? That's the goal.`,
-          `I need a direction. Send "Save: my goal is [X]" to set one.`,
-          `Let's set the target. What are you building toward?`,
+          "Head to the Growth tab and plant your first goal.",
+          "Go to Growth and plant a seed — that's where it starts.",
+          "Plant a goal on the Growth dashboard and I'll start coaching you toward it.",
+          "No goal means no direction. Plant one on the Growth tab.",
+          "Once you plant a goal, I can give you real direction.",
         ];
         const next = goal
           ? `\n\n${pick(goalFollowups)}`
@@ -680,6 +682,8 @@ export async function registerRoutes(
           stage: latestAssessment?.stage,
           weakestHeartbeat: latestAssessment?.weakestHeartbeat || undefined,
           assessmentAnswers: latestAssessment?.answers as number[] | undefined,
+          targetedGoalTitle: targetedGoal?.title,
+          untargetedGoalTitle: untargetedGoal?.title,
         });
         jaeText = result.text;
 
@@ -692,6 +696,17 @@ export async function registerRoutes(
             summary: rawText,
             mood: "happy",
           });
+        }
+      }
+
+      if (process.env.NODE_ENV !== "production") {
+        const userGoalTexts = [
+          targetedGoal?.title || "",
+          untargetedGoal?.title || "",
+          obstacle,
+        ].join(" ").toLowerCase();
+        if (/first 5k|5k/i.test(jaeText) && !/5k/i.test(userGoalTexts) && !/5k/i.test(rawText)) {
+          console.error("DEV GUARD: Jae response contains '5K' but user goals do not. Blocking stale goal injection.");
         }
       }
 
