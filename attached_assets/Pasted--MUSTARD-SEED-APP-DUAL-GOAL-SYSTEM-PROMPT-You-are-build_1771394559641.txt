@@ -1,0 +1,215 @@
+# MUSTARD SEED APP — DUAL GOAL SYSTEM PROMPT
+
+You are building the Mustard Seed digital accountability partner.
+
+This is NOT a workout tracker.
+This is a structured growth engine rooted in the Five Heartbeats:
+
+1. Clarity of Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+--------------------------------------------------
+CORE SYSTEM RULES
+--------------------------------------------------
+
+1. A user may have:
+   - Maximum of ONE active Targeted Goal
+   - Maximum of ONE active Untargeted Goal
+
+2. The system must prevent:
+   - Multiple simultaneous targeted goals
+   - Multiple simultaneous untargeted goals
+   - Goal stacking
+   - Fragmented focus
+
+3. Each goal must generate:
+   - Its own Growth Tree
+   - Its own Growth Chart
+   - Its own progress logic
+   - Its own data storage
+
+4. Both growth charts must be visible simultaneously on the Growth Dashboard.
+
+--------------------------------------------------
+GOAL TYPE DEFINITIONS
+--------------------------------------------------
+
+==============================
+1) TARGETED GOAL (Time-Bound)
+==============================
+
+Definition:
+A measurable goal with a deadline and defined outcome.
+
+Examples:
+- Lose 20 pounds in 90 days
+- Save $5,000 by June
+- Complete 12 workouts in 30 days
+
+Required Inputs:
+- Goal description
+- Deadline
+- Measurable outcome
+- Emotional Why
+- Starting baseline metric
+
+Tracking Logic:
+- Percent completion toward defined outcome
+- Countdown timer displayed
+- Weekly milestone checkpoints
+- Recalibration logic if user falls behind pace
+
+Growth Visualization:
+- Tree grows proportionally to % completion
+- Chart must display:
+    • Timeline (date-based X axis)
+    • Progress percentage
+    • Milestone markers
+    • Projected pacing line
+
+Dashboard Label:
+TARGETED TREE
+
+Completion Rule:
+Goal auto-completes when percent_complete >= 100%
+
+--------------------------------------------------
+
+=====================================
+2) UNTARGETED GOAL (Identity-Based)
+=====================================
+
+Definition:
+An open-ended identity commitment rooted in consistency and habit formation.
+
+Examples:
+- Become disciplined
+- Build consistency in the gym
+- Improve daily mindset
+- Strengthen leadership habits
+
+Required Inputs:
+- Identity statement (“I am becoming…”)
+- Focus area
+- Emotional Why
+- Chosen daily or weekly micro-habit
+
+Tracking Logic:
+- Daily consistency tracking
+- Streak counter
+- Weekly reflection scoring
+- Momentum score (rolling 7-day consistency average)
+
+Growth Visualization:
+- Tree grows based on streak strength and consistency rate
+- Chart must display:
+    • Consistency frequency
+    • Streak length
+    • Weekly growth trend
+    • Momentum score
+
+Dashboard Label:
+IDENTITY TREE
+
+Completion Rule:
+Untargeted goals do NOT auto-complete.
+User must manually mark as:
+- Integrated
+- Evolved
+- Archived
+
+--------------------------------------------------
+GROWTH DASHBOARD REQUIREMENTS
+--------------------------------------------------
+
+The Growth Dashboard must display BOTH charts simultaneously.
+
+Required Layout Structure:
+
+-----------------------------------------------
+| TARGETED TREE        | IDENTITY TREE       |
+| Countdown Visible    | Streak Visible      |
+| % Complete           | Momentum Score      |
+-----------------------------------------------
+
+Rules:
+- Charts update independently
+- Charts animate independently
+- Data is never merged
+- Trees grow independently
+- Both remain visible at all times
+
+Clarity over complexity.
+
+--------------------------------------------------
+DISCIPLINE PROTECTION LOGIC
+--------------------------------------------------
+
+If user attempts to add a second Targeted Goal:
+
+System Response:
+"You already have an active targeted goal. Complete or archive it before starting another."
+
+If user attempts to add a second Untargeted Goal:
+
+System Response:
+"Focus builds growth. Complete or archive your current identity goal before adding another."
+
+Encourage depth over breadth.
+
+--------------------------------------------------
+DATA STRUCTURE REQUIREMENTS
+--------------------------------------------------
+
+Each goal must include:
+
+goal_id: unique identifier
+goal_type: targeted | untargeted
+start_date
+status: active | completed | archived
+tree_growth_score
+weekly_review_log
+
+Targeted-only fields:
+deadline
+baseline_metric
+target_metric
+percent_complete
+
+Untargeted-only fields:
+streak_count
+momentum_score
+consistency_rate
+
+--------------------------------------------------
+ARCHIVING & HISTORY
+--------------------------------------------------
+
+When a goal is completed or archived:
+- Tree remains fully grown
+- Stored in history
+- Viewable on past growth timeline
+- Data remains immutable
+
+--------------------------------------------------
+VISUAL PHILOSOPHY
+--------------------------------------------------
+
+Two trees.
+Two paths.
+One focused life.
+
+Targeted = Outcome.
+Untargeted = Identity.
+
+Outcome creates urgency.
+Identity creates permanence.
+
+Both are visible.
+Focus is protected.
+Discipline is enforced.
+
+END OF PROMPT

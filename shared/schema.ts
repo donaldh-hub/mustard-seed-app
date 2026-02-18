@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -27,7 +27,7 @@ export const messages = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   text: text("text").notNull(),
-  sender: text("sender").notNull(), // 'user' | 'jae'
+  sender: text("sender").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -43,9 +43,20 @@ export const goals = pgTable("goals", {
   userId: varchar("user_id").notNull(),
   title: text("title").notNull(),
   goalType: text("goal_type").notNull().default("untargeted"),
+  status: text("status").notNull().default("active"),
+  emotionalWhy: text("emotional_why").notNull().default(""),
+  focusArea: text("focus_area").notNull().default(""),
   metricType: text("metric_type").notNull().default("actions"),
-  targetDate: text("target_date"),
+  deadline: text("deadline"),
+  baselineMetric: real("baseline_metric"),
+  targetMetric: real("target_metric"),
+  percentComplete: real("percent_complete").notNull().default(0),
+  microHabit: text("micro_habit").notNull().default(""),
   weeklyTarget: integer("weekly_target").notNull().default(3),
+  streakCount: integer("streak_count").notNull().default(0),
+  momentumScore: real("momentum_score").notNull().default(0),
+  consistencyRate: real("consistency_rate").notNull().default(0),
+  treeGrowthScore: real("tree_growth_score").notNull().default(0),
   isActive: integer("is_active").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -61,9 +72,9 @@ export const entries = pgTable("entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   goalId: varchar("goal_id"),
-  date: text("date").notNull(), // YYYY-MM-DD
+  date: text("date").notNull(),
   summary: text("summary").notNull(),
-  mood: text("mood").notNull(), // 'happy' | 'neutral' | 'sad'
+  mood: text("mood").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
