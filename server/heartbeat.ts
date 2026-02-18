@@ -3,7 +3,7 @@ type HeartbeatModule = {
   title: string;
   principle: string;
   keywords: string[];
-  pocketLines: string[];
+  lines: string[];
   prompts: string[];
   tools: { name: string; action: string }[];
 };
@@ -14,19 +14,19 @@ const HEARTBEAT_LIBRARY: Record<string, HeartbeatModule> = {
     title: "Clarity of Vision & Why",
     principle: "Movement without direction is just noise.",
     keywords: ["why", "vision", "goal", "purpose", "lost", "confused", "direction", "aimless"],
-    pocketLines: [
-      "Clarity comes from action, not just thought.",
-      "If the 'why' is strong enough, the 'how' becomes easier.",
-      "Vision isn't about seeing the future; it's about seeing your next step clearly."
+    lines: [
+      "Clarity doesn't come from thinking harder. It comes from moving.",
+      "A strong 'why' makes the 'how' almost obvious.",
+      "You don't need the full map. Just the next step."
     ],
     prompts: [
-      "If you were guaranteed not to fail, what would this look like?",
-      "Who are you becoming by pursuing this?",
-      "What is the cost of staying exactly where you are?"
+      "If you couldn't fail, what would you go after first?",
+      "Who are you becoming by chasing this?",
+      "What's it costing you to stay right here?"
     ],
     tools: [
-      { name: "Five Whys", action: "Ask 'Why?' five times to get to the core of this goal." },
-      { name: "Vision Scripting", action: "Describe a day in your life 6 months from now where this is solved." }
+      { name: "Five Whys", action: "Ask 'Why?' five times. Get to the root." },
+      { name: "Vision Scripting", action: "Describe one day, six months from now, where this is handled." }
     ]
   },
   consistency: {
@@ -34,19 +34,19 @@ const HEARTBEAT_LIBRARY: Record<string, HeartbeatModule> = {
     title: "Small Steps + Consistency",
     principle: "Small steps compound.",
     keywords: ["habit", "routine", "schedule", "time", "busy", "skip", "streak", "hard", "tired"],
-    pocketLines: [
+    lines: [
       "Don't break the chain.",
-      "Intensity is overrated; consistency is the secret.",
-      "Show up, even if it's just for two minutes."
+      "Intensity fades. Consistency builds.",
+      "Two minutes still counts."
     ],
     prompts: [
-      "What is the smallest possible step you can take today?",
-      "What is one friction point we can remove from your routine?",
-      "If you could only do 5 minutes today, what would you do?"
+      "What's the smallest version of this you could do today?",
+      "What's one friction point we can cut from your routine?",
+      "If you only had five minutes, what would you do?"
     ],
     tools: [
-      { name: "Chain Building", action: "Let's mark an X for today. Keep the streak alive." },
-      { name: "2-Minute Rule", action: "Shrink the task down to something that takes 2 minutes." }
+      { name: "Chain Building", action: "Mark today. Keep the streak alive." },
+      { name: "2-Minute Rule", action: "Shrink it to two minutes. Start there." }
     ]
   },
   mindset: {
@@ -54,19 +54,19 @@ const HEARTBEAT_LIBRARY: Record<string, HeartbeatModule> = {
     title: "Mindset over Method",
     principle: "Your identity drives your actions.",
     keywords: ["believe", "doubt", "imposter", "fake", "can't", "identity", "fear", "scared"],
-    pocketLines: [
-      "Evidence builds confidence.",
-      "You are what you do repeatedly.",
-      "Action alters attitude."
+    lines: [
+      "Evidence builds confidence. Not the other way around.",
+      "You are what you repeat.",
+      "Action rewires belief."
     ],
     prompts: [
-      "What would the person you want to be do in this situation?",
-      "What evidence do you have that contradicts that doubt?",
-      "Are you acting out of fear or out of vision?"
+      "What would the person you're becoming do right now?",
+      "What evidence contradicts that doubt?",
+      "Are you moving from fear or from vision?"
     ],
     tools: [
-      { name: "Identity Statement", action: "Complete this sentence: 'I am the kind of person who...'" },
-      { name: "Evidence Log", action: "List 3 things you did this week that prove you are changing." }
+      { name: "Identity Statement", action: "Finish this: 'I am the kind of person who...'" },
+      { name: "Evidence Log", action: "Name three things you did this week that prove you're changing." }
     ]
   },
   adaptation: {
@@ -74,19 +74,19 @@ const HEARTBEAT_LIBRARY: Record<string, HeartbeatModule> = {
     title: "Feedback & Adaptation",
     principle: "Failure isn't final; it's data.",
     keywords: ["fail", "failed", "mistake", "wrong", "change", "adjust", "pivot", "stuck"],
-    pocketLines: [
-      "It's not failure, it's feedback.",
-      "Be stubborn about the goal, but flexible about the method.",
-      "A plane is off-course 90% of the time; it just keeps correcting."
+    lines: [
+      "That's not failure. That's feedback.",
+      "Be stubborn about the goal. Flexible about the method.",
+      "A plane corrects course the whole flight. So do you."
     ],
     prompts: [
-      "What did we learn from this that we didn't know yesterday?",
-      "If you could do this week over, what's the one thing you'd change?",
-      "What is working? Let's double down on that."
+      "What did that teach you that you didn't know before?",
+      "If you could redo this week, what's the one thing you'd change?",
+      "What is working? Let's lean into that."
     ],
     tools: [
-      { name: "Feedback Loop", action: "Let's review: What happened? Why? What next?" },
-      { name: "OODA Loop", action: "Let's pause. Observe the situation. Re-orient to your goal. Decide one move." }
+      { name: "Feedback Loop", action: "What happened? Why? What's the next move?" },
+      { name: "OODA Loop", action: "Pause. Observe. Re-orient to the goal. Decide one move." }
     ]
   },
   courage: {
@@ -94,19 +94,19 @@ const HEARTBEAT_LIBRARY: Record<string, HeartbeatModule> = {
     title: "Courageous Action",
     principle: "Courage isn't the absence of fear; it's acting despite it.",
     keywords: ["afraid", "anxious", "later", "tomorrow", "wait", "ready", "perfect"],
-    pocketLines: [
+    lines: [
       "Do it afraid.",
-      "Action cures fear.",
-      "The perfect time never arrives."
+      "Action cures fear. Waiting feeds it.",
+      "The perfect time never shows up."
     ],
     prompts: [
       "What are you waiting for permission to do?",
-      "What is the worst that could happen? And could you survive it?",
-      "If you knew you'd handle whatever happens, what would you do right now?"
+      "Worst case — could you survive it?",
+      "If you knew you'd handle whatever comes, what would you do right now?"
     ],
     tools: [
-      { name: "Courage Compass", action: "Identify where the fear is pointing. That's usually the way." },
-      { name: "Decision Writing", action: "Write down the decision you're avoiding. Just seeing it helps." }
+      { name: "Courage Compass", action: "Where the fear points is usually the way." },
+      { name: "Decision Writing", action: "Write the decision you're avoiding. Just naming it helps." }
     ]
   }
 };
@@ -134,27 +134,27 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-const STAGE_CONTEXT: Record<string, { tone: string[]; phrases: string[]; prompts: string[] }> = {
-  seed: {
-    tone: ["Grounding", "gentle start", "self-acceptance"],
-    phrases: ["Every tree starts small.", "Don't rush the roots.", "You showed up, that's step one."],
-    prompts: ["What one thing feels clear to you right now?", "Let's plant something small today.", "Stillness is progress too."]
-  },
-  sprout: {
-    tone: ["Momentum", "reassurance", "steady"],
-    phrases: ["Keep watering what's working.", "Consistency feeds the seed.", "You're learning your rhythm."],
-    prompts: ["What routine felt good this week?", "Where did you notice progress, even small?", "Keep tending your seed — growth is happening."]
-  },
-  growth: {
-    tone: ["Challenge", "reflection", "adaptability"],
-    phrases: ["Growth isn't comfortable — it's movement.", "You've built roots, now stretch higher.", "Progress lives in the tension."],
-    prompts: ["What did you learn from what didn't work?", "Where are you being stretched lately?", "You're not stuck — you're strengthening."]
-  },
-  bloom: {
-    tone: ["Celebration", "mastery", "humility"],
-    phrases: ["You're in bloom — share what you've grown.", "Your effort is showing.", "Keep your soil rich with gratitude."],
-    prompts: ["Who can you pour into next?", "What's still teaching you even in success?", "Keep growing forward — every season matters."]
-  }
+const STAGE_LINES: Record<string, string[]> = {
+  seed: [
+    "You're planting right now. That's the hardest part.",
+    "Roots come before results.",
+    "Showing up is the work at this stage."
+  ],
+  sprout: [
+    "You're finding your rhythm. Stay in it.",
+    "Momentum is building. Don't second-guess it.",
+    "Consistency is feeding the seed. Keep watering."
+  ],
+  growth: [
+    "Growth lives in the tension. Lean into it.",
+    "You've built roots. Now stretch.",
+    "This part isn't comfortable. That's how you know it's working."
+  ],
+  bloom: [
+    "You're in bloom. Stay humble. Stay hungry.",
+    "Your effort is showing. Don't coast.",
+    "Keep the soil rich. Every season still matters."
+  ]
 };
 
 // Q1 (clear picture) → Clarity
@@ -170,7 +170,7 @@ const STAGE_CONTEXT: Record<string, { tone: string[]; phrases: string[]; prompts
 
 const QUESTION_HEARTBEAT_MAP: { heartbeat: string; label: string }[] = [
   { heartbeat: "clarity", label: "Clarity" },
-  { heartbeat: "consistency", label: "Consistency (Small Steps)" },
+  { heartbeat: "consistency", label: "Consistency" },
   { heartbeat: "consistency", label: "Consistency" },
   { heartbeat: "mindset", label: "Mindset" },
   { heartbeat: "adaptation", label: "Adaptation" },
@@ -227,70 +227,110 @@ type UserContext = {
   treeStage: number;
   waterLevel: number;
   stage?: string;
+  weakestHeartbeat?: string;
+  weakestScore?: number;
   assessmentAnswers?: number[];
 };
+
+function buildDataLine(ctx: UserContext, weakLabel: string): string {
+  const parts: string[] = [];
+  if (ctx.stage) {
+    const cap = ctx.stage.charAt(0).toUpperCase() + ctx.stage.slice(1);
+    parts.push(`${cap} stage`);
+  }
+  if (weakLabel) parts.push(`focus: ${weakLabel.toLowerCase()}`);
+  if (ctx.goal) parts.push(`goal: "${ctx.goal}"`);
+  if (ctx.streak > 1) parts.push(`${ctx.streak}-day streak`);
+  if (ctx.obstacle && parts.length < 3) parts.push(`obstacle: "${ctx.obstacle}"`);
+  if (parts.length === 0) parts.push("Let's get your baseline set");
+  return parts.join(" · ") + ".";
+}
 
 export function generateJaeResponse(userText: string, ctx: UserContext): { text: string; mood: 'happy' | 'neutral' | 'sad' } {
   const module = analyzeIntent(userText);
   const lowerText = userText.toLowerCase();
-  const greeting = ctx.name ? `${ctx.name}, ` : "";
+  const n = ctx.name ? `${ctx.name}, ` : "";
+  const stage = ctx.stage || "";
+  const weakLabel = ctx.weakestHeartbeat ? ctx.weakestHeartbeat.charAt(0).toUpperCase() + ctx.weakestHeartbeat.slice(1) : "";
+  const dataLine = buildDataLine(ctx, weakLabel);
 
   const isPositive = /done|did it|good|great|completed|finished|accomplished|nailed/.test(lowerText);
 
   if (module) {
-    const pocketLine = pick(module.pocketLines);
+    const line = pick(module.lines);
     const prompt = pick(module.prompts);
-    const tool = pick(module.tools);
 
-    let contextLine = "";
-    if (ctx.goal && (module.id === "clarity" || module.id === "consistency")) {
-      contextLine = `\n\nYour goal — "${ctx.goal}" — is worth fighting for.`;
-    }
-    if (ctx.obstacle && (module.id === "adaptation" || module.id === "mindset" || module.id === "courage")) {
-      contextLine = `\n\nYou told me "${ctx.obstacle}" gets in the way. Let's work with that.`;
+    let contextHook = "";
+    if (module.id === ctx.weakestHeartbeat) {
+      contextHook = ` This is your lowest heartbeat — sharpening it changes everything.`;
+    } else if (ctx.obstacle && (module.id === "adaptation" || module.id === "mindset" || module.id === "courage")) {
+      contextHook = ` You said "${ctx.obstacle}" gets in the way — let's use that.`;
+    } else if (ctx.goal) {
+      contextHook = ` This connects to "${ctx.goal}".`;
     }
 
-    const streakLine = ctx.streak > 0 ? `\n\nYou're on a ${ctx.streak}-day streak. Keep it alive.` : "";
+    let action = "";
+    if (ctx.goal && weakLabel) {
+      action = `Today: one ${module.title.toLowerCase().split(" ")[0]}-building action toward "${ctx.goal}".`;
+    } else if (ctx.goal) {
+      action = `One move toward "${ctx.goal}" today.`;
+    } else if (weakLabel) {
+      action = `Five minutes on ${weakLabel.toLowerCase()} today.`;
+    } else {
+      action = pick(module.tools).action;
+    }
 
     return {
-      text: `${greeting}${pocketLine}${contextLine}\n\n${prompt}\n\nTry this: ${tool.action} (${tool.name})${streakLine}`,
+      text: `${n}${line}${contextHook}\n${dataLine}\n${action}\n\n${prompt}`,
       mood: isPositive ? 'happy' : 'neutral',
     };
   }
 
   if (isPositive) {
-    const goalRef = ctx.goal ? ` Every step like this brings you closer to "${ctx.goal}".` : "";
+    const goalRef = ctx.goal ? ` One step closer to "${ctx.goal}".` : "";
+    const streakRef = ctx.streak > 0 ? ` Day ${ctx.streak + 1}.` : "";
     return {
-      text: `${greeting}that's a win.${goalRef}\n\nWhat made it click for you today?`,
+      text: `${n}that's a win.${goalRef}${streakRef}\n${dataLine}\n\nWhat made it click today?`,
       mood: 'happy',
     };
   }
 
-  if (ctx.stage && STAGE_CONTEXT[ctx.stage]) {
-    const stageCtx = STAGE_CONTEXT[ctx.stage];
-    const phrase = pick(stageCtx.phrases);
-    const prompt = pick(stageCtx.prompts);
+  if (stage && STAGE_LINES[stage]) {
+    const stageLine = pick(STAGE_LINES[stage]);
+
+    let action = "";
+    if (weakLabel) {
+      action = `Spend five minutes on ${weakLabel.toLowerCase()} today.`;
+    } else if (ctx.goal) {
+      action = `Take one step toward "${ctx.goal}" today.`;
+    } else {
+      action = "Pick one thing and move it forward today.";
+    }
+
+    const question = ctx.obstacle
+      ? `When "${ctx.obstacle}" shows up, what's your counter-move?`
+      : ctx.goal
+        ? `What's one move toward "${ctx.goal}" you can make right now?`
+        : "What felt hardest this week — and what did it teach you?";
+
     return {
-      text: `${greeting}${phrase}\n\n${prompt}`,
+      text: `${n}${stageLine}\n${dataLine}\n${action}\n\n${question}`,
       mood: 'neutral',
     };
   }
 
-  const fallbackPrompts = [
-    ctx.goal
-      ? `${greeting}let's zoom in. When you think about "${ctx.goal}", what feels like the next right step?`
-      : `${greeting}what's the one thing on your mind right now that you want to move forward on?`,
-    ctx.obstacle
-      ? `${greeting}you mentioned "${ctx.obstacle}" holds you back. What does that look like today?`
-      : `${greeting}what's one thing standing between you and progress right now?`,
-    `${greeting}break it down for me — what happened, and where do you want to go from here?`,
-    ctx.streak > 0
-      ? `${greeting}you're ${ctx.streak} days in. What's keeping you going?`
-      : `${greeting}every journey starts somewhere. What's the smallest move you can make today?`,
-  ];
+  let ack = ctx.goal
+    ? `${n}let's focus on "${ctx.goal}".`
+    : `${n}let's get moving.`;
+  let action = weakLabel
+    ? `Your focus area is ${weakLabel.toLowerCase()} — one small move there today.`
+    : "Pick one thing and take one step forward.";
+  let question = ctx.obstacle
+    ? `What does "${ctx.obstacle}" look like for you today?`
+    : "What's between you and your next step?";
 
   return {
-    text: pick(fallbackPrompts),
+    text: `${ack}\n${dataLine}\n${action}\n\n${question}`,
     mood: 'neutral',
   };
 }

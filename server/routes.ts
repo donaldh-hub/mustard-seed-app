@@ -78,25 +78,27 @@ export async function registerRoutes(
         const assessment = await storage.getLatestAssessment(userId);
         if (assessment) {
           const answers = assessment.answers as number[];
+          const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
+          const stageName = assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1);
+          const emoji = stageEmoji[assessment.stage] || "";
+          const weakest = getWeakestHeartbeat(answers);
+
           if (asksStage) {
-            const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
-            jaeText = `${greeting}your current stage is **${assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)}** ${stageEmoji[assessment.stage] || ""}.\n\n${assessment.motivationalMessage}`;
+            const goalRef = goal ? ` Goal: "${goal}".` : "";
+            const weakRef = ` Focus: ${weakest.label.toLowerCase()}.`;
+            jaeText = `${greeting}you're in **${stageName}** ${emoji}.${goalRef}${weakRef}\nKeep building from here.\n\nWhat's one move you're making today?`;
           } else if (asksFocus) {
-            const weakest = getWeakestHeartbeat(answers);
-            jaeText = `${greeting}based on your check-in, your weakest area is **${weakest.label}** (avg score: ${weakest.score.toFixed(1)}/5).\n\nI'd suggest focusing there this week. Small, consistent effort in ${weakest.label.toLowerCase()} will compound.`;
+            jaeText = `${greeting}${weakest.label.toLowerCase()} is your lowest heartbeat — ${weakest.score.toFixed(1)} out of 5. That's not a weakness. It's a signal.\nFive minutes on ${weakest.label.toLowerCase()} today will compound.\n\nWhat does that look like for you?`;
           } else if (asksWeakest) {
-            const weakest = getWeakestHeartbeat(answers);
-            jaeText = `${greeting}your weakest heartbeat is **${weakest.label}** with an average score of ${weakest.score.toFixed(1)}/5.\n\nThis is where the most growth potential lives. Let's work on it.`;
+            jaeText = `${greeting}${weakest.label.toLowerCase()} is at ${weakest.score.toFixed(1)} out of 5. That's where the biggest growth lives.\nLet's sharpen it.\n\nWhat's one thing you can do this week to raise that number?`;
           } else if (asksSmallStep) {
-            const weakest = getWeakestHeartbeat(answers);
-            const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
-            jaeText = `${greeting}you're in the ${assessment.stage} ${stageEmoji[assessment.stage] || ""} stage, and your weakest area is ${weakest.label}.\n\nHere's one small step for today: focus on one action related to ${weakest.label.toLowerCase()}. Even 5 minutes counts. What will you choose?`;
+            jaeText = `${greeting}you're in ${stageName} ${emoji}. ${weakest.label} needs attention.\nOne move: five minutes on ${weakest.label.toLowerCase()}.\n\nWhat will you choose?`;
           }
 
           const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
           return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
         } else {
-          jaeText = `${greeting}I don't have your assessment yet. Take the Self Check-In first so I can give you personalized guidance.`;
+          jaeText = `${greeting}I need your Self Check-In first. Without it, I'm guessing — and that's not how we work. Take it, and I'll know exactly where to coach you.`;
           const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
           return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
         }
@@ -129,15 +131,15 @@ export async function registerRoutes(
       if (asksGoal || asksObstacle) {
         const parts: string[] = [];
         if (asksGoal) {
-          parts.push(goal ? `your current goal is: "${goal}"` : "I don't have your goal saved yet. Tell me and I'll lock it in.");
+          parts.push(goal ? `your goal is "${goal}"` : "no goal locked in yet. Send me one and I'll hold you to it");
         }
         if (asksObstacle) {
-          parts.push(obstacle ? `what usually gets in the way is: "${obstacle}"` : "I don't have your main obstacle saved yet.");
+          parts.push(obstacle ? `your main obstacle is "${obstacle}"` : "no obstacle saved yet. Name it so we can work around it");
         }
         const next = goal
-          ? `\n\nWhat's one move you can make toward "${goal}" in the next 24 hours?`
-          : `\n\nReply "Save: <your goal>" and I'll remember it for you.`;
-        jaeText = `${greeting}${parts.join(". And ")}.${next}`;
+          ? `\n\nWhat's one move toward "${goal}" in the next 24 hours?`
+          : `\n\nSend "Save: [your goal]" and I'll lock it in.`;
+        jaeText = `${greeting}${parts.join(". ")}.${next}`;
 
       } else if (isSave) {
         const payload = rawText.replace(/^save:\s*/i, "").replace(/save that\.?\s*/i, "").replace(/remember this\.?\s*/i, "").trim();
@@ -163,10 +165,10 @@ export async function registerRoutes(
 
         shouldWater = true;
 
-        const confirmLines: string[] = [`${greeting}got it — saved to your memory bank.`];
-        if (patch.goals) confirmLines.push(`Goal locked in: "${patch.goals[0]}".`);
-        if (patch.struggles) confirmLines.push(`Obstacle noted: "${patch.struggles[0]}".`);
-        confirmLines.push(`\nWhat's ONE small step you can take in the next 24 hours?`);
+        const confirmLines: string[] = [`${greeting}locked in.`];
+        if (patch.goals) confirmLines.push(`Goal: "${patch.goals[0]}".`);
+        if (patch.struggles) confirmLines.push(`Obstacle: "${patch.struggles[0]}". Now I know what to watch for.`);
+        confirmLines.push(`\nWhat's one move you can make in the next 24 hours?`);
         jaeText = confirmLines.join("\n");
 
       } else if (isLog) {
@@ -181,9 +183,10 @@ export async function registerRoutes(
 
         shouldWater = true;
 
-        const goalRef = goal ? `This is progress toward "${goal}".` : "This is a strong win.";
-        const obstacleRef = obstacle ? `When "${obstacle}" shows up, remember — you beat it today.` : "Keep stacking these.";
-        jaeText = `${greeting}logged and locked in.\n\n${goalRef}\n${obstacleRef}\n\nWhat's the next small step you can repeat tomorrow?`;
+        const goalRef = goal ? `Progress toward "${goal}".` : "That's a rep.";
+        const obstacleRef = obstacle ? ` "${obstacle}" didn't win today.` : "";
+        const streakRef = streak > 0 ? ` Day ${streak + 1}.` : "";
+        jaeText = `${greeting}logged.${streakRef}\n${goalRef}${obstacleRef}\n\nWhat's the next move you can repeat tomorrow?`;
 
       } else {
         const latestAssessment = await storage.getLatestAssessment(userId);
@@ -195,6 +198,7 @@ export async function registerRoutes(
           treeStage,
           waterLevel,
           stage: latestAssessment?.stage,
+          weakestHeartbeat: latestAssessment?.weakestHeartbeat || undefined,
           assessmentAnswers: latestAssessment?.answers as number[] | undefined,
         });
         jaeText = result.text;
