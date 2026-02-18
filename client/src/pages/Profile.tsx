@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { User, Bell, Shield, LogOut } from "lucide-react";
+import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 export default function Profile() {
   const { profile } = useStore();
@@ -12,7 +13,7 @@ export default function Profile() {
     <div className="h-full p-6 bg-background">
       <header className="mb-8 flex items-center gap-4">
         <Avatar className="w-16 h-16 border-2 border-white shadow-md">
-          <AvatarImage src="https://github.com/shadcn.png" />
+          <AvatarImage src={JaeAvatar} className="object-cover" />
           <AvatarFallback className="bg-primary/20 text-primary text-xl">
             {profile.name.charAt(0).toUpperCase()}
           </AvatarFallback>
