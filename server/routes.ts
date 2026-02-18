@@ -9,6 +9,10 @@ function todayStr(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function stripSmartQuotes(text: string): string {
   return text
     .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
@@ -83,16 +87,82 @@ export async function registerRoutes(
           const emoji = stageEmoji[assessment.stage] || "";
           const weakest = getWeakestHeartbeat(answers);
 
+          const wl = weakest.label.toLowerCase();
+          const ws = weakest.score.toFixed(1);
+
           if (asksStage) {
             const goalRef = goal ? ` Goal: "${goal}".` : "";
-            const weakRef = ` Focus: ${weakest.label.toLowerCase()}.`;
-            jaeText = `${greeting}you're in **${stageName}** ${emoji}.${goalRef}${weakRef}\nKeep building from here.\n\nWhat's one move you're making today?`;
+            const stageActions = [
+              "Keep building from here.",
+              "Stay on this path.",
+              "You've earned this ground. Hold it.",
+              "This is where you sharpen everything.",
+            ];
+            const stageQuestions = [
+              "What's one move you're making today?",
+              "What will you do with this stage today?",
+              "How are you going to push forward from here?",
+              "What's the next step worth taking?",
+            ];
+            jaeText = `${greeting}you're in **${stageName}** ${emoji}.${goalRef} Focus: ${wl}.\n${pick(stageActions)}\n\n${pick(stageQuestions)}`;
           } else if (asksFocus) {
-            jaeText = `${greeting}${weakest.label.toLowerCase()} is your lowest heartbeat — ${weakest.score.toFixed(1)} out of 5. That's not a weakness. It's a signal.\nFive minutes on ${weakest.label.toLowerCase()} today will compound.\n\nWhat does that look like for you?`;
+            const focusFrames = [
+              `${wl} is your lowest heartbeat — ${ws} out of 5. That's not a weakness. It's a signal.`,
+              `${wl} is sitting at ${ws} out of 5. That's your growth edge right now.`,
+              `your focus area is ${wl} — ${ws} out of 5. This is where small effort compounds fastest.`,
+              `${wl} scored ${ws} out of 5. That's the heartbeat that needs you most.`,
+            ];
+            const focusActions = [
+              `Five minutes on ${wl} today will compound.`,
+              `One focused action on ${wl} today — that's the assignment.`,
+              `Put some energy into ${wl} today. Even something small.`,
+              `Give ${wl} ten minutes of real attention.`,
+            ];
+            const focusQuestions = [
+              "What does that look like for you?",
+              "What's one thing you can do for that today?",
+              "How will you show up for that this week?",
+              "Where can you start?",
+            ];
+            jaeText = `${greeting}${pick(focusFrames)}\n${pick(focusActions)}\n\n${pick(focusQuestions)}`;
           } else if (asksWeakest) {
-            jaeText = `${greeting}${weakest.label.toLowerCase()} is at ${weakest.score.toFixed(1)} out of 5. That's where the biggest growth lives.\nLet's sharpen it.\n\nWhat's one thing you can do this week to raise that number?`;
+            const weakFrames = [
+              `${wl} is at ${ws} out of 5. That's where the biggest growth lives.`,
+              `${wl} came in at ${ws} out of 5. That's your opening.`,
+              `your lowest heartbeat is ${wl} — ${ws} out of 5. This is the one to watch.`,
+              `${wl} scored ${ws} out of 5. Every point you raise here changes the whole picture.`,
+            ];
+            const weakActions = [
+              "Let's sharpen it.",
+              "Time to put some work in there.",
+              "Small, steady effort on this will shift everything.",
+              "This is where your focus pays off most.",
+            ];
+            const weakQuestions = [
+              "What's one thing you can do this week to raise that number?",
+              "What would moving that number up by even half a point look like?",
+              "Where do you want to start?",
+              "What's one action that would strengthen this?",
+            ];
+            jaeText = `${greeting}${pick(weakFrames)}\n${pick(weakActions)}\n\n${pick(weakQuestions)}`;
           } else if (asksSmallStep) {
-            jaeText = `${greeting}you're in ${stageName} ${emoji}. ${weakest.label} needs attention.\nOne move: five minutes on ${weakest.label.toLowerCase()}.\n\nWhat will you choose?`;
+            const stepFrames = [
+              `you're in ${stageName} ${emoji}. ${weakest.label} needs attention.`,
+              `${stageName} ${emoji} stage. ${weakest.label} is the priority.`,
+              `you're at ${stageName} ${emoji}, and ${wl} is where the next breakthrough lives.`,
+            ];
+            const stepActions = [
+              `One move: five minutes on ${wl}.`,
+              `Spend a few minutes on ${wl} today. That's the whole play.`,
+              `Give ${wl} one focused effort — even something small shifts the score.`,
+            ];
+            const stepQuestions = [
+              "What will you choose?",
+              "What's it going to be?",
+              "What action fits your day?",
+              "How will you spend those minutes?",
+            ];
+            jaeText = `${greeting}${pick(stepFrames)}\n${pick(stepActions)}\n\n${pick(stepQuestions)}`;
           }
 
           const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });

@@ -1,0 +1,109 @@
+We are expanding Jae’s response variation system.
+
+IMPORTANT CONSTRAINTS:
+- Do NOT fabricate user history.
+- Do NOT invent obstacles, achievements, or life circumstances.
+- Only reference stored data: name, stage, weakest heartbeat, scores, saved goal, saved obstacle, recent memory.
+- If data is missing, state that clearly instead of guessing.
+
+---------------------------------------
+GOAL
+---------------------------------------
+
+Eliminate repetitive phrasing without introducing hallucinations.
+
+Replace small phrase pools (3 options per category) with expanded structured variation.
+
+---------------------------------------
+IMPLEMENTATION RULES
+---------------------------------------
+
+1. Expand phrase variation pools to 15–25 options per category:
+   - Clarity
+   - Small Steps + Consistency
+   - Mindset over Method
+   - Feedback & Adaptation
+   - Courageous Action
+   - Growth Stage
+   - Goal Confirmation
+   - Memory Confirmation
+   - Accountability Prompts
+
+2. Do NOT write fixed template sentences like:
+   “Your weakest heartbeat is X.”
+   Instead generate structured variation using interchangeable components.
+
+---------------------------------------
+STRUCTURED RESPONSE FRAME
+---------------------------------------
+
+Every coaching response must follow this flexible structure:
+
+A. Personal Anchor
+   - Use user name naturally (varied placements)
+
+B. Data Reference
+   - Reference only real stored data (stage, heartbeat, goal, etc.)
+
+C. Reframe or Insight
+   - Short reflective line (varied phrasing)
+
+D. One Concrete Action Step
+   - Clear, simple, grounded suggestion
+
+E. One Focused Question
+   - Single question to continue engagement
+
+---------------------------------------
+VARIATION GUIDELINES
+---------------------------------------
+
+• Vary sentence openings.
+• Vary rhythm (short sentences vs slightly longer ones).
+• Rotate between:
+   - Direct tone
+   - Reflective tone
+   - Calm challenge tone
+   - Observational tone
+
+• Avoid repeating the same structural phrasing.
+• Avoid repeated sentence stems.
+• Avoid motivational clichés.
+• Avoid corporate language.
+
+---------------------------------------
+HALLUCINATION GUARDRAILS
+---------------------------------------
+
+If the user has:
+- No saved goal → say “You don’t have a goal saved yet.”
+- No saved obstacle → say that clearly.
+- No memory entries → state that.
+
+Never invent:
+- Personal struggles
+- Career situations
+- Family situations
+- Emotional states unless user explicitly states them.
+
+---------------------------------------
+EXAMPLE (DO NOT COPY EXACTLY)
+
+Instead of:
+“Your weakest heartbeat is Clarity at 2/5.”
+
+Allow variations like:
+- “Clarity is where the work starts.”
+- “Right now, your direction needs sharpening.”
+- “Your clarity score is the lowest signal I’m seeing.”
+- “This week is about tightening your vision.”
+
+All must still reference the actual stored score when appropriate.
+
+---------------------------------------
+OUTPUT REQUIREMENT
+---------------------------------------
+
+Refactor response logic to use structured dynamic assembly rather than small fixed phrase pools.
+
+Ensure variety without losing precision or integrity.
