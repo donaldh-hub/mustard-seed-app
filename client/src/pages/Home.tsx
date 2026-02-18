@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout } from "lucide-react";
+import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -60,6 +60,12 @@ export default function Home() {
   const { data: consistency } = useQuery({
     queryKey: ["consistency", userId],
     queryFn: () => api.getConsistencySummary(userId!),
+    enabled: !!userId,
+  });
+
+  const { data: garden } = useQuery({
+    queryKey: ["garden", userId],
+    queryFn: () => api.getGardenSummary(userId!),
     enabled: !!userId,
   });
 
@@ -158,6 +164,50 @@ export default function Home() {
               Refine Goal
             </Button>
           </motion.div>
+
+          {(garden?.targeted || garden?.untargeted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.12 }}
+              className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+              data-testid="card-active-goals"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <TreeDeciduous className="w-4 h-4 text-green-600" />
+                <h2 className="text-sm font-semibold text-foreground">Active Goals</h2>
+              </div>
+              <div className="space-y-2">
+                {garden.targeted && (
+                  <div className="flex items-center gap-2 bg-orange-50 rounded-xl px-3 py-2">
+                    <Target className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate" data-testid="text-home-targeted-title">{garden.targeted.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{Math.round(garden.targeted.percentComplete)}% complete{garden.targeted.daysLeft !== null ? ` · ${garden.targeted.daysLeft}d left` : ""}</p>
+                    </div>
+                  </div>
+                )}
+                {garden.untargeted && (
+                  <div className="flex items-center gap-2 bg-purple-50 rounded-xl px-3 py-2">
+                    <Flame className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate" data-testid="text-home-untargeted-title">{garden.untargeted.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{garden.untargeted.streakCount}d streak · {garden.untargeted.momentumScore}% momentum</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <Button
+                onClick={() => setLocation("/progress")}
+                variant="outline"
+                className="mt-3 w-full rounded-full"
+                size="sm"
+                data-testid="button-view-growth"
+              >
+                View Growth Dashboard
+              </Button>
+            </motion.div>
+          )}
 
           <motion.div
             initial={{ opacity: 0, y: 8 }}

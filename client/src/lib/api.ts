@@ -32,4 +32,19 @@ export const api = {
   submitAssessment: (userId: string, answers: number[]) => fetchJson<any>(`/users/${userId}/assessment`, { method: "POST", body: JSON.stringify({ answers }) }),
 
   getConsistencySummary: (userId: string) => fetchJson<any>(`/users/${userId}/consistency-summary`),
+
+  getActiveGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals`),
+  getAllGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals/all`),
+  createGoal: (userId: string, data: any) =>
+    fetchJson<any>(`/users/${userId}/goals`, { method: "POST", body: JSON.stringify(data) }),
+  updateGoal: (goalId: string, data: any) =>
+    fetchJson<any>(`/goals/${goalId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  archiveGoal: (goalId: string) =>
+    fetchJson<any>(`/goals/${goalId}/archive`, { method: "POST" }),
+  completeGoal: (goalId: string, completionType?: string) =>
+    fetchJson<any>(`/goals/${goalId}/complete`, { method: "POST", body: JSON.stringify({ completionType }) }),
+  logGoalProgress: (goalId: string, data: { summary: string; mood?: string; progressValue?: number }) =>
+    fetchJson<any>(`/goals/${goalId}/log`, { method: "POST", body: JSON.stringify(data) }),
+
+  getGardenSummary: (userId: string) => fetchJson<any>(`/users/${userId}/garden-summary`),
 };

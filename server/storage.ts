@@ -21,7 +21,8 @@ export interface IStorage {
   getEntriesByGoalId(goalId: string): Promise<Entry[]>;
   createEntry(entry: InsertEntry): Promise<Entry>;
 
-  getGoals(userId: string): Promise<Goal[]>;
+  getActiveGoals(userId: string): Promise<Goal[]>;
+  getAllGoals(userId: string): Promise<Goal[]>;
   getGoal(id: string): Promise<Goal | undefined>;
   createGoal(data: InsertGoal): Promise<Goal>;
   updateGoal(id: string, data: Partial<InsertGoal>): Promise<Goal | undefined>;
@@ -71,8 +72,12 @@ export class DatabaseStorage implements IStorage {
     return e;
   }
 
-  async getGoals(userId: string): Promise<Goal[]> {
-    return db.select().from(goals).where(and(eq(goals.userId, userId), eq(goals.isActive, 1))).orderBy(desc(goals.createdAt));
+  async getActiveGoals(userId: string): Promise<Goal[]> {
+    return db.select().from(goals).where(and(eq(goals.userId, userId), eq(goals.status, "active"))).orderBy(desc(goals.createdAt));
+  }
+
+  async getAllGoals(userId: string): Promise<Goal[]> {
+    return db.select().from(goals).where(eq(goals.userId, userId)).orderBy(desc(goals.createdAt));
   }
 
   async getGoal(id: string): Promise<Goal | undefined> {

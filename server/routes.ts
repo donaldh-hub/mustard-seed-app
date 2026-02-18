@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
-import type { InsertAssessment, Assessment } from "@shared/schema";
+import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
@@ -824,6 +824,294 @@ export async function registerRoutes(
         seedStageDescription,
         seedStageIconKey,
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // ─── Goal CRUD with Discipline Protection ───
+
+  app.get("/api/users/:userId/goals", async (req, res) => {
+    try {
+      const activeGoals = await storage.getActiveGoals(req.params.userId);
+      return res.json(activeGoals);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/goals/all", async (req, res) => {
+    try {
+      const allGoals = await storage.getAllGoals(req.params.userId);
+      return res.json(allGoals);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/users/:userId/goals", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { goalType } = req.body;
+      if (!goalType || !["targeted", "untargeted"].includes(goalType)) {
+        return res.status(400).json({ message: "goalType must be 'targeted' or 'untargeted'" });
+      }
+
+      const activeGoals = await storage.getActiveGoals(userId);
+      const existingOfType = activeGoals.find((g) => g.goalType === goalType);
+
+      if (existingOfType) {
+        const msg = goalType === "targeted"
+          ? "You already have an active targeted goal. Complete or archive it before starting another."
+          : "Focus builds growth. Complete or archive your current identity goal before adding another.";
+        return res.status(409).json({ message: msg });
+      }
+
+      const data = {
+        userId,
+        title: req.body.title || "",
+        goalType,
+        status: "active" as const,
+        emotionalWhy: req.body.emotionalWhy || "",
+        focusArea: req.body.focusArea || "",
+        metricType: req.body.metricType || "actions",
+        deadline: req.body.deadline || null,
+        baselineMetric: req.body.baselineMetric ?? null,
+        targetMetric: req.body.targetMetric ?? null,
+        percentComplete: 0,
+        microHabit: req.body.microHabit || "",
+        weeklyTarget: req.body.weeklyTarget ?? 3,
+        streakCount: 0,
+        momentumScore: 0,
+        consistencyRate: 0,
+        treeGrowthScore: 0,
+        isActive: 1,
+      };
+
+      const goal = await storage.createGoal(data);
+      return res.json(goal);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.patch("/api/goals/:goalId", async (req, res) => {
+    try {
+      const goal = await storage.updateGoal(req.params.goalId, req.body);
+      if (!goal) return res.status(404).json({ message: "Goal not found" });
+      return res.json(goal);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/goals/:goalId/archive", async (req, res) => {
+    try {
+      const goal = await storage.updateGoal(req.params.goalId, { status: "archived", isActive: 0 });
+      if (!goal) return res.status(404).json({ message: "Goal not found" });
+      return res.json(goal);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/goals/:goalId/complete", async (req, res) => {
+    try {
+      const goal = await storage.getGoal(req.params.goalId);
+      if (!goal) return res.status(404).json({ message: "Goal not found" });
+
+      const statusLabel = goal.goalType === "untargeted"
+        ? (req.body.completionType || "integrated")
+        : "completed";
+
+      const updated = await storage.updateGoal(req.params.goalId, {
+        status: statusLabel,
+        isActive: 0,
+        percentComplete: goal.goalType === "targeted" ? 100 : goal.percentComplete,
+        treeGrowthScore: 100,
+      });
+      return res.json(updated);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/goals/:goalId/log", async (req, res) => {
+    try {
+      const goal = await storage.getGoal(req.params.goalId);
+      if (!goal) return res.status(404).json({ message: "Goal not found" });
+
+      const summary = req.body.summary || "Activity logged";
+      const mood = req.body.mood || "neutral";
+      const progressValue = req.body.progressValue ?? null;
+
+      const entry = await storage.createEntry({
+        userId: goal.userId,
+        goalId: goal.id,
+        date: todayStr(),
+        summary,
+        mood,
+      });
+
+      const goalEntries = await storage.getEntriesByGoalId(goal.id);
+
+      if (goal.goalType === "targeted" && progressValue !== null && goal.targetMetric && goal.baselineMetric !== null) {
+        const range = goal.targetMetric - (goal.baselineMetric ?? 0);
+        const current = progressValue - (goal.baselineMetric ?? 0);
+        const pct = range > 0 ? Math.min(Math.round((current / range) * 100), 100) : 0;
+        const treeScore = Math.min(pct, 100);
+        await storage.updateGoal(goal.id, { percentComplete: pct, treeGrowthScore: treeScore });
+      }
+
+      if (goal.goalType === "untargeted") {
+        const distinctDates = new Set(goalEntries.map((e) => e.date));
+        const now = new Date();
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const windowStart = sevenDaysAgo.toISOString().split("T")[0];
+        const today = todayStr();
+
+        let weeklyActive = 0;
+        distinctDates.forEach((d) => {
+          if (d >= windowStart && d <= today) weeklyActive++;
+        });
+
+        const momentum = Math.round(Math.min((weeklyActive / 7) * 100, 100));
+
+        const allDates = Array.from(distinctDates).sort();
+        let streak = 0;
+        const todayD = new Date(today);
+        for (let i = 0; i < 365; i++) {
+          const checkDate = new Date(todayD);
+          checkDate.setDate(checkDate.getDate() - i);
+          const checkStr = checkDate.toISOString().split("T")[0];
+          if (distinctDates.has(checkStr)) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+
+        const totalDays = distinctDates.size;
+        const startDate = new Date(goal.createdAt!);
+        const daysSinceStart = Math.max(1, Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const consistencyR = Math.round(Math.min((totalDays / daysSinceStart) * 100, 100));
+
+        const treeLevels = [
+          { min: 0, max: 7, score: 10 },
+          { min: 8, max: 21, score: 30 },
+          { min: 22, max: 45, score: 55 },
+          { min: 46, max: 90, score: 80 },
+          { min: 91, max: Infinity, score: 100 },
+        ];
+        let treeScore = 0;
+        for (const level of treeLevels) {
+          if (totalDays >= level.min && totalDays <= level.max) {
+            const rangeSize = level.max === Infinity ? 100 : level.max - level.min;
+            const progress = Math.min((totalDays - level.min) / rangeSize, 1);
+            const prevScore = treeLevels[treeLevels.indexOf(level) - 1]?.score ?? 0;
+            treeScore = prevScore + progress * (level.score - prevScore);
+            break;
+          }
+        }
+
+        await storage.updateGoal(goal.id, {
+          streakCount: streak,
+          momentumScore: momentum,
+          consistencyRate: consistencyR,
+          treeGrowthScore: Math.round(treeScore),
+        });
+      }
+
+      return res.json(entry);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // ─── Garden Summary (per-goal metrics for Growth Dashboard) ───
+
+  app.get("/api/users/:userId/garden-summary", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const activeGoals = await storage.getActiveGoals(userId);
+
+      const result: any = { targeted: null, untargeted: null };
+
+      for (const goal of activeGoals) {
+        const goalEntries = await storage.getEntriesByGoalId(goal.id);
+        const distinctDates = new Set(goalEntries.map((e) => e.date));
+        const now = new Date();
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const windowStart = sevenDaysAgo.toISOString().split("T")[0];
+        const today = todayStr();
+
+        let weeklyActive = 0;
+        distinctDates.forEach((d) => {
+          if (d >= windowStart && d <= today) weeklyActive++;
+        });
+        const waterLevel = Math.round(Math.min((weeklyActive / 7) * 100, 100));
+
+        const lifetimeDays = distinctDates.size;
+        let seedStageName: string;
+        let seedStageIconKey: string;
+        if (lifetimeDays <= 7) { seedStageName = "Seed"; seedStageIconKey = "seed"; }
+        else if (lifetimeDays <= 21) { seedStageName = "Germinating"; seedStageIconKey = "germinating"; }
+        else if (lifetimeDays <= 45) { seedStageName = "Sprout"; seedStageIconKey = "sprout"; }
+        else if (lifetimeDays <= 90) { seedStageName = "Growing"; seedStageIconKey = "growing"; }
+        else { seedStageName = "Rooted"; seedStageIconKey = "rooted"; }
+
+        if (goal.goalType === "targeted") {
+          const daysLeft = goal.deadline
+            ? Math.max(0, Math.ceil((new Date(goal.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+            : null;
+
+          result.targeted = {
+            id: goal.id,
+            title: goal.title,
+            emotionalWhy: goal.emotionalWhy,
+            deadline: goal.deadline,
+            daysLeft,
+            baselineMetric: goal.baselineMetric,
+            targetMetric: goal.targetMetric,
+            percentComplete: goal.percentComplete,
+            treeGrowthScore: goal.treeGrowthScore,
+            waterLevel,
+            seedStageName,
+            seedStageIconKey,
+            lifetimeDays,
+            weeklyActive,
+          };
+        } else {
+          result.untargeted = {
+            id: goal.id,
+            title: goal.title,
+            emotionalWhy: goal.emotionalWhy,
+            microHabit: goal.microHabit,
+            focusArea: goal.focusArea,
+            streakCount: goal.streakCount,
+            momentumScore: goal.momentumScore,
+            consistencyRate: goal.consistencyRate,
+            treeGrowthScore: goal.treeGrowthScore,
+            waterLevel,
+            seedStageName,
+            seedStageIconKey,
+            lifetimeDays,
+            weeklyActive,
+          };
+        }
+      }
+
+      return res.json(result);
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });
