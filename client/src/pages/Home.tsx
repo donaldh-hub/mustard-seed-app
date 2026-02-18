@@ -139,7 +139,7 @@ export default function Home() {
               <h2 className="text-sm font-semibold text-foreground">Goal</h2>
             </div>
             {goal ? (
-              <p className="text-sm text-foreground" data-testid="text-goal">{goal}</p>
+              <p className="text-base font-semibold text-foreground truncate" data-testid="text-goal">{goal}</p>
             ) : (
               <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No goal saved yet</p>
             )}
