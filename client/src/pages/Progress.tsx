@@ -136,7 +136,7 @@ export default function ProgressPage() {
         </header>
 
         <div className="px-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-3">
             <TreeCard
               label="TARGETED TREE"
               type="targeted"
@@ -379,15 +379,18 @@ function TreeCard({
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white/60 backdrop-blur-sm rounded-2xl border border-dashed border-border/60 p-4 flex flex-col items-center justify-center min-h-[220px]"
+        className="bg-white/60 backdrop-blur-sm rounded-2xl border border-dashed border-border/60 p-5 flex items-center gap-4"
         data-testid={`card-empty-${type}`}
       >
-        <div className="text-4xl opacity-30 mb-2">🌰</div>
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-3">{label}</p>
-        <Button size="sm" variant="outline" className="rounded-full text-xs" onClick={onAdd} data-testid={`button-add-${type}`}>
-          <Plus className="w-3 h-3 mr-1" />
-          Plant {isTargeted ? "Goal" : "Identity"}
-        </Button>
+        <div className="text-4xl opacity-30">🌰</div>
+        <div className="flex-1">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1">{label}</p>
+          <p className="text-xs text-muted-foreground mb-3">No {isTargeted ? "targeted goal" : "identity goal"} planted yet.</p>
+          <Button size="sm" variant="outline" className="rounded-full text-xs" onClick={onAdd} data-testid={`button-add-${type}`}>
+            <Plus className="w-3 h-3 mr-1" />
+            Plant {isTargeted ? "Goal" : "Identity"}
+          </Button>
+        </div>
       </motion.div>
     );
   }
@@ -396,59 +399,64 @@ function TreeCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white/80 backdrop-blur-sm rounded-2xl border border-border/50 p-4 flex flex-col items-center min-h-[220px] shadow-sm"
+      className="bg-white/80 backdrop-blur-sm rounded-2xl border border-border/50 p-4 shadow-sm"
       data-testid={`card-tree-${type}`}
     >
-      <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">{label}</p>
-
-      <motion.div
-        key={data.seedStageIconKey}
-        initial={{ scale: 0.7, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", bounce: 0.4 }}
-        className="text-5xl my-2"
-        data-testid={`text-tree-icon-${type}`}
-      >
-        {icon}
-      </motion.div>
-
-      <p className="text-[11px] font-medium text-foreground truncate w-full text-center" data-testid={`text-goal-title-${type}`}>
-        {data.title}
-      </p>
-      <p className="text-[10px] text-muted-foreground">{data.seedStageName}</p>
-
-      <div className="w-full mt-2 space-y-1">
-        <div className="flex items-center gap-1 text-[10px]">
-          <Droplets className="w-3 h-3 text-blue-500" />
-          <span className="text-muted-foreground">Water</span>
-          <span className="ml-auto font-medium" data-testid={`text-water-${type}`}>{data.waterLevel}%</span>
+      <div className="flex items-start gap-4">
+        <div className="flex flex-col items-center shrink-0">
+          <motion.div
+            key={data.seedStageIconKey}
+            initial={{ scale: 0.7, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", bounce: 0.4 }}
+            className="text-5xl"
+            data-testid={`text-tree-icon-${type}`}
+          >
+            {icon}
+          </motion.div>
+          <p className="text-[10px] text-muted-foreground mt-1">{data.seedStageName}</p>
         </div>
-        <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${data.waterLevel}%` }} />
+
+        <div className="flex-1 min-w-0">
+          <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</p>
+          <p className="text-sm font-medium text-foreground truncate mt-0.5" data-testid={`text-goal-title-${type}`}>
+            {data.title}
+          </p>
+
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center gap-1 text-[11px]">
+              <Droplets className="w-3 h-3 text-blue-500" />
+              <span className="text-muted-foreground">Water</span>
+              <span className="ml-auto font-medium" data-testid={`text-water-${type}`}>{data.waterLevel}%</span>
+            </div>
+            <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${data.waterLevel}%` }} />
+            </div>
+          </div>
+
+          {isTargeted ? (
+            <div className="mt-1 text-[11px] text-muted-foreground flex justify-between">
+              <span data-testid="text-targeted-pct-card">{Math.round(data.percentComplete)}% done</span>
+              {data.daysLeft !== null && <span>{data.daysLeft}d left</span>}
+            </div>
+          ) : (
+            <div className="mt-1 text-[11px] text-muted-foreground flex justify-between">
+              <span data-testid="text-streak-card">{data.streakCount}d streak</span>
+              <span>{data.momentumScore}% momentum</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {isTargeted ? (
-        <div className="w-full mt-1 text-[10px] text-muted-foreground flex justify-between">
-          <span data-testid="text-targeted-pct-card">{Math.round(data.percentComplete)}% done</span>
-          {data.daysLeft !== null && <span>{data.daysLeft}d left</span>}
-        </div>
-      ) : (
-        <div className="w-full mt-1 text-[10px] text-muted-foreground flex justify-between">
-          <span data-testid="text-streak-card">{data.streakCount}d streak</span>
-          <span>{data.momentumScore}% mom.</span>
-        </div>
-      )}
-
-      <div className="flex gap-1 mt-3 w-full">
-        <Button size="sm" variant="ghost" className="flex-1 text-[10px] h-7 px-1" onClick={() => onLog(data.id)} data-testid={`button-log-${type}`}>
-          <TrendingUp className="w-3 h-3 mr-0.5" /> Log
+      <div className="flex gap-1 mt-3 border-t border-border/30 pt-3">
+        <Button size="sm" variant="ghost" className="flex-1 text-xs h-8" onClick={() => onLog(data.id)} data-testid={`button-log-${type}`}>
+          <TrendingUp className="w-3.5 h-3.5 mr-1" /> Log
         </Button>
-        <Button size="sm" variant="ghost" className="flex-1 text-[10px] h-7 px-1" onClick={() => onComplete(data.id)} data-testid={`button-complete-${type}`}>
-          <CheckCircle2 className="w-3 h-3 mr-0.5" /> Done
+        <Button size="sm" variant="ghost" className="flex-1 text-xs h-8" onClick={() => onComplete(data.id)} data-testid={`button-complete-${type}`}>
+          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Done
         </Button>
-        <Button size="sm" variant="ghost" className="text-[10px] h-7 px-1" onClick={() => onArchive(data.id)} data-testid={`button-archive-${type}`}>
-          <Archive className="w-3 h-3" />
+        <Button size="sm" variant="ghost" className="text-xs h-8 px-2" onClick={() => onArchive(data.id)} data-testid={`button-archive-${type}`}>
+          <Archive className="w-3.5 h-3.5" />
         </Button>
       </div>
     </motion.div>
