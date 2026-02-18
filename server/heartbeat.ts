@@ -134,33 +134,66 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-export function generateJaeResponse(userText: string): { text: string; mood: 'happy' | 'neutral' | 'sad'; shouldWater: boolean } {
+type UserContext = {
+  name: string;
+  goal: string;
+  obstacle: string;
+  streak: number;
+  treeStage: number;
+  waterLevel: number;
+};
+
+export function generateJaeResponse(userText: string, ctx: UserContext): { text: string; mood: 'happy' | 'neutral' | 'sad' } {
   const module = analyzeIntent(userText);
   const lowerText = userText.toLowerCase();
+  const greeting = ctx.name ? `${ctx.name}, ` : "";
+
+  const isPositive = /done|did it|good|great|completed|finished|accomplished|nailed/.test(lowerText);
 
   if (module) {
     const pocketLine = pick(module.pocketLines);
+    const prompt = pick(module.prompts);
     const tool = pick(module.tools);
-    const isPositive = lowerText.includes('done') || lowerText.includes('did it') || lowerText.includes('good');
+
+    let contextLine = "";
+    if (ctx.goal && (module.id === "clarity" || module.id === "consistency")) {
+      contextLine = `\n\nYour goal — "${ctx.goal}" — is worth fighting for.`;
+    }
+    if (ctx.obstacle && (module.id === "adaptation" || module.id === "mindset" || module.id === "courage")) {
+      contextLine = `\n\nYou told me "${ctx.obstacle}" gets in the way. Let's work with that.`;
+    }
+
+    const streakLine = ctx.streak > 0 ? `\n\nYou're on a ${ctx.streak}-day streak. Keep it alive.` : "";
 
     return {
-      text: `I hear you. ${pocketLine}\n\nTry this: ${tool.action} (${tool.name})`,
+      text: `${greeting}${pocketLine}${contextLine}\n\n${prompt}\n\nTry this: ${tool.action} (${tool.name})${streakLine}`,
       mood: isPositive ? 'happy' : 'neutral',
-      shouldWater: isPositive,
     };
   }
 
-  if (lowerText.includes('done') || lowerText.includes('did it') || lowerText.includes('good') || lowerText.includes('great')) {
+  if (isPositive) {
+    const goalRef = ctx.goal ? ` Every step like this brings you closer to "${ctx.goal}".` : "";
     return {
-      text: "That's wonderful! I'm adding this to your memory bank. How did it feel to accomplish that?",
+      text: `${greeting}that's a win.${goalRef}\n\nWhat made it click for you today?`,
       mood: 'happy',
-      shouldWater: true,
     };
   }
+
+  const fallbackPrompts = [
+    ctx.goal
+      ? `${greeting}let's zoom in. When you think about "${ctx.goal}", what feels like the next right step?`
+      : `${greeting}what's the one thing on your mind right now that you want to move forward on?`,
+    ctx.obstacle
+      ? `${greeting}you mentioned "${ctx.obstacle}" holds you back. What does that look like today?`
+      : `${greeting}what's one thing standing between you and progress right now?`,
+    `${greeting}break it down for me — what happened, and where do you want to go from here?`,
+    ctx.streak > 0
+      ? `${greeting}you're ${ctx.streak} days in. What's keeping you going?`
+      : `${greeting}every journey starts somewhere. What's the smallest move you can make today?`,
+  ];
 
   return {
-    text: "I'm listening. Tell me more about that.",
+    text: pick(fallbackPrompts),
     mood: 'neutral',
-    shouldWater: false,
   };
 }
