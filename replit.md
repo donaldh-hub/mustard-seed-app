@@ -68,8 +68,11 @@ Preferred communication style: Simple, everyday language.
 4. Feedback & Adaptation
 5. Courageous Action
 
-### No External AI Services
-- The Jae coaching system runs entirely locally using keyword matching against a predefined module library. There are no OpenAI, Google AI, or other external AI API calls currently in use (though the build script includes `@google/generative-ai` and `openai` in its bundle allowlist, suggesting potential future integration).
+### Jae AI Coach — DEPTH Coaching System
+- **Primary engine**: `server/jaeCoach.ts` — AI-powered DEPTH coaching using OpenAI (gpt-4o) via Replit AI Integrations. Uses a structured system prompt with intent classification (PROACTIVE_ACTION, PROGRESS_UPDATE, STRUGGLE_OR_SETBACK, QUESTION_SEEKING, REFLECTION_OR_IDENTITY, ADMIN_OR_NAVIGATION) and 4-part DEPTH response format (Mirror, Meaning, Heartbeat Link, Next Move).
+- **Fallback engine**: `server/heartbeat.ts` — Local keyword-matching "Heartbeat Relay" system used as fallback when AI is unavailable. Also used directly for admin/navigation queries (stage check, focus check, heartbeat check, small step, save commands, log entries, goal queries).
+- **Context injection**: System prompt dynamically receives user's active targeted/untargeted goal titles, obstacle, streak, growth stage, weakest heartbeat, and recent message history (last 6 messages).
+- **API keys**: Managed via Replit AI Integrations (`AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL`). No user API key required — charges go to Replit credits.
 
 ### Third-Party NPM Libraries (Notable)
 - `express` v5 — HTTP server

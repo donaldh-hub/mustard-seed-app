@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
+import { generateDepthResponse } from "./jaeCoach";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
 
@@ -672,24 +673,49 @@ export async function registerRoutes(
 
       } else {
         const latestAssessment = await storage.getLatestAssessment(userId);
-        const result = generateJaeResponse(rawText, {
-          name,
-          goal,
-          obstacle,
-          streak,
-          treeStage,
-          waterLevel,
-          stage: latestAssessment?.stage,
-          weakestHeartbeat: latestAssessment?.weakestHeartbeat || undefined,
-          assessmentAnswers: latestAssessment?.answers as number[] | undefined,
+        const recentMsgs = await storage.getMessages(userId);
+        const last10 = recentMsgs
+          .sort((a: any, b: any) => (a.createdAt > b.createdAt ? 1 : -1))
+          .slice(-10)
+          .map((m: any) => ({ sender: m.sender, text: m.text }));
+
+        const depthResult = await generateDepthResponse(rawText, {
+          userName: name,
           targetedGoalTitle: targetedGoal?.title,
           untargetedGoalTitle: untargetedGoal?.title,
+          obstacle,
+          streak,
+          stage: latestAssessment?.stage,
+          weakestHeartbeat: latestAssessment?.weakestHeartbeat || undefined,
+          weakestScore: latestAssessment?.heartbeatScores
+            ? (latestAssessment.heartbeatScores as Record<string, number>)[latestAssessment.weakestHeartbeat || ""] ?? undefined
+            : undefined,
+          recentMessages: last10,
         });
-        jaeText = result.text;
 
-        const isPositive = /done|did it|good|great|completed|finished|accomplished|nailed/i.test(textLower);
-        if (isPositive) {
-          shouldWater = true;
+        if (depthResult.text) {
+          jaeText = depthResult.text;
+          shouldWater = depthResult.shouldWater;
+        } else {
+          const result = generateJaeResponse(rawText, {
+            name,
+            goal,
+            obstacle,
+            streak,
+            treeStage,
+            waterLevel,
+            stage: latestAssessment?.stage,
+            weakestHeartbeat: latestAssessment?.weakestHeartbeat || undefined,
+            assessmentAnswers: latestAssessment?.answers as number[] | undefined,
+            targetedGoalTitle: targetedGoal?.title,
+            untargetedGoalTitle: untargetedGoal?.title,
+          });
+          jaeText = result.text;
+          const isPositive = /done|did it|good|great|completed|finished|accomplished|nailed/i.test(textLower);
+          if (isPositive) shouldWater = true;
+        }
+
+        if (shouldWater) {
           await storage.createEntry({
             userId,
             date: todayStr(),
