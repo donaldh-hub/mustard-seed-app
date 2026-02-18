@@ -69,17 +69,29 @@ export default function Home() {
               key={msg.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex items-end gap-2 mb-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
+              {msg.sender === 'jae' && (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+              )}
+
               <div 
-                className={`max-w-[85%] p-4 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                className={`max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.sender === 'user' 
-                    ? 'bg-primary text-primary-foreground rounded-br-none' 
-                    : 'bg-white text-foreground rounded-bl-none border border-border/50'
+                    ? 'bg-primary text-primary-foreground rounded-br-sm' 
+                    : 'bg-white text-foreground rounded-bl-sm border border-border/50'
                 }`}
               >
                 {msg.text}
               </div>
+
+              {msg.sender === 'user' && (
+                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1">
+                    <div className="w-4 h-4 bg-primary rounded-full opacity-50" />
+                 </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
