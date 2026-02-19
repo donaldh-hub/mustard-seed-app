@@ -5,7 +5,7 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
-import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
+import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { analyzePhoto } from "./visionAnalysis";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
@@ -764,65 +764,48 @@ export async function registerRoutes(
       let waterAwarded = false;
       let waterGoalId: string | null = null;
       let growthResult: any = null;
-      let titanResult: any = { category: agg.primaryCategory, actionPoints: agg.totalActionPoints, insightPoints: agg.totalInsightPoints, driftMarkers: agg.totalDriftMarkers };
+      let apDelta = agg.totalActionPoints;
+      let ipDelta = agg.totalInsightPoints;
+      let driftDelta = agg.totalDriftMarkers;
 
       const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
+      const isCBurnActive = !!(user.cBurnActive);
 
-      if (agg.totalDriftMarkers < 0) {
-        const newDrift = (user.driftMarkers || 0) + Math.abs(agg.totalDriftMarkers);
-        const newIOCount = (user.consecutiveIOCount || 0) + 1;
+      if (isCBurnActive && agg.primaryCategory !== "VA") {
+        apDelta = 0;
+        ipDelta = 0;
+      }
+
+      if (driftDelta < 0) {
         await storage.updateUser(userId, {
-          driftMarkers: newDrift,
-          consecutiveIOCount: newIOCount,
+          driftMarkers: (user.driftMarkers || 0) + Math.abs(driftDelta),
+          consecutiveIOCount: (user.consecutiveIOCount || 0) + 1,
         } as any);
       } else if (agg.primaryCategory === "IO") {
-        const newIOCount = (user.consecutiveIOCount || 0) + 1;
         await storage.updateUser(userId, {
-          consecutiveIOCount: newIOCount,
+          consecutiveIOCount: (user.consecutiveIOCount || 0) + 1,
         } as any);
       }
 
+      let heartbeatKey: HeartbeatKey | null = null;
       if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+        const creditKeys = Object.keys(agg.heartbeatCredits) as HeartbeatKey[];
+        heartbeatKey = creditKeys[0] || "consistency";
         const updatedCredits = { ...userCredits };
-        for (const [hb, count] of Object.entries(agg.heartbeatCredits)) {
-          updatedCredits[hb as HeartbeatKey] = (updatedCredits[hb as HeartbeatKey] || 0) + (count || 0);
-        }
-
-        const now = new Date();
-        const daysSinceLastVA = user.lastVerifiedActionAt
-          ? Math.floor((now.getTime() - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
-          : 999;
-
-        const hasDriftWarning = user.lastDriftWarningAt
-          ? (now.getTime() - new Date(user.lastDriftWarningAt).getTime()) < (48 * 60 * 60 * 1000)
-          : false;
-
-        let bonusAP = 0;
-        if (hasDriftWarning) {
-          const recentMsgs = await storage.getMessagesSince(userId, new Date(now.getTime() - 48 * 60 * 60 * 1000));
-          const recentVACount = recentMsgs.filter((m: any) => m.sender === "user").reduce((count, m) => {
-            const c = classifyMultipleActions(m.text);
-            const a = aggregateClassifications(c);
-            return count + (a.primaryCategory === "VA" ? 1 : 0);
-          }, 0);
-          if (recentVACount >= 3) {
-            bonusAP = 2;
-          }
-        }
+        updatedCredits[heartbeatKey] = (updatedCredits[heartbeatKey] || 0) + 1;
 
         await storage.updateUser(userId, {
           heartbeatCredits: updatedCredits as any,
-          lastVerifiedActionAt: now,
+          lastVerifiedActionAt: new Date(),
           consecutiveIOCount: 0,
           cBurnActive: 0,
           streak: streak + 1,
         } as any);
 
         const matchGoal = targetedGoal || untargetedGoal;
-        if (matchGoal) {
-          const totalNewAP = agg.totalActionPoints + bonusAP;
+        if (matchGoal && apDelta > 0) {
           const currentAP = matchGoal.actionPoints || 0;
-          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, totalNewAP);
+          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, apDelta);
 
           if (waterUnits > 0) {
             growthResult = computeGrowthUpdate(
@@ -843,58 +826,35 @@ export async function registerRoutes(
           } else {
             await storage.updateGoal(matchGoal.id, {
               actionPoints: remainingAP,
-              insightPoints: (matchGoal.insightPoints || 0) + agg.totalInsightPoints,
             });
           }
         }
 
-        if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
-          await storage.createEntry({
-            userId,
-            date: todayStr(),
-            summary: rawText,
-            mood: "happy",
-          });
-        }
+        await storage.createEntry({
+          userId,
+          date: todayStr(),
+          summary: rawText,
+          mood: "happy",
+        });
       } else {
-        if (agg.totalInsightPoints > 0) {
+        if (ipDelta > 0) {
           const matchGoal = targetedGoal || untargetedGoal;
           if (matchGoal) {
             await storage.updateGoal(matchGoal.id, {
-              insightPoints: (matchGoal.insightPoints || 0) + agg.totalInsightPoints,
+              insightPoints: (matchGoal.insightPoints || 0) + ipDelta,
             });
           }
         }
       }
 
-      const now7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const recentMsgs7d = await storage.getMessagesSince(userId, now7d);
-      const userMsgs7d = recentMsgs7d.filter((m: any) => m.sender === "user");
-      let driftMarkers7d = 0;
-      for (const m of userMsgs7d) {
-        const c = classifyMultipleActions(m.text);
-        const a = aggregateClassifications(c);
-        if (a.totalDriftMarkers < 0) driftMarkers7d += Math.abs(a.totalDriftMarkers);
-      }
-
-      const now14d = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-      const driftWarningCount14d = user.lastDriftWarningAt && new Date(user.lastDriftWarningAt) >= now14d
-        ? (user.driftWarningCount14d || 0)
-        : 0;
-
-      const consecutiveIO = user.consecutiveIOCount || 0;
-      const daysSinceVA = user.lastVerifiedActionAt
-        ? Math.floor((Date.now() - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
-        : 999;
-      const escalation = checkEscalation(
-        driftMarkers7d,
-        consecutiveIO,
-        daysSinceVA,
-        driftWarningCount14d,
-        !!(user.cBurnActive),
-        0,
-        !!(user.lastDriftWarningAt && (Date.now() - new Date(user.lastDriftWarningAt).getTime()) < (48 * 60 * 60 * 1000))
-      );
+      const recentMsgs7d = await storage.getMessagesSince(userId, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+      const escalation = computeEscalationFromMessages(recentMsgs7d, {
+        consecutiveIOCount: user.consecutiveIOCount || 0,
+        lastVerifiedActionAt: user.lastVerifiedActionAt,
+        lastDriftWarningAt: user.lastDriftWarningAt,
+        driftWarningCount14d: user.driftWarningCount14d || 0,
+        cBurnActive: user.cBurnActive || 0,
+      });
 
       if (escalation.driftWarning && !escalation.cBurnTriggered) {
         await storage.updateUser(userId, {
@@ -908,10 +868,13 @@ export async function registerRoutes(
         } as any);
       }
 
+      const matchGoalForLog = targetedGoal || untargetedGoal;
+      console.log(`[TITAN] category=${agg.primaryCategory} | apDelta=${apDelta} | driftDelta=${driftDelta} | heartbeat=${heartbeatKey || "none"} | goalAP=${matchGoalForLog?.actionPoints ?? 0} | waterUnits=${waterAwarded ? Math.floor(((matchGoalForLog?.actionPoints || 0) + apDelta) / 10) : 0} | escalation=${escalation.driftWarning ? "drift_warning" : escalation.cBurnTriggered ? "c_burn" : "none"} | cBurn=${isCBurnActive}`);
+
       return res.json({
         userMessage: userMsg,
         jaeMessage: jaeMsg,
-        titan: titanResult,
+        titan: { category: agg.primaryCategory, actionPoints: apDelta, insightPoints: ipDelta, driftMarkers: driftDelta },
         escalation: escalation.escalationMessage ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
         water: waterAwarded ? {
           awarded: true,
@@ -1434,7 +1397,6 @@ export async function registerRoutes(
       const directions = await evaluateHeartbeatDirections(recentMessages);
 
       const credits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
-      const { computeHeartbeatBalance } = await import("./titan");
       const balance = computeHeartbeatBalance(credits);
 
       let balanceFeedback = "";
@@ -1794,8 +1756,9 @@ export async function registerRoutes(
       if (photoAP > 0) {
         const matchGoal = targetedGoal || untargetedGoal;
         if (matchGoal) {
+          const effectiveAP = user.cBurnActive ? 0 : photoAP;
           const currentAP = matchGoal.actionPoints || 0;
-          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, photoAP);
+          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, effectiveAP);
 
           if (waterUnits > 0) {
             const gr = computeGrowthUpdate(
@@ -1810,7 +1773,7 @@ export async function registerRoutes(
               cupsFilled: gr.cupsFilled,
               seedStage: gr.seedStage,
             });
-          } else {
+          } else if (effectiveAP > 0) {
             await storage.updateGoal(matchGoal.id, {
               actionPoints: remainingAP,
             });
@@ -1825,6 +1788,8 @@ export async function registerRoutes(
             consecutiveIOCount: 0,
             cBurnActive: 0,
           } as any);
+
+          console.log(`[TITAN-PHOTO] apDelta=${effectiveAP} | heartbeat=${hbKey} | goalAP=${remainingAP} | waterUnits=${waterUnits} | cBurnWasActive=${!!user.cBurnActive}`);
         }
       }
 

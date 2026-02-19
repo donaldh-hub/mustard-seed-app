@@ -1,0 +1,124 @@
+SYSTEM TASK: HARDEN TITAN INTEGRATION AND VALIDATE WEEKLY REVIEW OUTPUT
+
+You are operating inside the Mustard Seed App codebase.
+
+TITAN 1.2 has been integrated.
+Water math and weekly review appear functional.
+
+Your objective now is to HARDEN the integration and eliminate structural drift.
+
+This is a validation and tightening pass.
+Do not redesign.
+Do not add new features.
+
+------------------------------------------------------------
+STEP 1 — VERIFY WATER SOURCE OF TRUTH
+------------------------------------------------------------
+
+Search entire codebase for:
+
+- evaluateWater
+- manual water increment
+- waterUnits +=
+- direct water mutation outside titan.ts or waterEngine.ts
+
+Confirm:
+
+1. Water can only be modified through deterministic math:
+   AP_PER_WATER_UNIT = 10
+2. No emotional or heuristic water logic remains.
+3. No route modifies water directly.
+
+If found, remove or refactor.
+
+------------------------------------------------------------
+STEP 2 — VERIFY ESCALATION CENTRALIZATION
+------------------------------------------------------------
+
+Confirm:
+
+- Drift Warning logic exists ONLY inside titan.ts
+- C-Burn logic exists ONLY inside titan.ts
+- Recovery Acceleration exists ONLY inside titan.ts
+- Routes do not contain escalation logic
+
+If any escalation logic exists outside titan.ts, move it.
+
+------------------------------------------------------------
+STEP 3 — HEARTBEAT CREDIT VALIDATION
+------------------------------------------------------------
+
+Ensure:
+
+- Exactly +1 Heartbeat Credit per VA or AR
+- No dual-credit scoring
+- No weighting differences
+- Weekly review calculates percentages from stored credits
+- Weekly review does NOT infer credits from text
+
+Heartbeat balance must be computed strictly from stored numeric credits.
+
+------------------------------------------------------------
+STEP 4 — WEEKLY REVIEW HARDENING
+------------------------------------------------------------
+
+Verify weekly review:
+
+- Pulls data from persistent storage
+- Does NOT recompute classification
+- Does NOT re-evaluate messages
+- Uses stored Action Points and Heartbeat Credits only
+
+Confirm Focus Area selection logic:
+
+- Lowest Heartbeat percentage becomes Focus Area
+- If tie, choose earliest underdeveloped heartbeat
+- No randomness
+
+------------------------------------------------------------
+STEP 5 — C-BURN ENFORCEMENT CHECK
+------------------------------------------------------------
+
+Confirm:
+
+When cBurnActive = true:
+- Action Points accumulation is paused
+- Water Units do not increase
+- User must log a Verified Action to resume
+- Resume logic resets cBurnActive to false
+
+No silent auto-resume allowed.
+
+------------------------------------------------------------
+STEP 6 — ADD TEMPORARY VALIDATION LOGGING
+------------------------------------------------------------
+
+For next 20 test messages, log:
+
+- classification category
+- actionPointsDelta
+- driftMarkerDelta
+- heartbeatCreditKey
+- updated actionPoints
+- updated waterUnits
+- escalation state
+
+Logs must appear clearly in console for testing.
+These logs may be removed after validation.
+
+------------------------------------------------------------
+FINAL REPORT REQUIRED
+------------------------------------------------------------
+
+After hardening:
+
+Provide:
+- List of files modified
+- Confirmation that legacy water logic is fully removed
+- Confirmation escalation is centralized
+- Confirmation weekly review uses stored numeric data only
+- Confirmation equal weighting across all five heartbeats
+
+Do not expand scope.
+Do not add monthly features.
+Only harden TITAN integrity.

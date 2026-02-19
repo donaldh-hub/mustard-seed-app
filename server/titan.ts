@@ -275,8 +275,8 @@ export function aggregateClassifications(classifications: TitanClassification[])
     totalAP += c.actionPoints;
     totalIP += c.insightPoints;
     totalDrift += c.driftMarker;
-    if (c.heartbeatCredit) {
-      credits[c.heartbeatCredit] = (credits[c.heartbeatCredit] || 0) + 1;
+    if (c.heartbeatCredit && Object.keys(credits).length === 0) {
+      credits[c.heartbeatCredit] = 1;
     }
   }
 
@@ -390,6 +390,60 @@ export function computeHeartbeatBalance(credits: HeartbeatCredits): {
     weakHeartbeats,
     feedbackType: balanced ? "balanced" : "mild_imbalance",
   };
+}
+
+export function computeEscalationFromMessages(
+  userMessages: { text: string; sender: string; createdAt: Date | null }[],
+  user: {
+    consecutiveIOCount: number;
+    lastVerifiedActionAt: Date | null;
+    lastDriftWarningAt: Date | null;
+    driftWarningCount14d: number;
+    cBurnActive: number;
+  }
+): EscalationState {
+  const userOnly = userMessages.filter((m) => m.sender === "user");
+
+  let driftMarkers7d = 0;
+  for (const m of userOnly) {
+    const c = classifyMultipleActions(m.text);
+    const a = aggregateClassifications(c);
+    if (a.totalDriftMarkers < 0) driftMarkers7d += Math.abs(a.totalDriftMarkers);
+  }
+
+  const now = Date.now();
+  const daysSinceVA = user.lastVerifiedActionAt
+    ? Math.floor((now - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
+    : 999;
+
+  const now14d = new Date(now - 14 * 24 * 60 * 60 * 1000);
+  const driftWarningCount14d =
+    user.lastDriftWarningAt && new Date(user.lastDriftWarningAt) >= now14d
+      ? user.driftWarningCount14d
+      : 0;
+
+  const cutoff48h = new Date(now - 48 * 60 * 60 * 1000);
+  const recentVACountLast48h = userOnly
+    .filter((m) => m.createdAt && new Date(m.createdAt) >= cutoff48h)
+    .reduce((count, m) => {
+      const c = classifyMultipleActions(m.text);
+      const a = aggregateClassifications(c);
+      return count + (a.primaryCategory === "VA" ? 1 : 0);
+    }, 0);
+
+  const hasDriftWarning = user.lastDriftWarningAt
+    ? now - new Date(user.lastDriftWarningAt).getTime() < 48 * 60 * 60 * 1000
+    : false;
+
+  return checkEscalation(
+    driftMarkers7d,
+    user.consecutiveIOCount,
+    daysSinceVA,
+    driftWarningCount14d,
+    !!(user.cBurnActive),
+    recentVACountLast48h,
+    hasDriftWarning
+  );
 }
 
 export const HEARTBEAT_NAMES: Record<HeartbeatKey, string> = {
