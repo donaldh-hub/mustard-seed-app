@@ -1,0 +1,166 @@
+MUSTARD SEED APP – CHAT PHOTO + MEMORY + JAI ANALYSIS FEATURE
+PRODUCTION IMPLEMENTATION INSTRUCTION
+
+You are the Mustard Seed App Build Agent.
+
+Implement a Chat Photo Attachment feature that:
+
+• Adds a "+" button inside the chat input
+• Allows Camera or Gallery selection
+• Automatically creates a Memory entry for the user’s LOCAL date
+• Sends the image to JAI for vision analysis
+• Awards WATER only after verified progress
+• Prevents gaming (no random images earning water)
+• Updates Chat, Memory, Calendar, and Water container consistently
+• Is fully wired production logic (no placeholders, no mock data)
+
+---------------------------------------------------
+1) CHAT UI – "+" BUTTON
+---------------------------------------------------
+
+1. Add a "+" icon button on the LEFT side of the chat input.
+2. On tap, open an action sheet:
+   - Take Photo
+   - Choose from Gallery
+   - Cancel
+3. Support iOS and Android permissions properly.
+
+---------------------------------------------------
+2) REQUIRED EXECUTION FLOW (STRICT ORDER)
+---------------------------------------------------
+
+When a user selects a photo:
+
+1. Upload image to storage.
+2. Create a chat_message record:
+   - type = "photo"
+   - status = "pending_analysis"
+   - photo_storage_url
+3. Immediately create a memory_item record for the USER’S LOCAL DATE:
+   - type = "photo_memory"
+   - date_key = YYYY-MM-DD (user local timezone)
+   - chat_message_id (link to chat)
+   - photo_storage_url
+   - status = "pending_analysis"
+   - water_awarded = 0
+4. Show system chat line:
+   "Uploaded. JAI is reviewing this for progress."
+5. Trigger backend JAI vision analysis job.
+6. When analysis returns:
+   - Update chat_message
+   - Update memory_item
+   - Mint water ONLY if approved (server-side only)
+7. Calendar must reflect the memory immediately.
+
+Client must NEVER mint water.
+
+---------------------------------------------------
+3) JAI VISION ANALYSIS – REQUIRED JSON OUTPUT
+---------------------------------------------------
+
+JAI MUST return strict JSON with this exact schema:
+
+{
+  labels: string[],
+  confidence: number (0.0–1.0),
+  action_type: "gym_activity" | "outdoor_walk_run" | "meal_prep_food_choice" | "scale_or_metrics" | "hydration" | "sleep_routine" | "work_productivity" | "reflection_journal" | "unknown_or_irrelevant",
+  proof_level: 0 | 1 | 2 | 3,
+  water_award: 0 | 1 | 2,
+  water_reason: string,
+  risk_flags: string[],
+  tags: string[],
+  next_prompt: string
+}
+
+Store this full JSON on BOTH:
+• chat_message
+• memory_item
+
+---------------------------------------------------
+4) WATER ENFORCEMENT RULES (SERVER-SIDE ONLY)
+---------------------------------------------------
+
+1. No water is awarded at upload time.
+2. confidence >= 0.75 required for any water.
+3. 0.60–0.74 confidence:
+   - Ask clarifying question
+   - Hold water (0 for now)
+4. confidence < 0.60:
+   - water_award = 0
+5. If action_type = "unknown_or_irrelevant":
+   - water_award = 0
+6. Goal Relevance Gate:
+   - Compare image meaning + caption to:
+     • active targeted goal
+     • active general goal
+   - If mismatch (example: ducks, memes, scenery):
+     • Add risk_flag "irrelevant"
+     • water_award = 0
+
+Only backend may create:
+• water_event record
+• update water container
+
+---------------------------------------------------
+5) MEMORY SYSTEM REQUIREMENTS
+---------------------------------------------------
+
+Every photo MUST become a memory entry regardless of water outcome.
+
+memory_item structure must include:
+
+• memory_id
+• user_id
+• date_key (local date)
+• type = "photo_memory"
+• photo_storage_url
+• chat_message_id
+• status = "pending_analysis" | "analyzed"
+• jai_analysis_json
+• water_awarded
+• water_reason
+• tags
+• visibility = "private"
+
+---------------------------------------------------
+6) CALENDAR INTEGRATION
+---------------------------------------------------
+
+1. The date must show a thumbnail indicator.
+2. Tapping a date shows summary list of memory items.
+3. Tapping the memory opens full view:
+   - Photo
+   - JAI feedback
+   - Water result
+   - Tags
+4. If water was awarded:
+   - Show water badge
+5. If not:
+   - Still show the memory entry.
+
+---------------------------------------------------
+7) UI REQUIREMENTS
+---------------------------------------------------
+
+1. Chat photo bubble must render properly.
+2. Show visible “reviewing” state while pending.
+3. After analysis:
+   - Insert JAI’s next_prompt into chat.
+   - Update memory entry.
+4. If rejected:
+   - JAI must clearly state why.
+   - Suggest how to earn water properly.
+
+---------------------------------------------------
+8) NON-NEGOTIABLE PRINCIPLE
+---------------------------------------------------
+
+Every uploaded photo becomes a Memory for that day.
+
+WATER is earned ONLY through verified, relevant, goal-aligned action.
+
+No client-side water logic.
+No placeholder wiring.
+No mock enforcement.
+
+Ship fully wired production logic.
