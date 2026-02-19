@@ -25,7 +25,8 @@ export interface WaterResult {
 export async function evaluateWater(
   userMessage: string,
   goalTitle: string,
-  goalType: string
+  goalType: string,
+  isPremiumUser: boolean = false
 ): Promise<WaterResult> {
   const fallback = evaluateWaterFallback(userMessage);
 
@@ -62,9 +63,16 @@ Amount is always 1 for a base action. Use 2 only if the user provides photo proo
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      let amount = parsed.awarded ? 1 : 0;
+      if (parsed.amount === 2) amount = 2;
+
+      if (isPremiumUser && parsed.awarded) {
+        amount = applyPremiumWeighting(userMessage, amount, goalType);
+      }
+
       return {
         awarded: !!parsed.awarded,
-        amount: parsed.amount === 2 ? 2 : parsed.awarded ? 1 : 0,
+        amount,
         reason: parsed.reason || "",
       };
     }
@@ -73,6 +81,23 @@ Amount is always 1 for a base action. Use 2 only if the user provides photo proo
     console.error("Water evaluation AI error, using fallback:", err);
     return fallback;
   }
+}
+
+function applyPremiumWeighting(message: string, baseAmount: number, goalType: string): number {
+  const msg = message.toLowerCase();
+  let multiplier = 1.0;
+
+  const difficultPatterns = /\b(hard|difficult|scared|afraid|uncomfortable|exhausting|painful|pushed myself|out of my comfort|first time|never done|challenging|struggled)\b/i;
+  if (difficultPatterns.test(msg)) {
+    multiplier += 0.5;
+  }
+
+  const couragePatterns = /\b(confronted|stood up|spoke up|asked for|reached out|published|shared publicly|applied|pitched|presented|cold.?call|initiated|risked|vulnerable)\b/i;
+  if (couragePatterns.test(msg)) {
+    multiplier += 0.5;
+  }
+
+  return Math.min(Math.round(baseAmount * multiplier), 3);
 }
 
 function evaluateWaterFallback(userMessage: string): WaterResult {

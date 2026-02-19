@@ -106,3 +106,14 @@ Preferred communication style: Simple, everyday language.
 - `react-day-picker` — Calendar component
 - `recharts` — Chart components
 - `vaul` — Drawer component
+- `stripe` — Payment processing via Stripe Checkout + Billing Portal
+- `stripe-replit-sync` — Stripe schema sync and webhook management
+
+### Subscription System
+- **Tiers**: Lite (free, limited) and Premium ($9.99/month or $79.99/year)
+- **States**: LITE, PREMIUM_TRIAL_ACTIVE, PREMIUM_ACTIVE, PREMIUM_GRACE_PERIOD, PREMIUM_EXPIRED, PAYMENT_FAILED, CANCELED_PENDING_EXPIRATION
+- **Trial**: 14 days from user creation, auto-downgrade to Lite on expiry
+- **Feature Gating**: Lite = 1 goal, basic water, no heartbeat trends. Premium = 2 goals, weighted water, heartbeat trends, deep weekly reviews, monthly recalibration.
+- **Stripe Integration**: `server/stripeClient.ts` (Stripe client + sync), `server/webhookHandlers.ts` (webhook processing), `server/subscriptionEngine.ts` (state machine + feature limits)
+- **Routes**: `POST /api/users/:userId/checkout` (Stripe Checkout), `POST /api/users/:userId/portal` (Billing Portal), `GET /api/users/:userId/subscription` (status), `GET /api/subscription/plans` (pricing)
+- **UI**: Profile page shows subscription badge, trial countdown, and upgrade CTA. UpgradePrompt component shown at gate points (dual goals, heartbeat trends).

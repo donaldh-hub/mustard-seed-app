@@ -3,6 +3,17 @@ import { pgTable, text, varchar, integer, timestamp, jsonb, real } from "drizzle
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const SUBSCRIPTION_STATES = [
+  "LITE",
+  "PREMIUM_TRIAL_ACTIVE",
+  "PREMIUM_ACTIVE",
+  "PREMIUM_GRACE_PERIOD",
+  "PREMIUM_EXPIRED",
+  "PAYMENT_FAILED",
+  "CANCELED_PENDING_EXPIRATION",
+] as const;
+export type SubscriptionState = typeof SUBSCRIPTION_STATES[number];
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().default(""),
@@ -14,6 +25,15 @@ export const users = pgTable("users", {
   treeStage: integer("tree_stage").notNull().default(1),
   streak: integer("streak").notNull().default(0),
   weeklyCycleStart: timestamp("weekly_cycle_start"),
+  subscriptionTier: text("subscription_tier").notNull().default("lite"),
+  subscriptionState: text("subscription_state").notNull().default("LITE"),
+  trialStartedAt: timestamp("trial_started_at").defaultNow(),
+  trialExpiresAt: timestamp("trial_expires_at"),
+  subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  planInterval: text("plan_interval"),
+  lastPaymentStatus: text("last_payment_status"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

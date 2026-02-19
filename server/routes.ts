@@ -7,6 +7,9 @@ import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weekl
 import { evaluateWater, computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
+import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt } from "./subscriptionEngine";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { sql } from "drizzle-orm";
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
@@ -32,7 +35,16 @@ export async function registerRoutes(
   app.post("/api/users", async (req, res) => {
     const result = insertUserSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ message: result.error.message });
-    const userData = { ...result.data, weeklyCycleStart: new Date() };
+    const now = new Date();
+    const trialExpires = computeTrialExpiresAt(now);
+    const userData = {
+      ...result.data,
+      weeklyCycleStart: now,
+      subscriptionTier: "premium",
+      subscriptionState: "PREMIUM_TRIAL_ACTIVE" as const,
+      trialStartedAt: now,
+      trialExpiresAt: trialExpires,
+    };
     const user = await storage.createUser(userData as any);
     return res.json(user);
   });
@@ -40,7 +52,23 @@ export async function registerRoutes(
   app.get("/api/users/:id", async (req, res) => {
     const user = await storage.getUser(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
-    return res.json(user);
+
+    const effective = deriveEffectiveState(user);
+    if (effective.subscriptionState !== user.subscriptionState || effective.subscriptionTier !== user.subscriptionTier) {
+      await storage.updateUser(user.id, {
+        subscriptionState: effective.subscriptionState,
+        subscriptionTier: effective.subscriptionTier,
+      } as any);
+    }
+
+    return res.json({
+      ...user,
+      subscriptionState: effective.subscriptionState,
+      subscriptionTier: effective.subscriptionTier,
+      subscriptionBadge: getSubscriptionBadge(user),
+      trialDaysRemaining: getTrialDaysRemaining(user),
+      featureLimits: getFeatureLimits({ ...user, ...effective } as any),
+    });
   });
 
   app.patch("/api/users/:id", async (req, res) => {
@@ -750,8 +778,9 @@ export async function registerRoutes(
         let bestGoal: typeof activeGoals[0] | null = null;
         let bestWaterResult: { awarded: boolean; amount: number; reason: string } | null = null;
 
+        const userIsPremium = isPremium(user);
         for (const g of goalsToEval) {
-          const result = await evaluateWater(rawText, g.title, g.goalType);
+          const result = await evaluateWater(rawText, g.title, g.goalType, userIsPremium);
           if (result.awarded && (!bestWaterResult || result.amount > bestWaterResult.amount)) {
             bestGoal = g;
             bestWaterResult = result;
@@ -951,6 +980,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "goalType must be 'targeted' or 'untargeted'" });
       }
 
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
       const activeGoals = await storage.getActiveGoals(userId);
       const existingOfType = activeGoals.find((g) => g.goalType === goalType);
 
@@ -959,6 +991,15 @@ export async function registerRoutes(
           ? "You already have an active targeted goal. Complete or archive it before starting another."
           : "Focus builds growth. Complete or archive your current identity goal before adding another.";
         return res.status(409).json({ message: msg });
+      }
+
+      const limits = getFeatureLimits(user);
+      if (activeGoals.length >= limits.maxGoals) {
+        return res.status(403).json({
+          message: "Upgrade to Premium to plant a second goal.",
+          upgradeRequired: true,
+          feature: "dual_goals",
+        });
       }
 
       const data = {
@@ -1358,6 +1399,181 @@ export async function registerRoutes(
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // ─── Subscription & Stripe Routes ───
+
+  app.get("/api/stripe/publishable-key", async (_req, res) => {
+    try {
+      const key = await getStripePublishableKey();
+      return res.json({ publishableKey: key });
+    } catch (err) {
+      console.error("Error getting Stripe publishable key:", err);
+      return res.status(500).json({ message: "Stripe not configured" });
+    }
+  });
+
+  app.get("/api/subscription/plans", async (_req, res) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const products = await stripe.products.search({ query: "metadata['app']:'mustard_seed'" });
+      const premiumProduct = products.data[0];
+      if (!premiumProduct) return res.json({ plans: [] });
+
+      const prices = await stripe.prices.list({ product: premiumProduct.id, active: true });
+      const plans = prices.data.map((p) => ({
+        priceId: p.id,
+        interval: p.recurring?.interval || "month",
+        amount: p.unit_amount! / 100,
+        currency: p.currency,
+      }));
+
+      return res.json({ plans });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Error fetching plans" });
+    }
+  });
+
+  app.post("/api/users/:userId/checkout", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { priceId } = req.body;
+      if (!priceId) return res.status(400).json({ message: "priceId is required" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const stripe = await getUncachableStripeClient();
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          name: user.name || undefined,
+          metadata: { userId },
+        });
+        customerId = customer.id;
+        await storage.updateUser(userId, { stripeCustomerId: customerId } as any);
+      }
+
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'}`;
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'subscription',
+        success_url: `${baseUrl}/profile?checkout=success`,
+        cancel_url: `${baseUrl}/profile?checkout=cancel`,
+        metadata: { userId },
+      });
+
+      return res.json({ url: session.url });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Checkout error" });
+    }
+  });
+
+  app.post("/api/users/:userId/portal", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user.stripeCustomerId) return res.status(400).json({ message: "No subscription found" });
+
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'}`;
+      const session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: `${baseUrl}/profile`,
+      });
+
+      return res.json({ url: session.url });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Portal error" });
+    }
+  });
+
+  app.get("/api/users/:userId/subscription", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const effective = deriveEffectiveState(user);
+
+      return res.json({
+        subscriptionState: effective.subscriptionState,
+        subscriptionTier: effective.subscriptionTier,
+        badge: getSubscriptionBadge({ ...user, ...effective } as any),
+        trialDaysRemaining: getTrialDaysRemaining(user),
+        featureLimits: getFeatureLimits({ ...user, ...effective } as any),
+        hasStripeSubscription: !!user.stripeSubscriptionId,
+        planInterval: user.planInterval,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/stripe/subscription-webhook", async (req, res) => {
+    try {
+      const { type, data } = req.body;
+
+      if (type === "customer.subscription.created" || type === "customer.subscription.updated") {
+        const subscription = data.object;
+        const customerId = subscription.customer;
+
+        const user = await storage.findUserByStripeCustomerId(customerId);
+        if (user) {
+          const periodEnd = new Date(subscription.current_period_end * 1000);
+          const interval = subscription.items?.data?.[0]?.price?.recurring?.interval || "month";
+
+          if (subscription.status === "active") {
+            await storage.updateUser(user.id, {
+              subscriptionState: "PREMIUM_ACTIVE",
+              subscriptionTier: "premium",
+              stripeSubscriptionId: subscription.id,
+              subscriptionExpiresAt: periodEnd,
+              planInterval: interval,
+              lastPaymentStatus: "succeeded",
+            } as any);
+          } else if (subscription.status === "past_due") {
+            await storage.updateUser(user.id, {
+              subscriptionState: "PAYMENT_FAILED",
+              lastPaymentStatus: "failed",
+            } as any);
+          } else if (subscription.status === "canceled") {
+            await storage.updateUser(user.id, {
+              subscriptionState: "PREMIUM_EXPIRED",
+              subscriptionTier: "lite",
+              lastPaymentStatus: "canceled",
+            } as any);
+          }
+        }
+      }
+
+      if (type === "customer.subscription.deleted") {
+        const subscription = data.object;
+        const customerId = subscription.customer;
+        const user = await storage.findUserByStripeCustomerId(customerId);
+        if (user) {
+          await storage.updateUser(user.id, {
+            subscriptionState: "PREMIUM_EXPIRED",
+            subscriptionTier: "lite",
+            stripeSubscriptionId: null,
+            lastPaymentStatus: "canceled",
+          } as any);
+        }
+      }
+
+      return res.json({ received: true });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Webhook error" });
     }
   });
 

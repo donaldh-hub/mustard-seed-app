@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X } from "lucide-react";
+import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X, Crown } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { WaterCup } from "@/components/WaterCup";
 import { SeedGrowth } from "@/components/SeedGrowth";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 type FormMode = null | "targeted" | "untargeted";
 
@@ -20,6 +21,7 @@ export default function ProgressPage() {
   const queryClient = useQueryClient();
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [logGoalId, setLogGoalId] = useState<string | null>(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [logSummary, setLogSummary] = useState("");
   const [logProgress, setLogProgress] = useState("");
   const [completeGoalId, setCompleteGoalId] = useState<string | null>(null);
@@ -46,6 +48,12 @@ export default function ProgressPage() {
   const { data: garden, isLoading: gardenLoading } = useQuery({
     queryKey: ["garden", userId],
     queryFn: () => api.getGardenSummary(userId!),
+    enabled: !!userId,
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
     enabled: !!userId,
   });
 
@@ -134,7 +142,15 @@ export default function ProgressPage() {
             label="TARGETED GOAL"
             type="targeted"
             data={targeted}
-            onAdd={() => setFormMode("targeted")}
+            onAdd={() => {
+              const maxGoals = user?.featureLimits?.maxGoals ?? 1;
+              const activeCount = [targeted, untargeted].filter(Boolean).length;
+              if (activeCount >= maxGoals) {
+                setShowUpgradePrompt(true);
+              } else {
+                setFormMode("targeted");
+              }
+            }}
             onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
             onArchive={(id) => archiveMut.mutate(id)}
             onComplete={(id) => { setCompleteGoalId(id); }}
@@ -143,7 +159,15 @@ export default function ProgressPage() {
             label="IDENTITY GOAL"
             type="untargeted"
             data={untargeted}
-            onAdd={() => setFormMode("untargeted")}
+            onAdd={() => {
+              const maxGoals = user?.featureLimits?.maxGoals ?? 1;
+              const activeCount = [targeted, untargeted].filter(Boolean).length;
+              if (activeCount >= maxGoals) {
+                setShowUpgradePrompt(true);
+              } else {
+                setFormMode("untargeted");
+              }
+            }}
             onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
             onArchive={(id) => archiveMut.mutate(id)}
             onComplete={(id) => { setCompleteGoalId(id); setCompletionType("integrated"); }}
@@ -342,6 +366,12 @@ export default function ProgressPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <UpgradePrompt
+        feature="dual_goals"
+        show={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </div>
   );
 }
