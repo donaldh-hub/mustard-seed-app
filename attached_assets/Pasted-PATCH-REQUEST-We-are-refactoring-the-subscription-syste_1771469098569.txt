@@ -1,0 +1,146 @@
+PATCH REQUEST:
+
+We are refactoring the subscription system to remove Stripe and move entirely to Store-based billing.
+
+Remove all Stripe references and logic.
+
+Replace with Apple In-App Purchase and Google Play Billing logic only.
+
+---
+
+OBJECTIVE:
+
+1) Subscription system must use:
+   - Apple auto-renewable subscriptions (iOS)
+   - Google Play Billing (Android)
+
+2) Firebase must be the single readable state source.
+3) Store receipt validation must be the single authoritative source.
+
+No Stripe.
+No external billing.
+No PayPal.
+
+---
+
+REQUIRED CHANGES:
+
+1) REMOVE:
+   - Stripe initialization
+   - Stripe webhooks
+   - Stripe trial logic
+   - Any `trialDaysRemaining` derived from Stripe
+   - Any Stripe subscription ID fields
+
+2) ADD:
+
+SubscriptionState enum:
+
+enum SubscriptionState {
+  LITE,
+  PREMIUM_TRIAL_ACTIVE,
+  PREMIUM_ACTIVE,
+  PREMIUM_GRACE_PERIOD,
+  PAYMENT_FAILED,
+  CANCELED_PENDING_EXPIRATION
+}
+
+---
+
+FIREBASE USER MODEL UPDATE:
+
+users/{uid}:
+
+{
+  subscriptionState: "LITE" | "PREMIUM_TRIAL_ACTIVE" | "PREMIUM_ACTIVE" | "PREMIUM_GRACE_PERIOD" | "PAYMENT_FAILED" | "CANCELED_PENDING_EXPIRATION",
+  subscriptionPlatform: "APPLE" | "GOOGLE" | null,
+  subscriptionProductId: string | null,
+  subscriptionExpiresAt: timestamp | null,
+  trialStartedAt: timestamp | null,
+  trialEndsAt: timestamp | null,
+  lastReceiptValidation: timestamp | null
+}
+
+---
+
+STATE MACHINE RULES:
+
+1) On App Launch:
+   - Verify receipt with store
+   - Compare store expiration date with Firebase
+   - If mismatch → update Firebase to match store
+   - Store is source of truth
+
+2) Trial Logic:
+   - Trial begins only after store confirms trial subscription purchase
+   - trialEndsAt = purchaseDate + 14 days
+   - After trialEndsAt:
+       if subscription renewed → PREMIUM_ACTIVE
+       else → LITE
+
+3) Cancellation:
+   - If user cancels:
+       state = CANCELED_PENDING_EXPIRATION
+       retain Premium until expiration date
+   - After expiration → LITE
+
+4) Payment Failure:
+   - If store signals billing issue:
+       state = PAYMENT_FAILED
+       enter grace period if supported
+   - If resolved → PREMIUM_ACTIVE
+   - If not resolved after expiration → LITE
+
+---
+
+PROFILE BADGE LOGIC:
+
+Display based strictly on subscriptionState:
+
+LITE → "Lite"
+PREMIUM_TRIAL_ACTIVE → "Premium (Trial)"
+PREMIUM_ACTIVE → "Premium"
+PREMIUM_GRACE_PERIOD → "Premium (Grace)"
+PAYMENT_FAILED → "Payment Issue"
+CANCELED_PENDING_EXPIRATION → "Premium (Ends Soon)"
+
+Badge must:
+- Auto-update on state change
+- Never rely on cached local state
+- Pull from Firebase listener
+
+---
+
+FEATURE GATING RULE:
+
+Premium Features unlocked only if:
+
+subscriptionState IN:
+  - PREMIUM_TRIAL_ACTIVE
+  - PREMIUM_ACTIVE
+  - PREMIUM_GRACE_PERIOD
+  - CANCELED_PENDING_EXPIRATION (before expiration)
+
+Else → locked
+
+---
+
+REMOVE ANY:
+- trialDaysRemaining derived locally
+- Manual subscription toggles
+- Frontend-only state assumptions
+
+All gating must reference subscriptionState from Firebase.
+
+---
+
+DELIVER:
+
+1) Updated subscription service file
+2) Updated Firebase schema
+3) Updated state machine logic
+4) Updated feature gating middleware
+5) Confirmation that Stripe logic is fully removed
+
+Output code-ready changes only.
+No commentary.
