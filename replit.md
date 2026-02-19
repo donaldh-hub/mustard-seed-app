@@ -118,6 +118,15 @@ Preferred communication style: Simple, everyday language.
 - **Routes**: `POST /api/users/:userId/checkout` (Stripe Checkout), `POST /api/users/:userId/portal` (Billing Portal), `GET /api/users/:userId/subscription` (status), `GET /api/subscription/plans` (pricing)
 - **UI**: Profile page shows subscription badge, trial countdown, and upgrade CTA. UpgradePrompt component shown at gate points (dual goals, heartbeat trends).
 
+### Photo Attachment + Vision Analysis
+- **Engine**: `server/visionAnalysis.ts` — OpenAI gpt-4o vision API analyzes photos for verified goal-aligned action
+- **Schema**: `messages` table extended with `messageType` (text/photo), `status` (sent/pending_analysis/analyzed), `photoUrl`, `analysisJson`. New `photo_memories` table stores per-photo analysis results with water awards and tags.
+- **Upload flow**: Presigned URL via Replit Object Storage → client uploads to storage → server runs vision analysis → awards water (0-2 max) based on confidence ≥ 0.75 and goal alignment
+- **Water rules**: Server-side enforcement clamps water to 0-2. Irrelevant photos or confidence < 0.75 = 0 water. Strong photo proof with context = 2 water.
+- **Calendar integration**: Photo uploads create entries in calendar memory bank. Calendar page shows photo memory thumbnails with detail view (analysis stats, Jae feedback, tags).
+- **Routes**: `POST /api/users/:userId/messages/photo` (upload + analyze), `GET /api/users/:userId/photo-memories` (list)
+- **UI**: Chat page has + button for camera/gallery attachment, photo preview before send, photo bubbles with water badges. Calendar shows photo memories with thumbnails.
+
 ### Multi-Platform Subscription Architecture
 - **Platforms**: STRIPE (web), APPLE (iOS - future), GOOGLE (Android - future)
 - **Schema fields**: `subscriptionPlatform` (STRIPE/APPLE/GOOGLE), `subscriptionProductId`, `lastReceiptValidation`

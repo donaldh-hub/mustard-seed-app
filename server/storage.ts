@@ -4,7 +4,8 @@ import {
   type Entry, type InsertEntry, entries,
   type Assessment, type InsertAssessment, assessments,
   type Goal, type InsertGoal, goals,
-  type WeeklyReview, type InsertWeeklyReview, weeklyReviews
+  type WeeklyReview, type InsertWeeklyReview, weeklyReviews,
+  type PhotoMemory, type InsertPhotoMemory, photoMemories
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, asc, and, gte } from "drizzle-orm";
@@ -18,6 +19,7 @@ export interface IStorage {
 
   getMessages(userId: string): Promise<Message[]>;
   createMessage(msg: InsertMessage): Promise<Message>;
+  updateMessage(id: string, data: Partial<InsertMessage>): Promise<Message | undefined>;
 
   getEntries(userId: string): Promise<Entry[]>;
   getEntriesByGoalId(goalId: string): Promise<Entry[]>;
@@ -38,6 +40,11 @@ export interface IStorage {
   createWeeklyReview(data: InsertWeeklyReview): Promise<WeeklyReview>;
   completeWeeklyReview(id: string): Promise<WeeklyReview | undefined>;
   getMessagesSince(userId: string, since: Date): Promise<Message[]>;
+
+  createPhotoMemory(data: InsertPhotoMemory): Promise<PhotoMemory>;
+  updatePhotoMemory(id: string, data: Partial<InsertPhotoMemory>): Promise<PhotoMemory | undefined>;
+  getPhotoMemories(userId: string): Promise<PhotoMemory[]>;
+  getPhotoMemoriesByDate(userId: string, dateKey: string): Promise<PhotoMemory[]>;
 }
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -70,6 +77,11 @@ export class DatabaseStorage implements IStorage {
 
   async createMessage(msg: InsertMessage): Promise<Message> {
     const [message] = await db.insert(messages).values(msg).returning();
+    return message;
+  }
+
+  async updateMessage(id: string, data: Partial<InsertMessage>): Promise<Message | undefined> {
+    const [message] = await db.update(messages).set(data).where(eq(messages.id, id)).returning();
     return message;
   }
 
@@ -171,6 +183,26 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(messages)
       .where(and(eq(messages.userId, userId), gte(messages.createdAt, since)))
       .orderBy(asc(messages.createdAt));
+  }
+
+  async createPhotoMemory(data: InsertPhotoMemory): Promise<PhotoMemory> {
+    const [pm] = await db.insert(photoMemories).values(data).returning();
+    return pm;
+  }
+
+  async updatePhotoMemory(id: string, data: Partial<InsertPhotoMemory>): Promise<PhotoMemory | undefined> {
+    const [pm] = await db.update(photoMemories).set(data).where(eq(photoMemories.id, id)).returning();
+    return pm;
+  }
+
+  async getPhotoMemories(userId: string): Promise<PhotoMemory[]> {
+    return db.select().from(photoMemories).where(eq(photoMemories.userId, userId)).orderBy(desc(photoMemories.createdAt));
+  }
+
+  async getPhotoMemoriesByDate(userId: string, dateKey: string): Promise<PhotoMemory[]> {
+    return db.select().from(photoMemories)
+      .where(and(eq(photoMemories.userId, userId), eq(photoMemories.dateKey, dateKey)))
+      .orderBy(desc(photoMemories.createdAt));
   }
 }
 

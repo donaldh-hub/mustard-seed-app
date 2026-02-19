@@ -5,10 +5,12 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { evaluateWater, computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
+import { analyzePhoto } from "./visionAnalysis";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt, validateReceiptUpdate } from "./subscriptionEngine";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
 function todayStr(): string {
@@ -31,6 +33,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  registerObjectStorageRoutes(app);
 
   app.post("/api/users", async (req, res) => {
     const result = insertUserSchema.safeParse(req.body);
@@ -1580,6 +1584,155 @@ export async function registerRoutes(
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Webhook error" });
+    }
+  });
+
+  // ─── Photo Upload + Vision Analysis ───
+
+  app.post("/api/users/:userId/messages/photo", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { photoUrl, caption, localDate } = req.body;
+
+      if (!photoUrl) return res.status(400).json({ message: "photoUrl is required" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const dateKey = localDate || todayStr();
+
+      const photoMessage = await storage.createMessage({
+        userId,
+        text: caption || "📷 Photo uploaded",
+        sender: "user",
+        messageType: "photo",
+        status: "pending_analysis",
+        photoUrl,
+      });
+
+      const photoMemory = await storage.createPhotoMemory({
+        userId,
+        messageId: photoMessage.id,
+        dateKey,
+        photoUrl,
+        status: "pending_analysis",
+        waterAwarded: 0,
+      });
+
+      await storage.createEntry({
+        userId,
+        date: dateKey,
+        summary: caption ? `📷 ${caption}` : "📷 Photo uploaded",
+        mood: "neutral",
+      });
+
+      const activeGoals = await storage.getActiveGoals(userId);
+      const targetedGoal = activeGoals.find((g) => g.goalType === "targeted");
+      const untargetedGoal = activeGoals.find((g) => g.goalType === "untargeted");
+
+      const serveUrl = photoUrl.startsWith("/objects/")
+        ? `${req.protocol}://${req.get("host")}${photoUrl}`
+        : photoUrl;
+
+      let analysis;
+      try {
+        analysis = await analyzePhoto(
+          serveUrl,
+          caption || "",
+          targetedGoal?.title || null,
+          untargetedGoal?.title || null,
+          user.name || ""
+        );
+      } catch (analysisErr) {
+        console.error("Vision analysis failed:", analysisErr);
+        analysis = {
+          labels: [],
+          confidence: 0,
+          action_type: "unknown_or_irrelevant",
+          proof_level: 0,
+          water_award: 0,
+          water_reason: "Analysis unavailable",
+          risk_flags: ["analysis_error"],
+          tags: [],
+          next_prompt: "Got it. I wasn't able to review this photo right now, but keep sharing your progress.",
+        };
+      }
+
+      const enforcedWater = Math.max(0, Math.min(2, Math.round(analysis.water_award)));
+      const validConfidence = typeof analysis.confidence === "number" ? analysis.confidence : 0;
+      const validActionType = analysis.action_type || "unknown_or_irrelevant";
+      const finalWater =
+        validActionType === "unknown_or_irrelevant" || validConfidence < 0.75
+          ? 0
+          : enforcedWater;
+
+      analysis.water_award = finalWater;
+
+      await storage.updateMessage(photoMessage.id, {
+        status: "analyzed",
+        analysisJson: analysis as any,
+      });
+
+      await storage.updatePhotoMemory(photoMemory.id, {
+        status: "analyzed",
+        analysisJson: analysis as any,
+        waterAwarded: finalWater,
+        waterReason: analysis.water_reason,
+        tags: analysis.tags || [],
+      });
+
+      if (finalWater > 0) {
+        const matchGoal = targetedGoal || untargetedGoal;
+        if (matchGoal) {
+          const currentWater = matchGoal.waterEvents || 0;
+          const newWater = currentWater + finalWater;
+          const WATER_PER_CUP = 50;
+          const newCups = Math.floor(newWater / WATER_PER_CUP);
+          const prevCups = matchGoal.cupsFilled || 0;
+          const growthUpdate: any = { waterEvents: newWater };
+
+          if (newCups > prevCups) {
+            growthUpdate.cupsFilled = newCups;
+            const STAGE_CUP_REQUIREMENTS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 8 };
+            const currentStage = matchGoal.seedStage || 0;
+            const nextStageReq = STAGE_CUP_REQUIREMENTS[currentStage + 1];
+            if (nextStageReq && newCups >= nextStageReq) {
+              growthUpdate.seedStage = currentStage + 1;
+            }
+          }
+
+          await storage.updateGoal(matchGoal.id, growthUpdate);
+        }
+      }
+
+      const jaeResponse = await storage.createMessage({
+        userId,
+        text: analysis.next_prompt,
+        sender: "jae",
+        messageType: "text",
+        status: "sent",
+        analysisJson: analysis as any,
+      });
+
+      return res.json({
+        photoMessage,
+        jaeResponse,
+        analysis,
+        photoMemory,
+      });
+    } catch (err) {
+      console.error("Photo upload error:", err);
+      return res.status(500).json({ message: "Photo upload failed" });
+    }
+  });
+
+  app.get("/api/users/:userId/photo-memories", async (req, res) => {
+    try {
+      const memories = await storage.getPhotoMemories(req.params.userId);
+      return res.json(memories);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Failed to get photo memories" });
     }
   });
 

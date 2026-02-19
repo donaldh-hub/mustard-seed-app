@@ -1,5 +1,5 @@
 import { useStore } from "@/lib/store";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, ArrowUp, ArrowRight, ArrowDown, Leaf } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, ArrowUp, ArrowRight, ArrowDown, Leaf, Droplets, Camera } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
@@ -18,6 +18,10 @@ const HEARTBEAT_ORDER = ["clarity", "consistency", "mindset", "adaptation", "cou
 
 function isWeeklyReviewEntry(summary: string) {
   return summary.startsWith("Weekly Review");
+}
+
+function isPhotoEntry(summary: string) {
+  return summary.startsWith("📷");
 }
 
 function DirArrow({ dir }: { dir: string }) {
@@ -63,6 +67,12 @@ export default function CalendarPage() {
     enabled: !!userId,
   });
 
+  const { data: photoMemories = [] } = useQuery({
+    queryKey: ["photo-memories", userId],
+    queryFn: () => api.getPhotoMemories(userId!),
+    enabled: !!userId,
+  });
+
   const { data: reviewHistory = [] } = useQuery({
     queryKey: ["weekly-review-history", userId],
     queryFn: () => api.getWeeklyReviewHistory(userId!),
@@ -83,6 +93,15 @@ export default function CalendarPage() {
     });
     return map;
   }, [reviewHistory]);
+
+  const photosByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    photoMemories.forEach((pm: any) => {
+      if (!map[pm.dateKey]) map[pm.dateKey] = [];
+      map[pm.dateKey].push(pm);
+    });
+    return map;
+  }, [photoMemories]);
 
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -108,6 +127,7 @@ export default function CalendarPage() {
 
   const selectedDateKey = dateKey(selectedDay);
   const selectedEntries = entriesByDate[selectedDateKey] || [];
+  const selectedPhotos = photosByDate[selectedDateKey] || [];
 
   const prevMonth = () => {
     setSelectedDay(1);
@@ -197,6 +217,7 @@ export default function CalendarPage() {
             {days.map((day) => {
               const dk = dateKey(day);
               const hasEntry = !!entriesByDate[dk];
+              const hasPhoto = !!photosByDate[dk];
               const isTodayDay = isToday(day);
               const isSelected = selectedDay === day;
               const hasReview = !!reviewsByDate[dk];
@@ -218,9 +239,17 @@ export default function CalendarPage() {
                   data-testid={`button-day-${day}`}
                 >
                   {day}
-                  {hasEntry && !isSelected && (
-                    <div className={`absolute bottom-0.5 w-1.5 h-1.5 rounded-full ${hasReview ? "bg-amber-500" : "bg-green-500"}`} />
-                  )}
+                  <div className="absolute bottom-0.5 flex gap-0.5">
+                    {hasPhoto && !isSelected && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    )}
+                    {hasEntry && !hasPhoto && !isSelected && (
+                      <div className={`w-1.5 h-1.5 rounded-full ${hasReview ? "bg-amber-500" : "bg-green-500"}`} />
+                    )}
+                    {hasEntry && hasPhoto && !isSelected && (
+                      <div className={`w-1.5 h-1.5 rounded-full ${hasReview ? "bg-amber-500" : "bg-green-500"}`} />
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -236,11 +265,18 @@ export default function CalendarPage() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <MemoryDetail
-                entry={expandedEntry}
-                review={reviewsByDate[expandedEntry.date]}
-                onClose={() => setExpandedEntry(null)}
-              />
+              {expandedEntry._isPhoto ? (
+                <PhotoMemoryDetail
+                  memory={expandedEntry}
+                  onClose={() => setExpandedEntry(null)}
+                />
+              ) : (
+                <MemoryDetail
+                  entry={expandedEntry}
+                  review={reviewsByDate[expandedEntry.date]}
+                  onClose={() => setExpandedEntry(null)}
+                />
+              )}
             </motion.div>
           ) : (
             <motion.div
@@ -257,20 +293,58 @@ export default function CalendarPage() {
                     ? "Today's Memories"
                     : `${new Date(viewYear, viewMonth, selectedDay).toLocaleDateString("default", { weekday: "long", month: "short", day: "numeric" })}`}
                 </h3>
-                {selectedEntries.length > 0 && (
+                {(selectedEntries.length > 0 || selectedPhotos.length > 0) && (
                   <span className="text-xs text-muted-foreground" data-testid="text-entry-count">
-                    {selectedEntries.length} {selectedEntries.length === 1 ? "memory" : "memories"}
+                    {selectedEntries.length + selectedPhotos.length} {(selectedEntries.length + selectedPhotos.length) === 1 ? "memory" : "memories"}
                   </span>
                 )}
               </div>
 
-              {selectedEntries.length === 0 ? (
+              {selectedPhotos.length > 0 && (
+                <div className="space-y-3">
+                  {selectedPhotos.map((pm: any) => (
+                    <button
+                      key={pm.id}
+                      onClick={() => setExpandedEntry({ ...pm, _isPhoto: true })}
+                      className="w-full text-left bg-white rounded-xl border border-border/40 shadow-sm overflow-hidden hover:shadow-md transition-shadow active:scale-[0.99]"
+                      data-testid={`button-photo-memory-${pm.id}`}
+                    >
+                      <div className="flex gap-3 p-3">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 bg-muted">
+                          <img src={pm.photoUrl} alt="Memory" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Camera className="w-3 h-3 text-blue-500" />
+                            <span className="text-xs font-medium text-blue-600">Photo Memory</span>
+                            {pm.waterAwarded > 0 && (
+                              <span className="flex items-center gap-0.5 text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full" data-testid={`badge-water-memory-${pm.id}`}>
+                                <Droplets className="w-3 h-3" />
+                                +{pm.waterAwarded}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm line-clamp-2 text-foreground">
+                            {pm.waterReason || "Photo uploaded"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(pm.createdAt).toLocaleTimeString("default", { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 self-center" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedEntries.length === 0 && selectedPhotos.length === 0 ? (
                 <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border" data-testid="text-no-memories">
                   <p className="text-sm">No memories for this day.</p>
                   <p className="text-xs mt-1">Chat with Jae to create moments worth remembering.</p>
                 </div>
               ) : (
-                selectedEntries.map((entry: any) => {
+                selectedEntries.filter((e: any) => !isPhotoEntry(e.summary)).map((entry: any) => {
                   const isReview = isWeeklyReviewEntry(entry.summary) && !!reviewsByDate[entry.date];
                   return (
                     <button
@@ -303,6 +377,119 @@ export default function CalendarPage() {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function PhotoMemoryDetail({
+  memory,
+  onClose,
+}: {
+  memory: any;
+  onClose: () => void;
+}) {
+  const analysis = memory.analysisJson as any;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1 text-sm text-primary font-medium hover:underline"
+          data-testid="button-back-to-list"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Back
+        </button>
+        <span className="text-xs text-muted-foreground">
+          {new Date(memory.createdAt).toLocaleString("default", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </span>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-border/40 shadow-sm overflow-hidden">
+        <img
+          src={memory.photoUrl}
+          alt="Photo memory"
+          className="w-full max-h-64 object-cover"
+          data-testid="img-photo-memory-detail"
+        />
+
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Camera className="w-4 h-4 text-blue-500" />
+            <span className="text-sm font-medium text-foreground">Photo Memory</span>
+            {memory.waterAwarded > 0 && (
+              <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full" data-testid="badge-water-detail">
+                <Droplets className="w-3 h-3" />
+                +{memory.waterAwarded} water
+              </span>
+            )}
+            {memory.waterAwarded === 0 && (
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                No water
+              </span>
+            )}
+          </div>
+
+          {analysis && (
+            <>
+              <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jae's Feedback</p>
+                <p className="text-sm text-foreground leading-relaxed" data-testid="text-jae-feedback">
+                  {analysis.next_prompt}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {analysis.tags?.map((tag: string, i: number) => (
+                  <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full" data-testid={`tag-${tag}`}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-muted/30 rounded-lg p-2">
+                  <p className="text-xs text-muted-foreground">Confidence</p>
+                  <p className="font-mono font-semibold text-sm" data-testid="text-confidence">
+                    {Math.round((analysis.confidence || 0) * 100)}%
+                  </p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-2">
+                  <p className="text-xs text-muted-foreground">Proof</p>
+                  <p className="font-mono font-semibold text-sm" data-testid="text-proof-level">
+                    {analysis.proof_level}/3
+                  </p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-2">
+                  <p className="text-xs text-muted-foreground">Type</p>
+                  <p className="font-mono font-semibold text-xs" data-testid="text-action-type">
+                    {(analysis.action_type || "").replace(/_/g, " ")}
+                  </p>
+                </div>
+              </div>
+
+              {memory.waterReason && (
+                <div className="text-xs text-muted-foreground italic" data-testid="text-water-reason">
+                  {memory.waterReason}
+                </div>
+              )}
+            </>
+          )}
+
+          {!analysis && memory.status === "pending_analysis" && (
+            <div className="text-center py-4 text-muted-foreground text-sm">
+              Jae is still reviewing this photo...
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

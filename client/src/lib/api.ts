@@ -26,6 +26,14 @@ export const api = {
       body: JSON.stringify({ text }),
     }),
 
+  sendPhoto: (userId: string, data: { photoUrl: string; caption?: string; localDate?: string }) =>
+    fetchJson<any>(`/users/${userId}/messages/photo`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getPhotoMemories: (userId: string) => fetchJson<any[]>(`/users/${userId}/photo-memories`),
+
   getEntries: (userId: string) => fetchJson<any[]>(`/users/${userId}/entries`),
 
   getAssessment: (userId: string) => fetchJson<any>(`/users/${userId}/assessment`),

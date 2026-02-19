@@ -55,6 +55,10 @@ export const messages = pgTable("messages", {
   userId: varchar("user_id").notNull(),
   text: text("text").notNull(),
   sender: text("sender").notNull(),
+  messageType: text("message_type").notNull().default("text"),
+  status: text("status").notNull().default("sent"),
+  photoUrl: text("photo_url"),
+  analysisJson: jsonb("analysis_json"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -64,6 +68,28 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 });
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
+
+export const photoMemories = pgTable("photo_memories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  messageId: varchar("message_id").notNull(),
+  dateKey: text("date_key").notNull(),
+  photoUrl: text("photo_url").notNull(),
+  status: text("status").notNull().default("pending_analysis"),
+  analysisJson: jsonb("analysis_json"),
+  waterAwarded: integer("water_awarded").notNull().default(0),
+  waterReason: text("water_reason"),
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+  visibility: text("visibility").notNull().default("private"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPhotoMemorySchema = createInsertSchema(photoMemories).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPhotoMemory = z.infer<typeof insertPhotoMemorySchema>;
+export type PhotoMemory = typeof photoMemories.$inferSelect;
 
 export const goals = pgTable("goals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

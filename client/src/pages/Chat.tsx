@@ -2,11 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send } from "lucide-react";
+import { Send, Plus, Camera, Image, X, Droplets, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
+import { useUpload } from "@/hooks/use-upload";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -15,8 +16,14 @@ export default function Chat() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
+  const [showAttach, setShowAttach] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
+
+  const { uploadFile, isUploading } = useUpload();
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -49,20 +56,69 @@ export default function Chat() {
     },
   });
 
+  const photoMutation = useMutation({
+    mutationFn: async ({ file, caption }: { file: File; caption: string }) => {
+      const uploadResult = await uploadFile(file);
+      if (!uploadResult) throw new Error("Upload failed");
+
+      const localDate = new Date().toISOString().split("T")[0];
+
+      return api.sendPhoto(userId!, {
+        photoUrl: uploadResult.objectPath,
+        caption: caption || undefined,
+        localDate,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["messages", userId] });
+      qc.invalidateQueries({ queryKey: ["user", userId] });
+      qc.invalidateQueries({ queryKey: ["entries", userId] });
+      qc.invalidateQueries({ queryKey: ["photo-memories", userId] });
+      qc.invalidateQueries({ queryKey: ["garden", userId] });
+      setPhotoPreview(null);
+      setInput("");
+    },
+  });
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, sendMutation.isPending]);
+  }, [messages, sendMutation.isPending, photoMutation.isPending]);
 
   const handleSend = () => {
+    if (photoPreview) {
+      photoMutation.mutate({ file: photoPreview.file, caption: input.trim() });
+      return;
+    }
     if (!input.trim() || sendMutation.isPending) return;
     const text = input;
     setInput("");
     sendMutation.mutate(text);
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 10 * 1024 * 1024) return;
+
+    const url = URL.createObjectURL(file);
+    setPhotoPreview({ file, url });
+    setShowAttach(false);
+    e.target.value = "";
+  };
+
+  const clearPreview = () => {
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview.url);
+      setPhotoPreview(null);
+    }
+  };
+
   if (!userId) return null;
+
+  const isBusy = sendMutation.isPending || photoMutation.isPending || isUploading;
 
   return (
     <div className="h-full flex flex-col bg-background relative">
@@ -125,13 +181,39 @@ export default function Chat() {
               )}
 
               <div
-                className={`max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                className={`max-w-[80%] rounded-2xl shadow-sm text-sm leading-relaxed ${
                   msg.sender === 'user'
                     ? 'bg-primary text-primary-foreground rounded-br-sm'
                     : 'bg-white text-foreground rounded-bl-sm border border-border/50'
                 }`}
               >
-                {msg.text}
+                {msg.messageType === 'photo' && msg.photoUrl && (
+                  <div className="relative">
+                    <img
+                      src={msg.photoUrl}
+                      alt="Photo"
+                      className="w-full rounded-t-2xl object-cover max-h-48"
+                      data-testid={`img-photo-${msg.id}`}
+                    />
+                    {msg.status === 'pending_analysis' && (
+                      <div className="absolute inset-0 bg-black/30 rounded-t-2xl flex items-center justify-center">
+                        <div className="flex items-center gap-2 text-white text-xs bg-black/50 px-3 py-1.5 rounded-full">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Reviewing...
+                        </div>
+                      </div>
+                    )}
+                    {msg.status === 'analyzed' && msg.analysisJson && (msg.analysisJson as any).water_award > 0 && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-blue-500/90 text-white text-xs px-2 py-1 rounded-full" data-testid={`badge-water-${msg.id}`}>
+                        <Droplets className="w-3 h-3" />
+                        +{(msg.analysisJson as any).water_award}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="px-4 py-3 whitespace-pre-wrap">
+                  {msg.text}
+                </div>
               </div>
 
               {msg.sender === 'user' && (
@@ -143,7 +225,7 @@ export default function Chat() {
           ))}
         </AnimatePresence>
 
-        {sendMutation.isPending && (
+        {isBusy && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -154,20 +236,79 @@ export default function Chat() {
               <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
               <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce" />
             </div>
-            Jae is thinking...
+            {photoMutation.isPending || isUploading ? "Uploading & analyzing..." : "Jae is thinking..."}
           </motion.div>
         )}
       </div>
 
       <div className="absolute bottom-[4.5rem] w-full p-4 flex flex-col gap-3 bg-gradient-to-t from-white via-white/90 to-transparent pt-8">
+        <AnimatePresence>
+          {photoPreview && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-primary shadow-md"
+            >
+              <img src={photoPreview.url} alt="Preview" className="w-full h-full object-cover" />
+              <button
+                onClick={clearPreview}
+                className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
+                data-testid="button-clear-preview"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showAttach && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex gap-2 mb-1"
+            >
+              <button
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-border shadow-sm text-sm hover:bg-muted transition-colors"
+                data-testid="button-take-photo"
+              >
+                <Camera className="w-4 h-4 text-primary" />
+                Take Photo
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-border shadow-sm text-sm hover:bg-muted transition-colors"
+                data-testid="button-choose-gallery"
+              >
+                <Image className="w-4 h-4 text-primary" />
+                Gallery
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <form
           onSubmit={(e) => { e.preventDefault(); handleSend(); }}
           className="flex gap-2 items-center"
         >
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="rounded-full h-12 w-12 shrink-0 border border-border shadow-sm bg-white hover:bg-muted"
+            onClick={() => setShowAttach(!showAttach)}
+            disabled={isBusy}
+            data-testid="button-attach"
+          >
+            <Plus className={`w-5 h-5 transition-transform ${showAttach ? 'rotate-45' : ''}`} />
+          </Button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
+            placeholder={photoPreview ? "Add a caption (optional)..." : "Type a message..."}
             className="rounded-full bg-white border border-border shadow-lg h-12 px-6 focus-visible:ring-1 focus-visible:ring-primary"
             data-testid="input-chat"
           />
@@ -175,12 +316,30 @@ export default function Chat() {
             type="submit"
             size="icon"
             className="rounded-full h-12 w-12 shrink-0 bg-primary hover:bg-primary/90 shadow-md"
-            disabled={!input.trim() || sendMutation.isPending}
+            disabled={(!input.trim() && !photoPreview) || isBusy}
             data-testid="button-send"
           >
             <Send className="w-5 h-5" />
           </Button>
         </form>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileSelect}
+          data-testid="input-file-gallery"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFileSelect}
+          data-testid="input-file-camera"
+        />
       </div>
     </div>
   );
