@@ -3,10 +3,11 @@ import {
   type Message, type InsertMessage, messages,
   type Entry, type InsertEntry, entries,
   type Assessment, type InsertAssessment, assessments,
-  type Goal, type InsertGoal, goals
+  type Goal, type InsertGoal, goals,
+  type WeeklyReview, type InsertWeeklyReview, weeklyReviews
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, desc, asc, and } from "drizzle-orm";
+import { eq, desc, asc, and, gte } from "drizzle-orm";
 import pg from "pg";
 
 export interface IStorage {
@@ -29,6 +30,13 @@ export interface IStorage {
 
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
   createAssessment(data: InsertAssessment): Promise<Assessment>;
+
+  getWeeklyReviewStatus(userId: string): Promise<{ pending: boolean; review?: WeeklyReview; daysSinceCycleStart?: number }>;
+  getPendingWeeklyReview(userId: string): Promise<WeeklyReview | undefined>;
+  getLatestCompletedReview(userId: string): Promise<WeeklyReview | undefined>;
+  createWeeklyReview(data: InsertWeeklyReview): Promise<WeeklyReview>;
+  completeWeeklyReview(id: string): Promise<WeeklyReview | undefined>;
+  getMessagesSince(userId: string, since: Date): Promise<Message[]>;
 }
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -103,6 +111,60 @@ export class DatabaseStorage implements IStorage {
   async createAssessment(data: InsertAssessment): Promise<Assessment> {
     const [assessment] = await db.insert(assessments).values(data).returning();
     return assessment;
+  }
+
+  async getWeeklyReviewStatus(userId: string): Promise<{ pending: boolean; review?: WeeklyReview; daysSinceCycleStart?: number }> {
+    const user = await this.getUser(userId);
+    if (!user) return { pending: false };
+
+    const existingPending = await this.getPendingWeeklyReview(userId);
+    if (existingPending) {
+      return { pending: true, review: existingPending };
+    }
+
+    const cycleStart = user.weeklyCycleStart;
+    if (!cycleStart) return { pending: false };
+
+    const now = new Date();
+    const diffMs = now.getTime() - new Date(cycleStart).getTime();
+    const daysSince = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    return { pending: daysSince >= 7, daysSinceCycleStart: daysSince };
+  }
+
+  async getPendingWeeklyReview(userId: string): Promise<WeeklyReview | undefined> {
+    const [review] = await db.select().from(weeklyReviews)
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.status, "pending")))
+      .orderBy(desc(weeklyReviews.createdAt))
+      .limit(1);
+    return review;
+  }
+
+  async getLatestCompletedReview(userId: string): Promise<WeeklyReview | undefined> {
+    const [review] = await db.select().from(weeklyReviews)
+      .where(and(eq(weeklyReviews.userId, userId), eq(weeklyReviews.status, "completed")))
+      .orderBy(desc(weeklyReviews.createdAt))
+      .limit(1);
+    return review;
+  }
+
+  async createWeeklyReview(data: InsertWeeklyReview): Promise<WeeklyReview> {
+    const [review] = await db.insert(weeklyReviews).values(data).returning();
+    return review;
+  }
+
+  async completeWeeklyReview(id: string): Promise<WeeklyReview | undefined> {
+    const [review] = await db.update(weeklyReviews)
+      .set({ status: "completed", completedAt: new Date() })
+      .where(eq(weeklyReviews.id, id))
+      .returning();
+    return review;
+  }
+
+  async getMessagesSince(userId: string, since: Date): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(and(eq(messages.userId, userId), gte(messages.createdAt, since)))
+      .orderBy(asc(messages.createdAt));
   }
 }
 

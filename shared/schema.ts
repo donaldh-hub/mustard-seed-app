@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   waterLevel: integer("water_level").notNull().default(30),
   treeStage: integer("tree_stage").notNull().default(1),
   streak: integer("streak").notNull().default(0),
+  weeklyCycleStart: timestamp("weekly_cycle_start"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -84,6 +85,27 @@ export const insertEntrySchema = createInsertSchema(entries).omit({
 });
 export type InsertEntry = z.infer<typeof insertEntrySchema>;
 export type Entry = typeof entries.$inferSelect;
+
+export const weeklyReviews = pgTable("weekly_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  cycleStartDate: text("cycle_start_date").notNull(),
+  status: text("status").notNull().default("pending"),
+  targetedGoalSnapshot: jsonb("targeted_goal_snapshot"),
+  heartbeatDirections: jsonb("heartbeat_directions"),
+  collectiveAnalysis: text("collective_analysis"),
+  previousMeasurable: real("previous_measurable"),
+  currentMeasurable: real("current_measurable"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWeeklyReviewSchema = createInsertSchema(weeklyReviews).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertWeeklyReview = z.infer<typeof insertWeeklyReviewSchema>;
+export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 
 export const assessments = pgTable("assessments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

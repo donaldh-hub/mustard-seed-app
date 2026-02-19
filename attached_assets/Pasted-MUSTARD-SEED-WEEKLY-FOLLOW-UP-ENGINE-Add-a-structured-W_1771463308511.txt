@@ -1,0 +1,206 @@
+MUSTARD SEED — WEEKLY FOLLOW-UP ENGINE
+
+Add a structured Weekly Follow-Up feature that triggers automatically every 7 days from user onboarding or from the last completed weekly review timestamp.
+
+This feature is an audit only.
+It does not assign steps.
+It does not redesign strategy.
+It does not include water logic.
+It does not include gamification.
+
+The Weekly Follow-Up must contain exactly three sections:
+
+1) Targeted Goal Progress
+2) Heartbeat Direction
+3) Collective Analysis (maximum 4 sentences)
+
+----------------------------------------
+TRIGGER LOGIC
+----------------------------------------
+
+• Store weekly_cycle_start_timestamp at onboarding.
+• Trigger Weekly Follow-Up every 7 days.
+• If user does not complete review on Day 7, mark as “Pending Weekly Review.”
+• Do not reset cycle until review is completed.
+• After completion, reset weekly_cycle_start_timestamp.
+• Store previous weekly measurable values for comparison.
+
+----------------------------------------
+SECTION 1 — TARGETED GOAL PROGRESS
+----------------------------------------
+
+If a targeted goal exists, display:
+
+• Goal statement
+• Last week’s measurable value (from previous weekly review)
+• Current measurable value
+• Net change
+
+Format example:
+
+Goal: Lose 20 lbs by June 1
+Last Week: 197 lbs
+This Week: 195.8 lbs
+Net Change: -1.2 lbs
+
+No commentary.
+No emotional interpretation.
+
+If no targeted goal exists, display:
+
+“No targeted goal active.”
+
+----------------------------------------
+SECTION 2 — HEARTBEAT DIRECTION
+----------------------------------------
+
+Evaluate the previous 7 days of user behavioral activity only.
+
+Emotional language alone is not sufficient evidence.
+Declared intention without execution is not advancement.
+
+For each of the Five Heartbeats:
+
+• Clarity of Vision & Why
+• Small Steps + Consistency
+• Mindset over Method
+• Feedback & Adaptation
+• Courageous Action
+
+Assign exactly one direction:
+
+↑ Advancement
+→ Stagnation
+↓ Regression
+
+----------------------------------------
+HEARTBEAT EVALUATION CRITERIA
+----------------------------------------
+
+1) Clarity of Vision & Why
+
+↑ Advancement:
+• Goal defined or refined
+• Purpose restated or recommitted
+• Measurable objective clarified
+
+→ Stagnation:
+• No refinement or confusion introduced
+
+↓ Regression:
+• Goal abandoned
+• Contradictory direction
+• Loss of clarity
+
+----------------------------------------
+
+2) Small Steps + Consistency
+
+↑ Advancement:
+• Repeated execution of declared steps
+• Habit repetition across multiple days
+• Follow-through on commitments
+
+→ Stagnation:
+• Minimal activity
+• Inconsistent but not collapsed
+
+↓ Regression:
+• Repeated missed commitments
+• Drop-off in execution
+• Avoidance of declared actions
+
+----------------------------------------
+
+3) Mindset over Method
+
+↑ Advancement:
+• Action taken despite discomfort
+• Continued execution without perfect conditions
+• Reduction of excuse-based behavior
+
+→ Stagnation:
+• Neutral behavior
+• No adversity faced or addressed
+
+↓ Regression:
+• Excuse patterns dominate
+• Waiting for perfect timing
+• Avoidance framed as logic
+
+----------------------------------------
+
+4) Feedback & Adaptation
+
+↑ Advancement:
+• Strategy adjusted after friction
+• Intelligent modification of approach
+• Active problem-solving
+
+→ Stagnation:
+• No adaptation needed or applied
+
+↓ Regression:
+• Repeated friction without adjustment
+• Same mistake repeated
+• Ignored performance feedback
+
+----------------------------------------
+
+5) Courageous Action
+
+↑ Advancement:
+• Action taken on something previously avoided
+• Visible step taken despite hesitation
+• Initiated difficult conversation or change
+
+→ Stagnation:
+• No avoidance pattern addressed
+
+↓ Regression:
+• Backed away from declared action
+• Avoided known necessary step
+
+----------------------------------------
+
+Display format:
+
+Clarity of Vision & Why — ↑
+Small Steps + Consistency — →
+Mindset over Method — ↑
+Feedback & Adaptation — →
+Courageous Action — ↓
+
+No explanation under arrows.
+
+----------------------------------------
+SECTION 3 — COLLECTIVE ANALYSIS
+----------------------------------------
+
+Generate one short integrated analysis.
+
+Rules:
+
+• Maximum 4 sentences
+• No step assignment
+• No new plan creation
+• No micro-action recommendation
+• No motivational padding
+• No water logic
+• No gamification language
+
+The analysis must synthesize:
+
+• Targeted Goal Progress
+• Overall heartbeat pattern
+• Alignment or misalignment between outcome and development
+
+Tone:
+
+Clear
+Direct
+Grounded
+Objective
+Non-therapeutic
+
+End Weekly Follow-Up.
