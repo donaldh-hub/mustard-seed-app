@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
-import { evaluateWater, computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
+import { computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
+import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { analyzePhoto } from "./visionAnalysis";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
@@ -115,7 +116,7 @@ export async function registerRoutes(
 
       const textLower = rawText.toLowerCase();
       let jaeText = "";
-      let shouldWater = false;
+      
 
       const asksStage = /what('?s| is) my stage/i.test(textLower) || /my stage/i.test(textLower) || /current stage/i.test(textLower);
       const asksFocus = /what should i focus/i.test(textLower) || /focus.*week/i.test(textLower) || /what should i do today/i.test(textLower);
@@ -515,8 +516,6 @@ export async function registerRoutes(
           mood: "neutral",
         });
 
-        shouldWater = true;
-
         const saveConfirms = [
           `${greeting}locked in.`,
           `${greeting}saved.`,
@@ -608,8 +607,6 @@ export async function registerRoutes(
           summary: payload || rawText,
           mood: "happy",
         });
-
-        shouldWater = true;
 
         const logConfirms = [
           `${greeting}logged.`,
@@ -730,7 +727,6 @@ export async function registerRoutes(
 
         if (depthResult.text) {
           jaeText = depthResult.text;
-          shouldWater = depthResult.shouldWater;
         } else {
           const result = generateJaeResponse(rawText, {
             name,
@@ -746,17 +742,6 @@ export async function registerRoutes(
             untargetedGoalTitle: untargetedGoal?.title,
           });
           jaeText = result.text;
-          const isPositive = /done|did it|good|great|completed|finished|accomplished|nailed/i.test(textLower);
-          if (isPositive) shouldWater = true;
-        }
-
-        if (shouldWater) {
-          await storage.createEntry({
-            userId,
-            date: todayStr(),
-            summary: rawText,
-            mood: "happy",
-          });
         }
       }
 
@@ -773,51 +758,161 @@ export async function registerRoutes(
 
       const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
 
+      const classifications = classifyMultipleActions(rawText);
+      const agg = aggregateClassifications(classifications);
+
       let waterAwarded = false;
       let waterGoalId: string | null = null;
       let growthResult: any = null;
+      let titanResult: any = { category: agg.primaryCategory, actionPoints: agg.totalActionPoints, insightPoints: agg.totalInsightPoints, driftMarkers: agg.totalDriftMarkers };
 
-      if (shouldWater && (targetedGoal || untargetedGoal)) {
-        const goalsToEval = [targetedGoal, untargetedGoal].filter(Boolean) as typeof activeGoals;
-        let bestGoal: typeof activeGoals[0] | null = null;
-        let bestWaterResult: { awarded: boolean; amount: number; reason: string } | null = null;
+      const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
 
-        const userIsPremium = isPremium(user);
-        for (const g of goalsToEval) {
-          const result = await evaluateWater(rawText, g.title, g.goalType, userIsPremium);
-          if (result.awarded && (!bestWaterResult || result.amount > bestWaterResult.amount)) {
-            bestGoal = g;
-            bestWaterResult = result;
+      if (agg.totalDriftMarkers < 0) {
+        const newDrift = (user.driftMarkers || 0) + Math.abs(agg.totalDriftMarkers);
+        const newIOCount = (user.consecutiveIOCount || 0) + 1;
+        await storage.updateUser(userId, {
+          driftMarkers: newDrift,
+          consecutiveIOCount: newIOCount,
+        } as any);
+      } else if (agg.primaryCategory === "IO") {
+        const newIOCount = (user.consecutiveIOCount || 0) + 1;
+        await storage.updateUser(userId, {
+          consecutiveIOCount: newIOCount,
+        } as any);
+      }
+
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+        const updatedCredits = { ...userCredits };
+        for (const [hb, count] of Object.entries(agg.heartbeatCredits)) {
+          updatedCredits[hb as HeartbeatKey] = (updatedCredits[hb as HeartbeatKey] || 0) + (count || 0);
+        }
+
+        const now = new Date();
+        const daysSinceLastVA = user.lastVerifiedActionAt
+          ? Math.floor((now.getTime() - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
+          : 999;
+
+        const hasDriftWarning = user.lastDriftWarningAt
+          ? (now.getTime() - new Date(user.lastDriftWarningAt).getTime()) < (48 * 60 * 60 * 1000)
+          : false;
+
+        let bonusAP = 0;
+        if (hasDriftWarning) {
+          const recentMsgs = await storage.getMessagesSince(userId, new Date(now.getTime() - 48 * 60 * 60 * 1000));
+          const recentVACount = recentMsgs.filter((m: any) => m.sender === "user").reduce((count, m) => {
+            const c = classifyMultipleActions(m.text);
+            const a = aggregateClassifications(c);
+            return count + (a.primaryCategory === "VA" ? 1 : 0);
+          }, 0);
+          if (recentVACount >= 3) {
+            bonusAP = 2;
           }
         }
 
-        if (bestGoal && bestWaterResult && bestWaterResult.awarded) {
-          waterAwarded = true;
-          waterGoalId = bestGoal.id;
-          growthResult = computeGrowthUpdate(
-            bestGoal.waterEvents,
-            bestGoal.cupsFilled,
-            bestGoal.seedStage,
-            bestWaterResult.amount
-          );
+        await storage.updateUser(userId, {
+          heartbeatCredits: updatedCredits as any,
+          lastVerifiedActionAt: now,
+          consecutiveIOCount: 0,
+          cBurnActive: 0,
+          streak: streak + 1,
+        } as any);
 
-          await storage.updateGoal(bestGoal.id, {
-            waterEvents: growthResult.waterEvents,
-            cupsFilled: growthResult.cupsFilled,
-            seedStage: growthResult.seedStage,
+        const matchGoal = targetedGoal || untargetedGoal;
+        if (matchGoal) {
+          const totalNewAP = agg.totalActionPoints + bonusAP;
+          const currentAP = matchGoal.actionPoints || 0;
+          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, totalNewAP);
+
+          if (waterUnits > 0) {
+            growthResult = computeGrowthUpdate(
+              matchGoal.waterEvents,
+              matchGoal.cupsFilled,
+              matchGoal.seedStage,
+              waterUnits
+            );
+            waterAwarded = true;
+            waterGoalId = matchGoal.id;
+
+            await storage.updateGoal(matchGoal.id, {
+              actionPoints: remainingAP,
+              waterEvents: growthResult.waterEvents,
+              cupsFilled: growthResult.cupsFilled,
+              seedStage: growthResult.seedStage,
+            });
+          } else {
+            await storage.updateGoal(matchGoal.id, {
+              actionPoints: remainingAP,
+              insightPoints: (matchGoal.insightPoints || 0) + agg.totalInsightPoints,
+            });
+          }
+        }
+
+        if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+          await storage.createEntry({
+            userId,
+            date: todayStr(),
+            summary: rawText,
+            mood: "happy",
           });
+        }
+      } else {
+        if (agg.totalInsightPoints > 0) {
+          const matchGoal = targetedGoal || untargetedGoal;
+          if (matchGoal) {
+            await storage.updateGoal(matchGoal.id, {
+              insightPoints: (matchGoal.insightPoints || 0) + agg.totalInsightPoints,
+            });
+          }
         }
       }
 
-      if (shouldWater) {
+      const now7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const recentMsgs7d = await storage.getMessagesSince(userId, now7d);
+      const userMsgs7d = recentMsgs7d.filter((m: any) => m.sender === "user");
+      let driftMarkers7d = 0;
+      for (const m of userMsgs7d) {
+        const c = classifyMultipleActions(m.text);
+        const a = aggregateClassifications(c);
+        if (a.totalDriftMarkers < 0) driftMarkers7d += Math.abs(a.totalDriftMarkers);
+      }
+
+      const now14d = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const driftWarningCount14d = user.lastDriftWarningAt && new Date(user.lastDriftWarningAt) >= now14d
+        ? (user.driftWarningCount14d || 0)
+        : 0;
+
+      const consecutiveIO = user.consecutiveIOCount || 0;
+      const daysSinceVA = user.lastVerifiedActionAt
+        ? Math.floor((Date.now() - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
+        : 999;
+      const escalation = checkEscalation(
+        driftMarkers7d,
+        consecutiveIO,
+        daysSinceVA,
+        driftWarningCount14d,
+        !!(user.cBurnActive),
+        0,
+        !!(user.lastDriftWarningAt && (Date.now() - new Date(user.lastDriftWarningAt).getTime()) < (48 * 60 * 60 * 1000))
+      );
+
+      if (escalation.driftWarning && !escalation.cBurnTriggered) {
         await storage.updateUser(userId, {
-          streak: streak + 1,
-        });
+          lastDriftWarningAt: new Date(),
+          driftWarningCount14d: (user.driftWarningCount14d || 0) + 1,
+        } as any);
+      }
+      if (escalation.cBurnTriggered) {
+        await storage.updateUser(userId, {
+          cBurnActive: 1,
+        } as any);
       }
 
       return res.json({
         userMessage: userMsg,
         jaeMessage: jaeMsg,
+        titan: titanResult,
+        escalation: escalation.escalationMessage ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
         water: waterAwarded ? {
           awarded: true,
           goalId: waterGoalId,
@@ -826,7 +921,7 @@ export async function registerRoutes(
           seedStage: growthResult?.seedStage,
           cupJustFilled: growthResult?.cupJustFilled,
           stageAdvanced: growthResult?.stageAdvanced,
-          fillPercent: Math.round((growthResult?.waterEvents / 50) * 100),
+          fillPercent: Math.round((growthResult?.waterEvents / 10) * 100),
           preResetFillPercent: growthResult?.preResetFillPercent,
         } : null,
       });
@@ -1186,7 +1281,7 @@ export async function registerRoutes(
         const waterEvents = goal.waterEvents ?? 0;
         const cupsFilled = goal.cupsFilled ?? 0;
         const seedStage = goal.seedStage ?? 0;
-        const fillPercent = Math.round((waterEvents / 50) * 100);
+        const fillPercent = Math.round((waterEvents / 10) * 100);
         const stageInfo = SEED_STAGE_INFO[seedStage] || SEED_STAGE_INFO[0];
 
         const revealedStatements: Record<number, string> = {};
@@ -1337,7 +1432,21 @@ export async function registerRoutes(
       }
 
       const directions = await evaluateHeartbeatDirections(recentMessages);
+
+      const credits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
+      const { computeHeartbeatBalance } = await import("./titan");
+      const balance = computeHeartbeatBalance(credits);
+
+      let balanceFeedback = "";
+      if (balance.feedbackType === "balanced") {
+        balanceFeedback = " All heartbeats are balanced (each ≥15%).";
+      } else if (balance.weakHeartbeats.length > 0) {
+        const weakNames = balance.weakHeartbeats.map(k => HEARTBEAT_NAMES[k]).join(", ");
+        balanceFeedback = ` Heartbeat imbalance detected: ${weakNames} below 15%. Distribution: Clarity ${balance.percentages.clarity}%, Consistency ${balance.percentages.consistency}%, Mindset ${balance.percentages.mindset}%, Adaptation ${balance.percentages.adaptation}%, Courage ${balance.percentages.courage}%.`;
+      }
+
       const analysis = await generateCollectiveAnalysis(goalProgress, directions, recentMessages);
+      const fullAnalysis = analysis + balanceFeedback;
 
       const review = await storage.createWeeklyReview({
         userId,
@@ -1345,7 +1454,7 @@ export async function registerRoutes(
         status: "pending",
         targetedGoalSnapshot: goalProgress,
         heartbeatDirections: directions,
-        collectiveAnalysis: analysis,
+        collectiveAnalysis: fullAnalysis,
         previousMeasurable: lastMeasurable,
         currentMeasurable,
       });
@@ -1658,15 +1767,16 @@ export async function registerRoutes(
         };
       }
 
-      const enforcedWater = Math.max(0, Math.min(2, Math.round(analysis.water_award)));
       const validConfidence = typeof analysis.confidence === "number" ? analysis.confidence : 0;
       const validActionType = analysis.action_type || "unknown_or_irrelevant";
-      const finalWater =
-        validActionType === "unknown_or_irrelevant" || validConfidence < 0.75
-          ? 0
-          : enforcedWater;
 
-      analysis.water_award = finalWater;
+      let photoAP = 0;
+      if (validActionType !== "unknown_or_irrelevant" && validConfidence >= 0.75) {
+        photoAP = analysis.proof_level >= 2 ? 3 : 2;
+      }
+
+      analysis.water_award = photoAP;
+      analysis.action_points = photoAP;
 
       await storage.updateMessage(photoMessage.id, {
         status: "analyzed",
@@ -1676,32 +1786,45 @@ export async function registerRoutes(
       await storage.updatePhotoMemory(photoMemory.id, {
         status: "analyzed",
         analysisJson: analysis as any,
-        waterAwarded: finalWater,
+        waterAwarded: analysis.water_award,
         waterReason: analysis.water_reason,
         tags: analysis.tags || [],
       });
 
-      if (finalWater > 0) {
+      if (photoAP > 0) {
         const matchGoal = targetedGoal || untargetedGoal;
         if (matchGoal) {
-          const currentWater = matchGoal.waterEvents || 0;
-          const newWater = currentWater + finalWater;
-          const WATER_PER_CUP = 50;
-          const newCups = Math.floor(newWater / WATER_PER_CUP);
-          const prevCups = matchGoal.cupsFilled || 0;
-          const growthUpdate: any = { waterEvents: newWater };
+          const currentAP = matchGoal.actionPoints || 0;
+          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, photoAP);
 
-          if (newCups > prevCups) {
-            growthUpdate.cupsFilled = newCups;
-            const STAGE_CUP_REQUIREMENTS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 8 };
-            const currentStage = matchGoal.seedStage || 0;
-            const nextStageReq = STAGE_CUP_REQUIREMENTS[currentStage + 1];
-            if (nextStageReq && newCups >= nextStageReq) {
-              growthUpdate.seedStage = currentStage + 1;
-            }
+          if (waterUnits > 0) {
+            const gr = computeGrowthUpdate(
+              matchGoal.waterEvents,
+              matchGoal.cupsFilled,
+              matchGoal.seedStage,
+              waterUnits
+            );
+            await storage.updateGoal(matchGoal.id, {
+              actionPoints: remainingAP,
+              waterEvents: gr.waterEvents,
+              cupsFilled: gr.cupsFilled,
+              seedStage: gr.seedStage,
+            });
+          } else {
+            await storage.updateGoal(matchGoal.id, {
+              actionPoints: remainingAP,
+            });
           }
 
-          await storage.updateGoal(matchGoal.id, growthUpdate);
+          const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
+          const hbKey = analysis.action_type?.includes("courage") ? "courage" as HeartbeatKey : "consistency" as HeartbeatKey;
+          const updatedCredits = { ...userCredits, [hbKey]: (userCredits[hbKey] || 0) + 1 };
+          await storage.updateUser(userId, {
+            heartbeatCredits: updatedCredits as any,
+            lastVerifiedActionAt: new Date(),
+            consecutiveIOCount: 0,
+            cBurnActive: 0,
+          } as any);
         }
       }
 

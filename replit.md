@@ -118,6 +118,19 @@ Preferred communication style: Simple, everyday language.
 - **Routes**: `POST /api/users/:userId/checkout` (Stripe Checkout), `POST /api/users/:userId/portal` (Billing Portal), `GET /api/users/:userId/subscription` (status), `GET /api/subscription/plans` (pricing)
 - **UI**: Profile page shows subscription badge, trial countdown, and upgrade CTA. UpgradePrompt component shown at gate points (dual goals, heartbeat trends).
 
+### TITAN 1.2 — Deterministic Evaluation Engine
+- **Engine**: `server/titan.ts` — Purely deterministic keyword-based classification engine replacing AI-based water scoring
+- **Classification categories**: VA (Verified Action, +3 AP), AR (Adaptive Recovery, +2 AP), RW (Reflection Without Action, +1 IP), IO (Intention Only, 0), AD (Avoidance/Drift, -1 Drift Marker)
+- **Scoring**: 10 Action Points (AP) = 1 Water Unit for seed growth. Insight Points (IP) tracked per goal separately. No emotional overrides or AI decisions.
+- **Heartbeat credit tracking**: Each VA/AR action earns a heartbeat credit mapped by keyword (e.g., "gym" → consistency, "applied" → courage). Credits tracked on user.heartbeatCredits as JSON.
+- **Escalation mechanics**:
+  - Drift Warning: ≥3 drift markers in 7 days OR ≥5 consecutive IO messages
+  - C-burn: No verified action in 7 days OR ≥2 drift warnings in 14 days. Water accumulation paused until a real action is taken.
+  - Recovery Acceleration: After drift warning, ≥3 VA messages in 48h grants +2 bonus AP
+- **Schema additions**: Users: driftMarkers, consecutiveIOCount, cBurnActive, lastVerifiedActionAt, lastDriftWarningAt, driftWarningCount14d, heartbeatCredits. Goals: actionPoints, insightPoints.
+- **Weekly balance**: computeHeartbeatBalance() calculates percentage distribution across 5 heartbeats. Weak heartbeats (<15%) flagged in weekly review.
+- **Photo integration**: Vision analysis maps to TITAN AP system (high-confidence photo proof = 3 AP, moderate = 2 AP). Server-side enforcement.
+
 ### Photo Attachment + Vision Analysis
 - **Engine**: `server/visionAnalysis.ts` — OpenAI gpt-4o vision API analyzes photos for verified goal-aligned action
 - **Schema**: `messages` table extended with `messageType` (text/photo), `status` (sent/pending_analysis/analyzed), `photoUrl`, `analysisJson`. New `photo_memories` table stores per-photo analysis results with water awards and tags.

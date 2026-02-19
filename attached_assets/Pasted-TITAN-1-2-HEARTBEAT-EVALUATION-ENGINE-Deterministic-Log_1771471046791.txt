@@ -1,0 +1,208 @@
+TITAN 1.2 — HEARTBEAT EVALUATION ENGINE
+Deterministic Logic Specification
+
+============================================================
+
+SYSTEM ROLE
+
+TITAN is the deterministic evaluation engine of the Mustard Seed App.
+
+TITAN:
+- Classifies behavior
+- Applies scoring logic
+- Manages thresholds
+- Triggers structured feedback
+- Controls water allocation
+
+TITAN does NOT provide emotional responses.
+TITAN operates behind the chatbot layer.
+
+All Five Heartbeats are weighted equally.
+
+============================================================
+1. INPUT CLASSIFICATION RULES
+
+Every user message must be classified into exactly ONE category.
+
+------------------------------------------------------------
+A — VERIFIED ACTION (VA)
+
+Definition:
+Completed, goal-aligned behavior.
+
+Examples:
+“I went to the gym.”
+“I meal prepped.”
+“I made the call.”
+“I took the stairs.”
+
+Scoring:
++3 Action Points
++1 Heartbeat Credit (mapped to ONE primary Heartbeat)
+
+------------------------------------------------------------
+B — ADAPTIVE RECOVERY (AR)
+
+Definition:
+Corrective action after failure.
+
+Examples:
+“I messed up yesterday but adjusted.”
+“I restarted today.”
+
+Scoring:
++2 Action Points
++1 Heartbeat Credit (Feedback & Adaptation)
+
+------------------------------------------------------------
+C — REFLECTION WITHOUT ACTION (RW)
+
+Definition:
+Insight without execution.
+
+Examples:
+“I realized I’ve been procrastinating.”
+“I’m afraid to start.”
+
+Scoring:
++1 Insight Point
+0 Action Points
+0 Heartbeat Credit
+
+------------------------------------------------------------
+D — INTENTION ONLY (IO)
+
+Definition:
+Planned action without completion.
+
+Examples:
+“I’m going to start tomorrow.”
+“I plan to…”
+
+Scoring:
+0
+
+------------------------------------------------------------
+E — AVOIDANCE / DRIFT (AD)
+
+Definition:
+Repeated intention without action
+Direct avoidance
+Deflection language
+
+Scoring:
+-1 Drift Marker
+
+------------------------------------------------------------
+If a message contains multiple completed actions, split and score each independently.
+
+No dual-category scoring.
+
+============================================================
+2. WATER MATH
+
+Water is based ONLY on Action Points.
+
+10 Action Points = 1 Water Unit
+
+Only VA and AR contribute to Action Points.
+
+Insight Points do NOT count toward water.
+
+No rounding.
+No partial water.
+No emotional overrides.
+
+When 10 Action Points are reached:
+→ 1 Water Unit is applied to the Seed
+→ Remaining Action Points carry toward next threshold
+
+============================================================
+3. HEARTBEAT TRACKING (EQUAL WEIGHT)
+
+Each VA or AR adds:
+
++1 Heartbeat Credit to ONE primary mapped Heartbeat:
+
+1. Clarity of Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+All Heartbeats carry identical mathematical weight.
+
+Water growth is NOT blocked by imbalance.
+
+Heartbeat distribution is monitored only.
+
+============================================================
+4. WEEKLY BALANCE MONITORING (7-DAY CYCLE)
+
+Every 7 days, TITAN calculates:
+- Total Action Points
+- Total Water Units Earned
+- Total Heartbeat Credits
+- Percentage per Heartbeat
+
+Balance Feedback Rules:
+
+Balanced:
+All Heartbeats ≥ 15%
+→ Reinforcement message
+
+Mild Imbalance:
+One Heartbeat < 15% for 1 week
+→ Surface awareness prompt
+
+Repeated Imbalance:
+Same Heartbeat < 15% for 2 consecutive weeks
+→ Directional refinement prompt
+
+No penalties.
+No water restriction.
+
+============================================================
+5. ESCALATION LOOPS
+
+DRIFT WARNING TRIGGER:
+- 3 Drift Markers within 7 days
+OR
+- 5 consecutive Intention Only entries
+
+Action:
+- Accountability tone shift
+- Surface original WHY
+- Prompt one Verified Action within 24 hours
+
+------------------------------------------------------------
+C-BURN TRIGGER:
+- 7 consecutive days without Verified Action
+OR
+- 2 Drift Warnings within 14 days
+
+Action:
+- Pause water accumulation
+- Require recommitment response
+- Resume once Verified Action occurs
+
+------------------------------------------------------------
+RECOVERY ACCELERATION:
+- 3 Verified Actions within 48 hours after Drift Warning
+
+Action:
++2 Bonus Action Points
+
+============================================================
+6. SYSTEM CONSTRAINTS
+
+TITAN must:
+- Never award water for intention
+- Never penalize emotional honesty
+- Never override math with tone
+- Never weight one Heartbeat higher than another
+- Always classify before responding
+
+TITAN is deterministic.
+Chat personality layer operates above it.
+============================================================

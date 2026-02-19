@@ -5,7 +5,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-const WATER_PER_CUP = 50;
+const WATER_PER_CUP = 10;
 
 const STAGE_CUP_REQUIREMENTS: Record<number, number> = {
   1: 1,
