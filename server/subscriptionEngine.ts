@@ -1,4 +1,4 @@
-import type { User, SubscriptionState } from "@shared/schema";
+import type { User, SubscriptionState, SubscriptionPlatform } from "@shared/schema";
 
 const TRIAL_DURATION_DAYS = 14;
 const GRACE_PERIOD_DAYS = 3;
@@ -66,6 +66,18 @@ export function isPremium(user: User): boolean {
   return subscriptionTier === "premium";
 }
 
+const PREMIUM_STATES: SubscriptionState[] = [
+  "PREMIUM_TRIAL_ACTIVE",
+  "PREMIUM_ACTIVE",
+  "PREMIUM_GRACE_PERIOD",
+  "CANCELED_PENDING_EXPIRATION",
+];
+
+export function hasPremiumAccess(user: User): boolean {
+  const { subscriptionState } = deriveEffectiveState(user);
+  return PREMIUM_STATES.includes(subscriptionState);
+}
+
 export function getSubscriptionBadge(user: User): string {
   const { subscriptionState } = deriveEffectiveState(user);
 
@@ -77,9 +89,9 @@ export function getSubscriptionBadge(user: User): string {
     case "PREMIUM_GRACE_PERIOD":
       return "Premium (Grace)";
     case "CANCELED_PENDING_EXPIRATION":
-      return "Premium (Canceling)";
+      return "Premium (Ends Soon)";
     case "PAYMENT_FAILED":
-      return "Premium (Payment Issue)";
+      return "Payment Issue";
     case "PREMIUM_EXPIRED":
       return "Lite";
     case "LITE":
@@ -131,23 +143,49 @@ export function getFeatureLimits(user: User) {
   return isPremium(user) ? PREMIUM_FEATURES : LITE_LIMITS;
 }
 
-export type StripeEventAction =
-  | { type: "subscription_created"; stripeCustomerId: string; stripeSubscriptionId: string; planInterval: string; expiresAt: Date }
-  | { type: "subscription_renewed"; expiresAt: Date }
-  | { type: "subscription_canceled"; expiresAt: Date }
-  | { type: "payment_failed" }
-  | { type: "payment_recovered"; expiresAt: Date };
+export type SubscriptionEventAction =
+  | { platform: SubscriptionPlatform; type: "subscription_created"; subscriptionId: string; productId?: string; planInterval?: string; expiresAt: Date }
+  | { platform: SubscriptionPlatform; type: "trial_started"; expiresAt: Date; productId?: string }
+  | { platform: SubscriptionPlatform; type: "subscription_renewed"; expiresAt: Date }
+  | { platform: SubscriptionPlatform; type: "subscription_canceled"; expiresAt: Date }
+  | { platform: SubscriptionPlatform; type: "payment_failed" }
+  | { platform: SubscriptionPlatform; type: "payment_recovered"; expiresAt: Date };
 
 export function computeStateTransition(
   currentState: SubscriptionState,
-  action: StripeEventAction
-): { subscriptionState: SubscriptionState; subscriptionTier: string; subscriptionExpiresAt?: Date } {
+  action: SubscriptionEventAction
+): {
+  subscriptionState: SubscriptionState;
+  subscriptionTier: string;
+  subscriptionPlatform?: SubscriptionPlatform;
+  subscriptionProductId?: string;
+  subscriptionExpiresAt?: Date;
+  trialStartedAt?: Date;
+  trialExpiresAt?: Date;
+  lastReceiptValidation?: Date;
+} {
+  const now = new Date();
+
   switch (action.type) {
+    case "trial_started":
+      return {
+        subscriptionState: "PREMIUM_TRIAL_ACTIVE",
+        subscriptionTier: "premium",
+        subscriptionPlatform: action.platform,
+        subscriptionProductId: action.productId,
+        trialStartedAt: now,
+        trialExpiresAt: action.expiresAt,
+        lastReceiptValidation: now,
+      };
+
     case "subscription_created":
       return {
         subscriptionState: "PREMIUM_ACTIVE",
         subscriptionTier: "premium",
+        subscriptionPlatform: action.platform,
+        subscriptionProductId: action.productId,
         subscriptionExpiresAt: action.expiresAt,
+        lastReceiptValidation: now,
       };
 
     case "subscription_renewed":
@@ -155,6 +193,7 @@ export function computeStateTransition(
         subscriptionState: "PREMIUM_ACTIVE",
         subscriptionTier: "premium",
         subscriptionExpiresAt: action.expiresAt,
+        lastReceiptValidation: now,
       };
 
     case "subscription_canceled":
@@ -162,12 +201,14 @@ export function computeStateTransition(
         subscriptionState: "CANCELED_PENDING_EXPIRATION",
         subscriptionTier: "premium",
         subscriptionExpiresAt: action.expiresAt,
+        lastReceiptValidation: now,
       };
 
     case "payment_failed":
       return {
         subscriptionState: "PAYMENT_FAILED",
         subscriptionTier: "premium",
+        lastReceiptValidation: now,
       };
 
     case "payment_recovered":
@@ -175,6 +216,7 @@ export function computeStateTransition(
         subscriptionState: "PREMIUM_ACTIVE",
         subscriptionTier: "premium",
         subscriptionExpiresAt: action.expiresAt,
+        lastReceiptValidation: now,
       };
 
     default:
@@ -183,4 +225,51 @@ export function computeStateTransition(
         subscriptionTier: currentState === "LITE" || currentState === "PREMIUM_EXPIRED" ? "lite" : "premium",
       };
   }
+}
+
+export function validateReceiptUpdate(
+  user: User,
+  storeExpiresAt: Date,
+  storeIsActive: boolean,
+  storeIsTrial: boolean,
+  platform: SubscriptionPlatform
+): Partial<User> & { subscriptionState: SubscriptionState; subscriptionTier: string } {
+  const now = new Date();
+
+  if (storeIsTrial && storeIsActive) {
+    return {
+      subscriptionState: "PREMIUM_TRIAL_ACTIVE",
+      subscriptionTier: "premium",
+      subscriptionPlatform: platform,
+      subscriptionExpiresAt: storeExpiresAt,
+      lastReceiptValidation: now,
+    } as any;
+  }
+
+  if (storeIsActive && !storeIsTrial) {
+    return {
+      subscriptionState: "PREMIUM_ACTIVE",
+      subscriptionTier: "premium",
+      subscriptionPlatform: platform,
+      subscriptionExpiresAt: storeExpiresAt,
+      lastReceiptValidation: now,
+    } as any;
+  }
+
+  if (!storeIsActive && storeExpiresAt > now) {
+    return {
+      subscriptionState: "CANCELED_PENDING_EXPIRATION",
+      subscriptionTier: "premium",
+      subscriptionPlatform: platform,
+      subscriptionExpiresAt: storeExpiresAt,
+      lastReceiptValidation: now,
+    } as any;
+  }
+
+  return {
+    subscriptionState: "LITE",
+    subscriptionTier: "lite",
+    subscriptionPlatform: platform,
+    lastReceiptValidation: now,
+  } as any;
 }

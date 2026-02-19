@@ -117,3 +117,12 @@ Preferred communication style: Simple, everyday language.
 - **Stripe Integration**: `server/stripeClient.ts` (Stripe client + sync), `server/webhookHandlers.ts` (webhook processing), `server/subscriptionEngine.ts` (state machine + feature limits)
 - **Routes**: `POST /api/users/:userId/checkout` (Stripe Checkout), `POST /api/users/:userId/portal` (Billing Portal), `GET /api/users/:userId/subscription` (status), `GET /api/subscription/plans` (pricing)
 - **UI**: Profile page shows subscription badge, trial countdown, and upgrade CTA. UpgradePrompt component shown at gate points (dual goals, heartbeat trends).
+
+### Multi-Platform Subscription Architecture
+- **Platforms**: STRIPE (web), APPLE (iOS - future), GOOGLE (Android - future)
+- **Schema fields**: `subscriptionPlatform` (STRIPE/APPLE/GOOGLE), `subscriptionProductId`, `lastReceiptValidation`
+- **State machine**: Platform-agnostic `computeStateTransition()` and `validateReceiptUpdate()` in `server/subscriptionEngine.ts`
+- **Receipt validation**: `POST /api/users/:userId/validate-receipt` (placeholder for Apple/Google store validation)
+- **Sync endpoint**: `POST /api/users/:userId/sync-subscription` (derives effective state from database)
+- **Badge labels**: CANCELED_PENDING_EXPIRATION = "Premium (Ends Soon)", PAYMENT_FAILED = "Payment Issue"
+- **Feature gating rule**: Premium access granted for PREMIUM_TRIAL_ACTIVE, PREMIUM_ACTIVE, PREMIUM_GRACE_PERIOD, CANCELED_PENDING_EXPIRATION (before expiration)

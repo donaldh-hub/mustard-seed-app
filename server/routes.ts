@@ -7,7 +7,7 @@ import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weekl
 import { evaluateWater, computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
-import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt } from "./subscriptionEngine";
+import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt, validateReceiptUpdate } from "./subscriptionEngine";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
 
@@ -1510,6 +1510,7 @@ export async function registerRoutes(
         badge: getSubscriptionBadge({ ...user, ...effective } as any),
         trialDaysRemaining: getTrialDaysRemaining(user),
         featureLimits: getFeatureLimits({ ...user, ...effective } as any),
+        platform: user.subscriptionPlatform || null,
         hasStripeSubscription: !!user.stripeSubscriptionId,
         planInterval: user.planInterval,
       });
@@ -1536,21 +1537,25 @@ export async function registerRoutes(
             await storage.updateUser(user.id, {
               subscriptionState: "PREMIUM_ACTIVE",
               subscriptionTier: "premium",
+              subscriptionPlatform: "STRIPE",
               stripeSubscriptionId: subscription.id,
               subscriptionExpiresAt: periodEnd,
               planInterval: interval,
               lastPaymentStatus: "succeeded",
+              lastReceiptValidation: new Date(),
             } as any);
           } else if (subscription.status === "past_due") {
             await storage.updateUser(user.id, {
               subscriptionState: "PAYMENT_FAILED",
               lastPaymentStatus: "failed",
+              lastReceiptValidation: new Date(),
             } as any);
           } else if (subscription.status === "canceled") {
             await storage.updateUser(user.id, {
               subscriptionState: "PREMIUM_EXPIRED",
               subscriptionTier: "lite",
               lastPaymentStatus: "canceled",
+              lastReceiptValidation: new Date(),
             } as any);
           }
         }
@@ -1566,6 +1571,7 @@ export async function registerRoutes(
             subscriptionTier: "lite",
             stripeSubscriptionId: null,
             lastPaymentStatus: "canceled",
+            lastReceiptValidation: new Date(),
           } as any);
         }
       }
@@ -1574,6 +1580,81 @@ export async function registerRoutes(
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Webhook error" });
+    }
+  });
+
+  // ─── Store Receipt Validation (Apple / Google) ───
+  // These endpoints are ready to plug in native app store receipt validation.
+  // The native app sends a receipt, the server validates with the store,
+  // and updates the user's subscription state accordingly.
+
+  app.post("/api/users/:userId/validate-receipt", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { platform, receipt, productId } = req.body;
+
+      if (!platform || !["APPLE", "GOOGLE"].includes(platform)) {
+        return res.status(400).json({ message: "platform must be 'APPLE' or 'GOOGLE'" });
+      }
+      if (!receipt) {
+        return res.status(400).json({ message: "receipt is required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // TODO: Implement actual store validation when native app is built
+      // For Apple: Send receipt to Apple's verifyReceipt endpoint
+      // For Google: Use Google Play Developer API to verify purchase token
+      //
+      // For now, return the current subscription state without modifying it.
+      // When implementing:
+      // 1. Validate receipt with store
+      // 2. Extract expiration date, trial status, cancellation status
+      // 3. Call validateReceiptUpdate() from subscriptionEngine
+      // 4. Update user in database
+
+      const effective = deriveEffectiveState(user);
+
+      return res.json({
+        validated: false,
+        message: "Receipt validation not yet implemented for native stores. Use Stripe checkout for web subscriptions.",
+        subscriptionState: effective.subscriptionState,
+        subscriptionTier: effective.subscriptionTier,
+        platform,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Receipt validation error" });
+    }
+  });
+
+  app.post("/api/users/:userId/sync-subscription", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const effective = deriveEffectiveState(user);
+
+      if (effective.subscriptionState !== user.subscriptionState || effective.subscriptionTier !== user.subscriptionTier) {
+        await storage.updateUser(userId, {
+          subscriptionState: effective.subscriptionState,
+          subscriptionTier: effective.subscriptionTier,
+        } as any);
+      }
+
+      return res.json({
+        subscriptionState: effective.subscriptionState,
+        subscriptionTier: effective.subscriptionTier,
+        badge: getSubscriptionBadge({ ...user, ...effective } as any),
+        trialDaysRemaining: getTrialDaysRemaining(user),
+        featureLimits: getFeatureLimits({ ...user, ...effective } as any),
+        platform: user.subscriptionPlatform || null,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Sync error" });
     }
   });
 

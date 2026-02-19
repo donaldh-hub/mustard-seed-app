@@ -14,6 +14,9 @@ export const SUBSCRIPTION_STATES = [
 ] as const;
 export type SubscriptionState = typeof SUBSCRIPTION_STATES[number];
 
+export const SUBSCRIPTION_PLATFORMS = ["STRIPE", "APPLE", "GOOGLE"] as const;
+export type SubscriptionPlatform = typeof SUBSCRIPTION_PLATFORMS[number];
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().default(""),
@@ -27,9 +30,12 @@ export const users = pgTable("users", {
   weeklyCycleStart: timestamp("weekly_cycle_start"),
   subscriptionTier: text("subscription_tier").notNull().default("lite"),
   subscriptionState: text("subscription_state").notNull().default("LITE"),
+  subscriptionPlatform: text("subscription_platform"),
+  subscriptionProductId: text("subscription_product_id"),
   trialStartedAt: timestamp("trial_started_at").defaultNow(),
   trialExpiresAt: timestamp("trial_expires_at"),
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
+  lastReceiptValidation: timestamp("last_receipt_validation"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   planInterval: text("plan_interval"),
