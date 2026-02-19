@@ -1,0 +1,251 @@
+ROLE:
+You are a Senior Product Architect and Systems Engineer.
+
+Your task is to generate a production-ready Lite vs Premium feature specification for the Mustard Seed Accountability App.
+
+This app is built in React Native (Expo) with Firebase backend and will be deployed to both iOS and Android using Apple In-App Purchases and Google Play Billing (NO external PayPal links).
+
+The output must be implementation-ready.
+No fluff.
+No placeholders.
+No vague language.
+No marketing tone.
+
+Write as if engineers will build directly from this document.
+
+---
+
+APP CORE IDENTITY:
+
+The Mustard Seed App is a digital accountability partner.
+It is NOT a workout app.
+It is built around the Five Heartbeats framework:
+
+1. Clarity of Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+The app includes:
+- AI chat accountability
+- A gamified water container system
+- Seed → root → tree visual growth
+- Memory calendar
+- Weekly review
+- Goal tracking (targeted + general)
+
+Growth is earned through real action language only.
+No points.
+No coins.
+No streak gimmicks.
+
+---
+
+GLOBAL REQUIREMENT:
+
+User subscription status must be visibly displayed next to the user’s name on their Profile screen.
+
+Requirements:
+- Label must clearly indicate: “Lite” or “Premium”.
+- If Premium trial is active, display: “Premium (Trial)”.
+- Status must dynamically update based on subscription validation.
+- Badge must reflect real-time subscription state from Firebase.
+- Badge must automatically change upon downgrade, cancellation, expiration, or payment failure.
+- No manual toggles allowed.
+- Must sync with backend subscription verification logic.
+- Badge must never desync from actual subscription status.
+
+---
+
+REQUIREMENTS:
+
+Generate a structured specification covering the following sections:
+
+1) FEATURE MATRIX
+Clearly define Lite vs Premium differences in table format.
+
+Include:
+- Chat depth
+- Goal limits
+- Five Heartbeats usage
+- Assessment access
+- Water system logic
+- Tree growth modeling
+- Weekly review depth
+- Trend analytics
+- Progress photo storage
+- Dual goal capability
+- Data retention rules
+- Profile subscription badge behavior
+
+Be precise.
+
+---
+
+2) FIVE HEARTBEATS ENGINE LOGIC
+
+Define:
+
+LITE:
+- Heartbeats referenced in language only.
+- No scoring.
+- No weighting.
+- No monthly recalibration.
+- No diagnostic outputs.
+
+PREMIUM:
+- Full onboarding assessment required.
+- Weighted scoring model.
+- Dynamic heartbeat imbalance detection.
+- Monthly recalibration cycle.
+- Trend tracking.
+- Behavioral pattern analysis.
+
+Explain:
+- How assessment data is stored.
+- How it is preserved on downgrade.
+- How it reactivates if user upgrades again.
+
+---
+
+3) 14-DAY PREMIUM TRIAL GATE LOGIC
+
+Define:
+
+- Trial start timestamp
+- Trial expiration check on login
+- Automatic downgrade if not subscribed
+- No data deletion on downgrade
+- Feature lock behavior
+- What user retains
+- What becomes inaccessible
+- What reactivates upon subscription
+- Profile badge change behavior upon expiration
+
+Must include backend logic steps.
+
+---
+
+4) SUBSCRIPTION SYSTEM
+
+Use:
+- Apple In-App Purchase (auto-renewable subscription)
+- Google Play Billing
+
+Define:
+- Monthly plan
+- Annual plan
+- Subscription validation flow
+- Receipt verification
+- Handling failed payments
+- Handling cancellations
+- Status sync with Firebase user record
+- Real-time update of Profile subscription badge
+
+No external payment processors.
+
+---
+
+5) FIREBASE SUBSCRIPTION STATE MACHINE (CRITICAL)
+
+Define a deterministic subscription state machine that prevents badge desync and feature access errors.
+
+Must include:
+
+Valid States:
+- LITE
+- PREMIUM_TRIAL_ACTIVE
+- PREMIUM_ACTIVE
+- PREMIUM_GRACE_PERIOD
+- PREMIUM_EXPIRED
+- PAYMENT_FAILED
+- CANCELED_PENDING_EXPIRATION
+
+Define:
+
+- State transition rules
+- Event triggers (purchase, renewal, expiration, cancellation, failed payment)
+- Backend validation flow
+- Receipt verification flow
+- Scheduled server-side checks
+- Login-time verification
+- How conflicts are resolved if store status and Firebase differ
+- Single source of truth rule
+- How UI reads state safely
+- How feature gating references state
+- How profile badge references state
+
+Include sample state transition diagram in text format.
+
+No ambiguous logic allowed.
+
+---
+
+6) WATER + TREE LOGIC DIFFERENTIATION
+
+Define:
+
+LITE:
+- Basic water additions
+- Slower growth
+- Single goal
+- No weighted behavioral modeling
+
+PREMIUM:
+- Weighted water based on difficulty + courage + consistency
+- Underground root development modeling
+- Dual trees (1 targeted + 1 general)
+- Monthly growth recalibration
+
+Explain how visual growth progression differs technically.
+
+---
+
+7) DATA STRUCTURE OVERVIEW
+
+Provide Firebase collection structure for:
+
+- Users
+- Subscription status
+- Subscription tier
+- Trial expiration timestamp
+- Subscription validation receipt
+- Subscription state enum
+- Assessment results
+- Heartbeat scores
+- Goals
+- Tree growth state
+- Water log
+
+Include field-level examples.
+
+---
+
+8) UPGRADE TRIGGER MOMENTS
+
+Define specific in-app trigger conditions for showing upgrade prompts.
+
+Examples:
+- Attempting second goal creation
+- Attempting to view heartbeat trend chart
+- Monthly recalibration ready
+- Trial expiration
+- Attempting to access locked Premium features
+
+No aggressive messaging.
+Access-based gating only.
+
+---
+
+OUTPUT FORMAT:
+
+Structured technical specification with clear headings.
+Implementation-ready.
+Concise but complete.
+No filler language.
+No motivational commentary.
+
+End with:
+
+“SPEC COMPLETE”

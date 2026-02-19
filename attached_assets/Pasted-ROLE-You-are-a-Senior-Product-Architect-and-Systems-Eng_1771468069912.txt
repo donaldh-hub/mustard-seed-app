@@ -1,0 +1,191 @@
+ROLE:
+You are a Senior Product Architect and Systems Engineer.
+
+Your task is to generate a production-ready Lite vs Premium feature specification for the Mustard Seed Accountability App.
+
+This app is built in React Native (Expo) with Firebase backend and will be deployed to both iOS and Android using Apple In-App Purchases and Google Play Billing (NO external PayPal links).
+
+The output must be implementation-ready.
+No fluff.
+No placeholders.
+No vague language.
+No marketing tone.
+
+Write as if engineers will build directly from this document.
+
+---
+
+APP CORE IDENTITY:
+
+The Mustard Seed App is a digital accountability partner.
+It is NOT a workout app.
+It is built around the Five Heartbeats framework:
+
+1. Clarity of Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+The app includes:
+- AI chat accountability
+- A gamified water container system
+- Seed → root → tree visual growth
+- Memory calendar
+- Weekly review
+- Goal tracking (targeted + general)
+
+Growth is earned through real action language only.
+No points.
+No coins.
+No streak gimmicks.
+
+---
+
+REQUIREMENTS:
+
+Generate a structured specification covering the following sections:
+
+1) FEATURE MATRIX
+Clearly define Lite vs Premium differences in table format.
+
+Include:
+- Chat depth
+- Goal limits
+- Five Heartbeats usage
+- Assessment access
+- Water system logic
+- Tree growth modeling
+- Weekly review depth
+- Trend analytics
+- Progress photo storage
+- Dual goal capability
+- Data retention rules
+
+Be precise.
+
+---
+
+2) FIVE HEARTBEATS ENGINE LOGIC
+
+Define:
+
+LITE:
+- Heartbeats referenced in language only.
+- No scoring.
+- No weighting.
+- No monthly recalibration.
+- No diagnostic outputs.
+
+PREMIUM:
+- Full onboarding assessment required.
+- Weighted scoring model.
+- Dynamic heartbeat imbalance detection.
+- Monthly recalibration cycle.
+- Trend tracking.
+- Behavioral pattern analysis.
+
+Explain how assessment data is stored and reactivated if user downgrades then upgrades again.
+
+---
+
+3) 14-DAY PREMIUM TRIAL GATE LOGIC
+
+Define:
+
+- Trial start timestamp
+- Trial expiration check on login
+- Automatic downgrade if not subscribed
+- No data deletion on downgrade
+- Feature lock behavior
+- What user retains
+- What becomes inaccessible
+- What reactivates upon subscription
+
+Must include backend logic steps.
+
+---
+
+4) SUBSCRIPTION SYSTEM
+
+Use:
+- Apple In-App Purchase (auto-renewable subscription)
+- Google Play Billing
+
+Define:
+- Monthly plan
+- Annual plan
+- Subscription validation flow
+- Receipt verification
+- Handling failed payments
+- Handling cancellations
+- Status sync with Firebase user record
+
+No external payment processors.
+
+---
+
+5) WATER + TREE LOGIC DIFFERENTIATION
+
+Define:
+
+LITE:
+- Basic water additions
+- Slower growth
+- Single goal
+- No weighted behavioral modeling
+
+PREMIUM:
+- Weighted water based on difficulty + courage + consistency
+- Underground root development modeling
+- Dual trees (1 targeted + 1 general)
+- Monthly growth recalibration
+
+Explain how visual growth progression differs technically.
+
+---
+
+6) DATA STRUCTURE OVERVIEW
+
+Provide:
+
+Firebase collection structure for:
+- Users
+- Subscription status
+- Assessment results
+- Heartbeat scores
+- Goals
+- Tree growth state
+- Trial expiration
+- Water log
+
+Must be clearly formatted.
+
+---
+
+7) UPGRADE TRIGGER MOMENTS
+
+Define specific in-app trigger conditions for showing upgrade prompts.
+
+Examples:
+- Attempting second goal creation
+- Attempting to view heartbeat trend chart
+- Monthly recalibration ready
+- Trial expiration
+
+No aggressive messaging.
+Access-based gating only.
+
+---
+
+OUTPUT FORMAT:
+
+Structured technical specification with clear headings.
+Implementation-ready.
+Concise but complete.
+No filler language.
+No motivational commentary.
+
+End with:
+
+“SPEC COMPLETE”
