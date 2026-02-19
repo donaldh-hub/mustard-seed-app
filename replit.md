@@ -74,6 +74,15 @@ Preferred communication style: Simple, everyday language.
 - **Context injection**: System prompt dynamically receives user's active targeted/untargeted goal titles, obstacle, streak, growth stage, weakest heartbeat, and recent message history (last 6 messages).
 - **API keys**: Managed via Replit AI Integrations (`AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL`). No user API key required — charges go to Replit credits.
 
+### Weekly Follow-Up Engine
+- **Engine**: `server/weeklyReview.ts` — AI-powered weekly audit using OpenAI (gpt-4o) for heartbeat direction evaluation and collective analysis
+- **Trigger**: Every 7 days from `users.weeklyCycleStart` (set at onboarding/user creation and reset on review completion)
+- **Three sections**: Targeted Goal Progress (measurable data only), Heartbeat Direction (5 arrows: ↑/→/↓), Collective Analysis (max 4 sentences, objective tone)
+- **Endpoints**: `GET /api/users/:userId/weekly-review/status`, `POST .../generate`, `POST .../:reviewId/complete`, `GET .../history`
+- **UI**: `/weekly-review` route shows structured written report (not chat). Home screen shows amber banner when pending, compact snapshot after completion
+- **Calendar**: Generates an entry in the entries table on review generation with heartbeat summary
+- **Schema**: `weekly_reviews` table stores cycle dates, goal snapshots, heartbeat directions, and analysis text
+
 ### Third-Party NPM Libraries (Notable)
 - `express` v5 — HTTP server
 - `drizzle-orm` + `drizzle-kit` — Database ORM and migrations

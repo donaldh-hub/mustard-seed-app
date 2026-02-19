@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
+import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
 
@@ -30,7 +31,8 @@ export async function registerRoutes(
   app.post("/api/users", async (req, res) => {
     const result = insertUserSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ message: result.error.message });
-    const user = await storage.createUser(result.data);
+    const userData = { ...result.data, weeklyCycleStart: new Date() };
+    const user = await storage.createUser(userData as any);
     return res.json(user);
   });
 
@@ -802,6 +804,8 @@ export async function registerRoutes(
         weakestHeartbeat: weakest.heartbeat,
       });
 
+      await storage.updateUser(userId, { weeklyCycleStart: new Date() } as any);
+
       return res.json(assessment);
     } catch (err) {
       console.error(err);
@@ -1153,6 +1157,157 @@ export async function registerRoutes(
       }
 
       return res.json(result);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/weekly-review/status", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const status = await storage.getWeeklyReviewStatus(userId);
+
+      const lastCompleted = await storage.getLatestCompletedReview(userId);
+      let snapshot = null;
+      if (lastCompleted) {
+        const goalSnap = lastCompleted.targetedGoalSnapshot as any;
+        const dirs = lastCompleted.heartbeatDirections as any;
+        const dirSymbol = (d: string) => d === "up" ? "↑" : d === "down" ? "↓" : "→";
+        snapshot = {
+          reviewId: lastCompleted.id,
+          date: lastCompleted.completedAt ? new Date(lastCompleted.completedAt).toISOString().split("T")[0] : lastCompleted.cycleStartDate,
+          goalNet: goalSnap?.hasGoal ? goalSnap.netChange : null,
+          metricType: goalSnap?.metricType || null,
+          heartbeatSummary: dirs ? `${dirSymbol(dirs.clarity)} ${dirSymbol(dirs.consistency)} ${dirSymbol(dirs.mindset)} ${dirSymbol(dirs.adaptation)} ${dirSymbol(dirs.courage)}` : null,
+        };
+      }
+
+      return res.json({ ...status, lastSnapshot: snapshot });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/users/:userId/weekly-review/generate", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const existing = await storage.getPendingWeeklyReview(userId);
+      if (existing) return res.json(existing);
+
+      const cycleStart = user.weeklyCycleStart;
+      if (!cycleStart) return res.status(400).json({ message: "No weekly cycle started" });
+
+      const cycleStartDate = new Date(cycleStart);
+      const recentMessages = await storage.getMessagesSince(userId, cycleStartDate);
+
+      const activeGoals = await storage.getActiveGoals(userId);
+      const targetedGoal = activeGoals.find(g => g.goalType === "targeted");
+
+      const lastReview = await storage.getLatestCompletedReview(userId);
+      const lastMeasurable = lastReview?.currentMeasurable ?? targetedGoal?.baselineMetric ?? null;
+
+      let goalProgress: any = { hasGoal: false };
+      let currentMeasurable: number | null = null;
+
+      if (targetedGoal) {
+        const goalEntries = await storage.getEntriesByGoalId(targetedGoal.id);
+        const recentEntries = goalEntries.filter(e => {
+          const entryDate = new Date(e.date);
+          return entryDate >= cycleStartDate;
+        });
+
+        const latestProgressEntry = recentEntries.length > 0 ? recentEntries[0] : null;
+
+        if (targetedGoal.metricType === "lbs" || targetedGoal.metricType === "kg" || targetedGoal.metricType === "weight") {
+          const progressMatch = latestProgressEntry?.summary?.match(/(\d+\.?\d*)/);
+          currentMeasurable = progressMatch ? parseFloat(progressMatch[1]) : lastMeasurable;
+        } else {
+          currentMeasurable = targetedGoal.percentComplete ?? 0;
+        }
+
+        const netChange = (currentMeasurable != null && lastMeasurable != null)
+          ? Math.round((currentMeasurable - lastMeasurable) * 100) / 100
+          : null;
+
+        goalProgress = {
+          hasGoal: true,
+          goalStatement: targetedGoal.title,
+          lastWeekValue: lastMeasurable,
+          currentValue: currentMeasurable,
+          netChange,
+          metricType: targetedGoal.metricType || "units",
+        };
+      }
+
+      const directions = await evaluateHeartbeatDirections(recentMessages);
+      const analysis = await generateCollectiveAnalysis(goalProgress, directions, recentMessages);
+
+      const review = await storage.createWeeklyReview({
+        userId,
+        cycleStartDate: cycleStartDate.toISOString().split("T")[0],
+        status: "pending",
+        targetedGoalSnapshot: goalProgress,
+        heartbeatDirections: directions,
+        collectiveAnalysis: analysis,
+        previousMeasurable: lastMeasurable,
+        currentMeasurable,
+      });
+
+      const dirSymbol = (d: string) => d === "up" ? "↑" : d === "down" ? "↓" : "→";
+      const heartbeatLine = `${dirSymbol(directions.clarity)} ${dirSymbol(directions.consistency)} ${dirSymbol(directions.mindset)} ${dirSymbol(directions.adaptation)} ${dirSymbol(directions.courage)}`;
+      const calendarSummary = goalProgress.hasGoal
+        ? `Weekly Review — ${goalProgress.goalStatement} | Net: ${goalProgress.netChange ?? "N/A"} | Heartbeats: ${heartbeatLine}`
+        : `Weekly Review — No targeted goal | Heartbeats: ${heartbeatLine}`;
+
+      await storage.createEntry({
+        userId,
+        date: todayStr(),
+        summary: calendarSummary,
+        mood: "neutral",
+        goalId: null,
+      });
+
+      return res.json(review);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/users/:userId/weekly-review/:reviewId/complete", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const reviewId = req.params.reviewId;
+
+      const pending = await storage.getPendingWeeklyReview(userId);
+      if (!pending || pending.id !== reviewId) {
+        return res.status(404).json({ message: "Review not found for this user" });
+      }
+
+      const review = await storage.completeWeeklyReview(reviewId);
+      if (!review) return res.status(404).json({ message: "Review not found" });
+
+      await storage.updateUser(userId, { weeklyCycleStart: new Date() } as any);
+
+      return res.json(review);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/weekly-review/history", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const pending = await storage.getPendingWeeklyReview(userId);
+      const latest = await storage.getLatestCompletedReview(userId);
+      const reviews = [pending, latest].filter(Boolean);
+      return res.json(reviews);
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });

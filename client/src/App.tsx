@@ -12,6 +12,7 @@ import Chat from "@/pages/Chat";
 import ProgressPage from "@/pages/Progress";
 import CalendarPage from "@/pages/Calendar";
 import Profile from "@/pages/Profile";
+import WeeklyReview from "@/pages/WeeklyReview";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
         <Route path="/progress" component={ProgressPage} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/profile" component={Profile} />
+        <Route path="/weekly-review" component={WeeklyReview} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -1,0 +1,241 @@
+MUSTARD SEED — WEEKLY FOLLOW-UP SYSTEM (FINALIZED)
+
+Add a structured Weekly Follow-Up feature that triggers automatically every 7 days from user onboarding or from the last completed weekly review timestamp.
+
+This feature is mandatory.
+It is written.
+It is structured.
+It is not conversational chat.
+It does not assign steps.
+It does not redesign strategy.
+It does not include water logic.
+It does not include gamification.
+
+The Weekly Follow-Up contains exactly three sections:
+
+1) Targeted Goal Progress
+2) Heartbeat Direction
+3) Collective Analysis (maximum 4 sentences)
+
+--------------------------------------------------
+TRIGGER + HOME SCREEN BANNER
+--------------------------------------------------
+
+• Store weekly_cycle_start_timestamp at onboarding.
+• Trigger Weekly Follow-Up every 7 days.
+• When triggered, display a Home Screen banner:
+
+  "Your Weekly Review is Ready"
+
+• Banner remains visible until review is acknowledged.
+• User taps banner to open full Weekly Review screen.
+• Review must be acknowledged before banner disappears.
+• Do not reset weekly cycle until review is completed.
+
+--------------------------------------------------
+CALENDAR INTEGRATION
+--------------------------------------------------
+
+• On the day the Weekly Review is generated, automatically add an entry to the in-app calendar:
+
+  Title: Weekly Review
+  Type: System Event
+  Status: Completed (after acknowledgment)
+
+• This calendar entry is permanent and viewable in history.
+• Each review should be timestamped and archived.
+
+--------------------------------------------------
+WEEKLY REVIEW SCREEN (WRITTEN REPORT)
+--------------------------------------------------
+
+The Weekly Review must display as a structured written report.
+Not chat bubbles.
+Not conversational formatting.
+
+Clean layout:
+
+--------------------------------
+WEEKLY REVIEW
+--------------------------------
+
+SECTION 1 — TARGETED GOAL PROGRESS
+
+If a targeted goal exists, display:
+
+• Goal statement
+• Last week measurable value
+• Current measurable value
+• Net change
+
+Example:
+
+Goal: Lose 20 lbs by June 1
+Last Week: 197 lbs
+This Week: 195.8 lbs
+Net Change: -1.2 lbs
+
+No commentary.
+No emotional framing.
+
+If no targeted goal exists:
+
+Display:
+"No targeted goal active."
+
+--------------------------------
+SECTION 2 — HEARTBEAT DIRECTION
+--------------------------------
+
+Evaluate the previous 7 days of behavioral activity only.
+
+Emotional language alone does not qualify as advancement.
+Declared intention without execution does not qualify as advancement.
+
+For each of the Five Heartbeats:
+
+• Clarity of Vision & Why
+• Small Steps + Consistency
+• Mindset over Method
+• Feedback & Adaptation
+• Courageous Action
+
+Assign exactly one direction:
+
+↑ Advancement
+→ Stagnation
+↓ Regression
+
+Display format:
+
+Clarity of Vision & Why — ↑
+Small Steps + Consistency — →
+Mindset over Method — ↑
+Feedback & Adaptation — →
+Courageous Action — ↓
+
+No explanation under arrows.
+
+--------------------------------
+HEARTBEAT EVALUATION CRITERIA
+--------------------------------
+
+Clarity of Vision & Why
+
+↑ Advancement:
+• Goal defined or refined
+• Purpose recommitted
+• Objective clarified
+
+→ Stagnation:
+• No refinement, no confusion introduced
+
+↓ Regression:
+• Goal abandoned
+• Contradictory direction
+• Loss of clarity
+
+--------------------------------
+
+Small Steps + Consistency
+
+↑ Advancement:
+• Repeated execution across multiple days
+• Follow-through on commitments
+
+→ Stagnation:
+• Minimal or inconsistent action without full drop-off
+
+↓ Regression:
+• Repeated missed commitments
+• Execution collapse
+
+--------------------------------
+
+Mindset over Method
+
+↑ Advancement:
+• Action taken despite discomfort
+• Reduced excuse behavior
+• Continued execution without perfect conditions
+
+→ Stagnation:
+• Neutral behavioral pattern
+
+↓ Regression:
+• Excuse patterns dominate
+• Avoidance disguised as logic
+
+--------------------------------
+
+Feedback & Adaptation
+
+↑ Advancement:
+• Strategy adjusted after friction
+• Intelligent modification applied
+
+→ Stagnation:
+• No adaptation required or applied
+
+↓ Regression:
+• Repeated friction with no adjustment
+
+--------------------------------
+
+Courageous Action
+
+↑ Advancement:
+• Action taken on previously avoided task
+• Initiated difficult step
+
+→ Stagnation:
+• No avoidance addressed
+
+↓ Regression:
+• Backed away from declared action
+• Avoided necessary step
+
+--------------------------------
+SECTION 3 — COLLECTIVE ANALYSIS
+--------------------------------
+
+Generate one short integrated written analysis.
+
+Rules:
+
+• Maximum 4 sentences
+• No step assignment
+• No plan creation
+• No motivational padding
+• No water logic
+• No gamification language
+
+The analysis must synthesize:
+
+• Targeted Goal Progress
+• Overall heartbeat pattern
+• Alignment or misalignment between outcome and development
+
+Tone:
+
+Clear
+Direct
+Grounded
+Objective
+Non-therapeutic
+
+--------------------------------
+POST-COMPLETION BEHAVIOR
+--------------------------------
+
+• Upon acknowledgment, archive the review.
+• Add it to Review History.
+• Display a compact summary snapshot on Home Screen:
+
+  Last Weekly Review
+  Goal Net: [value]
+  Heartbeats: ↑ → ↑ → ↓
+
+• Begin next 7-day cycle immediately.
+
+End Weekly Follow-Up System.

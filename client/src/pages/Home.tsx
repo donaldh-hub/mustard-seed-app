@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame } from "lucide-react";
+import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame, ClipboardCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -69,6 +69,13 @@ export default function Home() {
     enabled: !!userId,
   });
 
+  const { data: weeklyStatus } = useQuery({
+    queryKey: ["weekly-review-status", userId],
+    queryFn: () => api.getWeeklyReviewStatus(userId!),
+    enabled: !!userId,
+    refetchInterval: 60000,
+  });
+
   useEffect(() => {
     if (!assessmentLoading && !assessment && userId) {
       setLocation("/assessment");
@@ -113,6 +120,61 @@ export default function Home() {
         </header>
 
         <div className="px-5 space-y-4">
+          {weeklyStatus?.pending && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm cursor-pointer"
+              onClick={() => setLocation("/weekly-review")}
+              data-testid="banner-weekly-review"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                  <ClipboardCheck className="w-4.5 h-4.5 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-900">Your Weekly Review is Ready</p>
+                  <p className="text-xs text-amber-700/70 mt-0.5">Tap to view your progress report</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {!weeklyStatus?.pending && weeklyStatus?.lastSnapshot && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.02 }}
+              className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+              data-testid="card-last-review-snapshot"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <ClipboardCheck className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Last Weekly Review</h2>
+                <span className="text-xs text-muted-foreground ml-auto">{weeklyStatus.lastSnapshot.date}</span>
+              </div>
+              <div className="flex items-center gap-4">
+                {weeklyStatus.lastSnapshot.goalNet != null && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Goal Net</p>
+                    <p className="text-sm font-mono font-semibold" data-testid="text-snapshot-goal-net">
+                      {weeklyStatus.lastSnapshot.goalNet > 0 ? "+" : ""}{weeklyStatus.lastSnapshot.goalNet}
+                      {weeklyStatus.lastSnapshot.metricType ? ` ${weeklyStatus.lastSnapshot.metricType}` : ""}
+                    </p>
+                  </div>
+                )}
+                {weeklyStatus.lastSnapshot.heartbeatSummary && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Heartbeats</p>
+                    <p className="text-sm font-mono font-semibold tracking-wider" data-testid="text-snapshot-heartbeats">
+                      {weeklyStatus.lastSnapshot.heartbeatSummary}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

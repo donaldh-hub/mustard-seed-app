@@ -47,4 +47,10 @@ export const api = {
     fetchJson<any>(`/goals/${goalId}/log`, { method: "POST", body: JSON.stringify(data) }),
 
   getGardenSummary: (userId: string) => fetchJson<any>(`/users/${userId}/garden-summary`),
+
+  getWeeklyReviewStatus: (userId: string) => fetchJson<any>(`/users/${userId}/weekly-review/status`),
+  generateWeeklyReview: (userId: string) => fetchJson<any>(`/users/${userId}/weekly-review/generate`, { method: "POST" }),
+  completeWeeklyReview: (userId: string, reviewId: string) =>
+    fetchJson<any>(`/users/${userId}/weekly-review/${reviewId}/complete`, { method: "POST" }),
+  getWeeklyReviewHistory: (userId: string) => fetchJson<any[]>(`/users/${userId}/weekly-review/history`),
 };
