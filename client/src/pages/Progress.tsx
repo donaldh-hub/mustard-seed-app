@@ -9,14 +9,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
-
-const SEED_ICON: Record<string, string> = {
-  seed: "🌰",
-  germinating: "🌱",
-  sprout: "🌿",
-  growing: "🪴",
-  rooted: "🌳",
-};
+import { WaterCup } from "@/components/WaterCup";
+import { SeedGrowth } from "@/components/SeedGrowth";
 
 type FormMode = null | "targeted" | "untargeted";
 
@@ -132,30 +126,28 @@ export default function ProgressPage() {
       <div className="flex-1 overflow-y-auto pb-24">
         <header className="p-5 pb-3">
           <h1 className="text-xl font-serif font-bold text-foreground" data-testid="text-page-title">Growth Dashboard</h1>
-          <p className="text-xs text-muted-foreground">Two trees. Two paths. One focused life.</p>
+          <p className="text-xs text-muted-foreground">Water is earned through action. Not intention.</p>
         </header>
 
         <div className="px-4 space-y-4">
-          <div className="flex flex-col gap-3">
-            <TreeCard
-              label="TARGETED TREE"
-              type="targeted"
-              data={targeted}
-              onAdd={() => setFormMode("targeted")}
-              onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
-              onArchive={(id) => archiveMut.mutate(id)}
-              onComplete={(id) => { setCompleteGoalId(id); }}
-            />
-            <TreeCard
-              label="IDENTITY TREE"
-              type="untargeted"
-              data={untargeted}
-              onAdd={() => setFormMode("untargeted")}
-              onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
-              onArchive={(id) => archiveMut.mutate(id)}
-              onComplete={(id) => { setCompleteGoalId(id); setCompletionType("integrated"); }}
-            />
-          </div>
+          <GoalCard
+            label="TARGETED GOAL"
+            type="targeted"
+            data={targeted}
+            onAdd={() => setFormMode("targeted")}
+            onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
+            onArchive={(id) => archiveMut.mutate(id)}
+            onComplete={(id) => { setCompleteGoalId(id); }}
+          />
+          <GoalCard
+            label="IDENTITY GOAL"
+            type="untargeted"
+            data={untargeted}
+            onAdd={() => setFormMode("untargeted")}
+            onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
+            onArchive={(id) => archiveMut.mutate(id)}
+            onComplete={(id) => { setCompleteGoalId(id); setCompletionType("integrated"); }}
+          />
 
           {targeted && (
             <motion.div
@@ -354,7 +346,7 @@ export default function ProgressPage() {
   );
 }
 
-function TreeCard({
+function GoalCard({
   label,
   type,
   data,
@@ -371,7 +363,6 @@ function TreeCard({
   onArchive: (id: string) => void;
   onComplete: (id: string) => void;
 }) {
-  const icon = data ? SEED_ICON[data.seedStageIconKey] || "🌰" : "🌰";
   const isTargeted = type === "targeted";
 
   if (!data) {
@@ -402,51 +393,58 @@ function TreeCard({
       className="bg-white/80 backdrop-blur-sm rounded-2xl border border-border/50 p-4 shadow-sm"
       data-testid={`card-tree-${type}`}
     >
-      <div className="flex items-start gap-4">
-        <div className="flex flex-col items-center shrink-0">
-          <motion.div
-            key={data.seedStageIconKey}
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", bounce: 0.4 }}
-            className="text-5xl"
-            data-testid={`text-tree-icon-${type}`}
-          >
-            {icon}
-          </motion.div>
-          <p className="text-[10px] text-muted-foreground mt-1">{data.seedStageName}</p>
+      <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">{label}</p>
+      <p className="text-sm font-medium text-foreground mb-4" data-testid={`text-goal-title-${type}`}>
+        {data.title}
+      </p>
+
+      <div className="flex items-start justify-center gap-6 mb-4">
+        <SeedGrowth seedStage={data.seedStage ?? 0} cupsFilled={data.cupsFilled ?? 0} />
+        <WaterCup
+          fillPercent={data.fillPercent ?? 0}
+          cupsFilled={data.cupsFilled ?? 0}
+          revealedStatements={data.revealedStatements ?? {}}
+        />
+      </div>
+
+      <div className="bg-muted/30 rounded-xl p-3 space-y-1.5">
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-muted-foreground flex items-center gap-1">
+            <Droplets className="w-3 h-3 text-blue-500" />
+            Water Events
+          </span>
+          <span className="font-mono font-medium" data-testid={`text-water-events-${type}`}>
+            {data.waterEvents ?? 0} / 50
+          </span>
         </div>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</p>
-          <p className="text-sm font-medium text-foreground truncate mt-0.5" data-testid={`text-goal-title-${type}`}>
-            {data.title}
-          </p>
-
-          <div className="mt-2 space-y-1">
-            <div className="flex items-center gap-1 text-[11px]">
-              <Droplets className="w-3 h-3 text-blue-500" />
-              <span className="text-muted-foreground">Water</span>
-              <span className="ml-auto font-medium" data-testid={`text-water-${type}`}>{data.waterLevel}%</span>
-            </div>
-            <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${data.waterLevel}%` }} />
-            </div>
-          </div>
-
-          {isTargeted ? (
-            <div className="mt-1 text-[11px] text-muted-foreground flex justify-between">
-              <span data-testid="text-targeted-pct-card">{Math.round(data.percentComplete)}% done</span>
-              {data.daysLeft !== null && <span>{data.daysLeft}d left</span>}
-            </div>
-          ) : (
-            <div className="mt-1 text-[11px] text-muted-foreground flex justify-between">
-              <span data-testid="text-streak-card">{data.streakCount}d streak</span>
-              <span>{data.momentumScore}% momentum</span>
-            </div>
-          )}
+        <div className="h-1.5 bg-blue-100 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${data.fillPercent ?? 0}%` }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground">
+          <span>{data.seedStageName}</span>
+          <span>{data.cupsFilled ?? 0} cups filled</span>
         </div>
       </div>
+
+      {isTargeted && data.daysLeft !== null && (
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-2">
+          <Clock className="w-3 h-3" />
+          <span data-testid="text-targeted-countdown-card">{data.daysLeft}d remaining</span>
+          <span className="ml-auto" data-testid="text-targeted-pct-card">{Math.round(data.percentComplete)}% done</span>
+        </div>
+      )}
+
+      {!isTargeted && (
+        <div className="flex justify-between text-[11px] text-muted-foreground mt-2">
+          <span data-testid="text-streak-card">{data.streakCount}d streak</span>
+          <span>{data.momentumScore}% momentum</span>
+        </div>
+      )}
 
       <div className="flex gap-1 mt-3 border-t border-border/30 pt-3">
         <Button size="sm" variant="ghost" className="flex-1 text-xs h-8" onClick={() => onLog(data.id)} data-testid={`button-log-${type}`}>
@@ -588,9 +586,9 @@ function FormOverlay({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Daily/Weekly Micro-Habit</label>
+              <label className="text-xs font-medium text-muted-foreground">Daily Micro-Habit</label>
               <Input
-                placeholder="e.g. 10 minutes of reading daily"
+                placeholder="e.g. 10 minutes of reading"
                 value={habit}
                 onChange={(e) => setHabit(e.target.value)}
                 data-testid="input-goal-habit"
@@ -605,7 +603,7 @@ function FormOverlay({
           onClick={onSubmit}
           data-testid="button-create-goal"
         >
-          {loading ? "Planting..." : "Plant Seed"}
+          {loading ? "Planting..." : `Plant ${isTargeted ? "Goal" : "Identity"}`}
         </Button>
       </motion.div>
     </motion.div>

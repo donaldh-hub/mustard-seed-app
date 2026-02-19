@@ -58,6 +58,9 @@ export const goals = pgTable("goals", {
   momentumScore: real("momentum_score").notNull().default(0),
   consistencyRate: real("consistency_rate").notNull().default(0),
   treeGrowthScore: real("tree_growth_score").notNull().default(0),
+  waterEvents: integer("water_events").notNull().default(0),
+  cupsFilled: integer("cups_filled").notNull().default(0),
+  seedStage: integer("seed_stage").notNull().default(0),
   isActive: integer("is_active").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow(),
 });

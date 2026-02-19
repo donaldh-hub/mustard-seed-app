@@ -83,6 +83,16 @@ Preferred communication style: Simple, everyday language.
 - **Calendar**: Generates an entry in the entries table on review generation with heartbeat summary
 - **Schema**: `weekly_reviews` table stores cycle dates, goal snapshots, heartbeat directions, and analysis text
 
+### Water & Growth Engine
+- **Engine**: `server/waterEngine.ts` — AI-powered water evaluation using OpenAI (gpt-4o) to determine if user message represents real execution vs. talk/intention
+- **Schema**: `goals` table has `waterEvents` (0-49), `cupsFilled` (cumulative), `seedStage` (0-6)
+- **Water rules**: Only awarded for measurable action aligned with active goal. 1 water per base action, 2 for photo+context proof. NOT awarded for conversation, venting, planning, or emotions.
+- **Cup mechanics**: 50 water events = 1 full cup. Identity statements reveal at 25% ("I STARTED"), 50% ("I CAN'T QUIT NOW"), 75% ("I'M FINISHING THIS"), 100% ("I FOLLOW THROUGH"). Cup pours onto seed at 100%, water resets.
+- **Seed stages**: 0=Dormant, 1=Germination (cup 1), 2=Primary Root (cup 2), 3=Root Expansion (cup 3), 4=Soil Pressure (cup 4), 5=Sprout Emergence (cup 5), 6=Early Plant (cup 8). Underground emphasis model.
+- **Per-goal**: Each goal has independent water container, cups, and seed. Water does NOT transfer between goals.
+- **Goal selection**: When both goals active, AI evaluates message against each goal and awards water to the best match.
+- **UI**: WaterCup component (fill animation, markers, identity statements) + SeedGrowth component (underground root visualization) on Growth Dashboard
+
 ### Third-Party NPM Libraries (Notable)
 - `express` v5 — HTTP server
 - `drizzle-orm` + `drizzle-kit` — Database ORM and migrations

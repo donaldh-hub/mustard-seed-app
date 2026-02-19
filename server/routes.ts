@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
+import { evaluateWater, computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
 
@@ -740,17 +741,62 @@ export async function registerRoutes(
 
       const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
 
+      let waterAwarded = false;
+      let waterGoalId: string | null = null;
+      let growthResult: any = null;
+
+      if (shouldWater && (targetedGoal || untargetedGoal)) {
+        const goalsToEval = [targetedGoal, untargetedGoal].filter(Boolean) as typeof activeGoals;
+        let bestGoal: typeof activeGoals[0] | null = null;
+        let bestWaterResult: { awarded: boolean; amount: number; reason: string } | null = null;
+
+        for (const g of goalsToEval) {
+          const result = await evaluateWater(rawText, g.title, g.goalType);
+          if (result.awarded && (!bestWaterResult || result.amount > bestWaterResult.amount)) {
+            bestGoal = g;
+            bestWaterResult = result;
+          }
+        }
+
+        if (bestGoal && bestWaterResult && bestWaterResult.awarded) {
+          waterAwarded = true;
+          waterGoalId = bestGoal.id;
+          growthResult = computeGrowthUpdate(
+            bestGoal.waterEvents,
+            bestGoal.cupsFilled,
+            bestGoal.seedStage,
+            bestWaterResult.amount
+          );
+
+          await storage.updateGoal(bestGoal.id, {
+            waterEvents: growthResult.waterEvents,
+            cupsFilled: growthResult.cupsFilled,
+            seedStage: growthResult.seedStage,
+          });
+        }
+      }
+
       if (shouldWater) {
-        const newLevel = Math.min(waterLevel + 20, 100);
-        const newStage = newLevel >= 100 && treeStage < 5 ? treeStage + 1 : treeStage;
         await storage.updateUser(userId, {
-          waterLevel: newLevel >= 100 ? 0 : newLevel,
-          treeStage: newStage,
           streak: streak + 1,
         });
       }
 
-      return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+      return res.json({
+        userMessage: userMsg,
+        jaeMessage: jaeMsg,
+        water: waterAwarded ? {
+          awarded: true,
+          goalId: waterGoalId,
+          waterEvents: growthResult?.waterEvents,
+          cupsFilled: growthResult?.cupsFilled,
+          seedStage: growthResult?.seedStage,
+          cupJustFilled: growthResult?.cupJustFilled,
+          stageAdvanced: growthResult?.stageAdvanced,
+          fillPercent: Math.round((growthResult?.waterEvents / 50) * 100),
+          preResetFillPercent: growthResult?.preResetFillPercent,
+        } : null,
+      });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });
@@ -1092,28 +1138,25 @@ export async function registerRoutes(
       const result: any = { targeted: null, untargeted: null };
 
       for (const goal of activeGoals) {
-        const goalEntries = await storage.getEntriesByGoalId(goal.id);
-        const distinctDates = new Set(goalEntries.map((e) => e.date));
+        const waterEvents = goal.waterEvents ?? 0;
+        const cupsFilled = goal.cupsFilled ?? 0;
+        const seedStage = goal.seedStage ?? 0;
+        const fillPercent = Math.round((waterEvents / 50) * 100);
+        const stageInfo = SEED_STAGE_INFO[seedStage] || SEED_STAGE_INFO[0];
+
+        const revealedStatements: Record<number, string> = {};
+        for (const [threshold, statement] of Object.entries(CUP_IDENTITY_STATEMENTS)) {
+          if (fillPercent >= Number(threshold)) {
+            revealedStatements[Number(threshold)] = statement;
+          }
+        }
+
+        const SEED_ICONS: Record<number, string> = {
+          0: "\u{1F330}", 1: "\u{1F330}", 2: "\u{1FAB4}", 3: "\u{1FAB4}",
+          4: "\u{1F331}", 5: "\u{1F331}", 6: "\u{1FAB4}",
+        };
+
         const now = new Date();
-        const sevenDaysAgo = new Date(now);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-        const windowStart = sevenDaysAgo.toISOString().split("T")[0];
-        const today = todayStr();
-
-        let weeklyActive = 0;
-        distinctDates.forEach((d) => {
-          if (d >= windowStart && d <= today) weeklyActive++;
-        });
-        const waterLevel = Math.round(Math.min((weeklyActive / 7) * 100, 100));
-
-        const lifetimeDays = distinctDates.size;
-        let seedStageName: string;
-        let seedStageIconKey: string;
-        if (lifetimeDays <= 7) { seedStageName = "Seed"; seedStageIconKey = "seed"; }
-        else if (lifetimeDays <= 21) { seedStageName = "Germinating"; seedStageIconKey = "germinating"; }
-        else if (lifetimeDays <= 45) { seedStageName = "Sprout"; seedStageIconKey = "sprout"; }
-        else if (lifetimeDays <= 90) { seedStageName = "Growing"; seedStageIconKey = "growing"; }
-        else { seedStageName = "Rooted"; seedStageIconKey = "rooted"; }
 
         if (goal.goalType === "targeted") {
           const daysLeft = goal.deadline
@@ -1129,12 +1172,14 @@ export async function registerRoutes(
             baselineMetric: goal.baselineMetric,
             targetMetric: goal.targetMetric,
             percentComplete: goal.percentComplete,
-            treeGrowthScore: goal.treeGrowthScore,
-            waterLevel,
-            seedStageName,
-            seedStageIconKey,
-            lifetimeDays,
-            weeklyActive,
+            waterEvents,
+            cupsFilled,
+            seedStage,
+            fillPercent,
+            seedStageName: stageInfo.name,
+            seedStageDescription: stageInfo.description,
+            seedIcon: SEED_ICONS[seedStage] || "\u{1F330}",
+            revealedStatements,
           };
         } else {
           result.untargeted = {
@@ -1146,12 +1191,14 @@ export async function registerRoutes(
             streakCount: goal.streakCount,
             momentumScore: goal.momentumScore,
             consistencyRate: goal.consistencyRate,
-            treeGrowthScore: goal.treeGrowthScore,
-            waterLevel,
-            seedStageName,
-            seedStageIconKey,
-            lifetimeDays,
-            weeklyActive,
+            waterEvents,
+            cupsFilled,
+            seedStage,
+            fillPercent,
+            seedStageName: stageInfo.name,
+            seedStageDescription: stageInfo.description,
+            seedIcon: SEED_ICONS[seedStage] || "\u{1F330}",
+            revealedStatements,
           };
         }
       }
