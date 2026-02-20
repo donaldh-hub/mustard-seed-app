@@ -1,0 +1,57 @@
+TASK: Fix client-side image compression failure (“Failed to load image for compression”) on mobile devices.
+
+PROBLEM:
+Some images (especially camera photos) fail before upload during compression. The error indicates the compression step cannot load or decode the image.
+
+GOALS:
+1) Compression must never crash the UI.
+2) If compression fails, fallback to safe original upload (if under server limit).
+3) Support HEIC/HEIF if possible; if not supported, provide clear user message.
+4) Ensure image is fully loaded before attempting canvas draw/compression.
+5) Prevent premature URL.revokeObjectURL usage.
+
+IMPLEMENTATION:
+
+A) Safe Image Loading:
+- When creating Image() object, attach:
+  img.onload = resolve
+  img.onerror = reject
+- Only run compression AFTER onload fires.
+- Await image.decode() where supported.
+
+B) HEIC Handling:
+- Detect file.type includes "heic" or "heif".
+- If browser cannot decode, show:
+  “This image format isn’t supported. Please select a JPEG or PNG.”
+- Do NOT attempt canvas draw if decode fails.
+
+C) Compression Wrapper:
+Wrap entire compression function in try/catch.
+If compression throws:
+  - Log error
+  - If file.size < MAX_UPLOAD_SIZE (ex: 8MB), fallback to original file
+  - Otherwise show:
+    “Image too large to process. Please select a smaller photo.”
+
+D) Canvas Stability:
+- Set canvas width/height AFTER image loads.
+- Guard against zero-dimension images.
+- Ensure drawImage only runs if width/height > 0.
+
+E) Do NOT revoke object URL until:
+  - compression completes
+  - or fallback decision made
+
+F) UI:
+- If compression fails but fallback succeeds, do NOT show error.
+- Only show error if neither compression nor fallback possible.
+
+ACCEPTANCE TESTS:
+1) Upload gym mirror photo (high resolution) → compress or fallback and upload.
+2) Upload screenshot → compress and upload.
+3) Upload HEIC (if unsupported) → clear error message.
+4) No more “Failed to load image for compression” crashes.
+5) No frozen UI state.
+
+Implement in the exact client file handling image uploads.
+Return which file was modified and summary of changes.
