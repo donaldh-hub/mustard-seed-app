@@ -119,9 +119,10 @@ export async function registerRoutes(
 
       if (/^(targeted|identity)$/i.test(textLower.trim())) {
         const recentMessages = await storage.getMessages(userId);
-        const lastJae = recentMessages.filter(m => m.sender === "jae").sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())[0];
-        if (lastJae) {
-          const pendingMatch = lastJae.text.match(/Is "(.+?)" a \*\*targeted goal\*\*/);
+        const recentJae = recentMessages.filter(m => m.sender === "jae").sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()).slice(0, 5);
+        const clarificationMsg = recentJae.find(m => m.text.includes('a **targeted goal**'));
+        if (clarificationMsg) {
+          const pendingMatch = clarificationMsg.text.match(/Is "(.+?)" a \*\*targeted goal\*\*/);
           if (pendingMatch) {
             const pendingGoalText = pendingMatch[1];
             const chosenType = textLower.trim() === "targeted" ? "targeted" as const : "untargeted" as const;
