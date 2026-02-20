@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X, Crown } from "lucide-react";
@@ -8,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
 import { WaterCup } from "@/components/WaterCup";
 import { SeedGrowth } from "@/components/SeedGrowth";
 import { UpgradePrompt } from "@/components/UpgradePrompt";
@@ -34,6 +34,16 @@ export default function ProgressPage() {
   const [formTarget, setFormTarget] = useState("");
   const [formHabit, setFormHabit] = useState("");
   const [formFocus, setFormFocus] = useState("");
+
+  const isAnyModalOpen = !!formMode || !!logGoalId || !!completeGoalId;
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isAnyModalOpen]);
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -241,6 +251,7 @@ export default function ProgressPage() {
         </div>
       </div>
 
+      {createPortal(
       <AnimatePresence>
         {formMode && (
           <FormOverlay
@@ -271,7 +282,8 @@ export default function ProgressPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center"
+            className="fixed inset-0 z-[9999] bg-black/40 flex items-end justify-center"
+            style={{ touchAction: "none" }}
             onClick={() => setLogGoalId(null)}
           >
             <motion.div
@@ -280,6 +292,7 @@ export default function ProgressPage() {
               exit={{ y: 200 }}
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-md bg-white rounded-t-2xl p-5 space-y-3"
+              style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))" }}
             >
               <div className="flex justify-between items-center">
                 <h3 className="font-semibold text-sm">Log Progress</h3>
@@ -323,7 +336,8 @@ export default function ProgressPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-6"
+            className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-6"
+            style={{ touchAction: "none" }}
             onClick={() => setCompleteGoalId(null)}
           >
             <motion.div
@@ -365,7 +379,9 @@ export default function ProgressPage() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+      )}
 
       <UpgradePrompt
         feature="dual_goals"
@@ -525,7 +541,8 @@ function FormOverlay({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center"
+      className="fixed inset-0 z-[9999] bg-black/40 flex items-end justify-center"
+      style={{ touchAction: "none" }}
       onClick={onClose}
     >
       <motion.div
@@ -533,7 +550,8 @@ function FormOverlay({
         animate={{ y: 0 }}
         exit={{ y: 300 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-white rounded-t-2xl p-5 space-y-3 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md bg-white rounded-t-2xl p-5 space-y-3 max-h-[90vh] overflow-y-auto overscroll-contain"
+        style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))" }}
       >
         <div className="flex justify-between items-center">
           <h3 className="font-semibold">
@@ -627,14 +645,16 @@ function FormOverlay({
           </>
         )}
 
-        <Button
-          className="w-full"
-          disabled={!title.trim() || loading}
-          onClick={onSubmit}
-          data-testid="button-create-goal"
-        >
-          {loading ? "Planting..." : `Plant ${isTargeted ? "Goal" : "Identity"}`}
-        </Button>
+        <div className="pb-4">
+          <Button
+            className="w-full"
+            disabled={!title.trim() || loading}
+            onClick={onSubmit}
+            data-testid="button-create-goal"
+          >
+            {loading ? "Planting..." : `Plant ${isTargeted ? "Goal" : "Identity"}`}
+          </Button>
+        </div>
       </motion.div>
     </motion.div>
   );
