@@ -1811,7 +1811,7 @@ export async function registerRoutes(
     const startTime = Date.now();
     try {
       const userId = req.params.userId;
-      const { photoUrl, caption, localDate } = req.body;
+      const { photoUrl, caption, localDate, uploadAttemptId } = req.body;
 
       if (!photoUrl) return res.status(400).json({ ok: false, message: "photoUrl is required", code: "MISSING_PHOTO" });
 
@@ -1820,7 +1820,30 @@ export async function registerRoutes(
 
       const dateKey = localDate || todayStr();
 
-      console.log(`[PHOTO] Start: userId=${userId} photoUrl=${photoUrl.substring(0, 60)} caption="${(caption || "").substring(0, 40)}"`);
+      console.log(`[PHOTO] Start: userId=${userId} photoUrl=${photoUrl.substring(0, 60)} caption="${(caption || "").substring(0, 40)}" attemptId=${uploadAttemptId || "none"}`);
+
+      const duplicate = await storage.getPhotoMemoryByUrl(userId, photoUrl);
+      if (duplicate) {
+        console.log(`[PHOTO] IDEMPOTENT HIT: photoUrl already processed (memoryId=${duplicate.id}, messageId=${duplicate.messageId})`);
+        const existingPhotoMsg = await storage.getMessageById(duplicate.messageId);
+        let existingJaeMsg = null;
+        if (existingPhotoMsg) {
+          const allMsgs = await storage.getMessages(userId);
+          const photoIdx = allMsgs.findIndex((m) => m.id === existingPhotoMsg.id);
+          if (photoIdx >= 0 && photoIdx + 1 < allMsgs.length) {
+            const nextMsg = allMsgs[photoIdx + 1];
+            if (nextMsg.sender === "jae") existingJaeMsg = nextMsg;
+          }
+        }
+        return res.json({
+          ok: true,
+          idempotent: true,
+          photoMessage: existingPhotoMsg || null,
+          jaeResponse: existingJaeMsg || null,
+          analysis: duplicate.analysisJson || null,
+          photoMemory: duplicate,
+        });
+      }
 
       const photoMessage = await storage.createMessage({
         userId,

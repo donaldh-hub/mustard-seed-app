@@ -45,6 +45,8 @@ export interface IStorage {
   updatePhotoMemory(id: string, data: Partial<InsertPhotoMemory>): Promise<PhotoMemory | undefined>;
   getPhotoMemories(userId: string): Promise<PhotoMemory[]>;
   getPhotoMemoriesByDate(userId: string, dateKey: string): Promise<PhotoMemory[]>;
+  getPhotoMemoryByUrl(userId: string, photoUrl: string): Promise<PhotoMemory | undefined>;
+  getMessageById(id: string): Promise<Message | undefined>;
 }
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -203,6 +205,18 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(photoMemories)
       .where(and(eq(photoMemories.userId, userId), eq(photoMemories.dateKey, dateKey)))
       .orderBy(desc(photoMemories.createdAt));
+  }
+
+  async getPhotoMemoryByUrl(userId: string, photoUrl: string): Promise<PhotoMemory | undefined> {
+    const [pm] = await db.select().from(photoMemories)
+      .where(and(eq(photoMemories.userId, userId), eq(photoMemories.photoUrl, photoUrl)))
+      .limit(1);
+    return pm;
+  }
+
+  async getMessageById(id: string): Promise<Message | undefined> {
+    const [msg] = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
+    return msg;
   }
 }
 

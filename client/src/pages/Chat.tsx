@@ -7,18 +7,23 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useUpload, type UploadStatus } from "@/hooks/use-upload";
+import { useUpload, type UploadPhase } from "@/hooks/use-upload";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
 
-const STATUS_LABELS: Record<UploadStatus, string> = {
-  idle: "",
-  compressing: "Preparing image...",
-  uploading: "Uploading...",
-  analyzing: "Analyzing...",
-  success: "Done!",
-  error: "",
+const PHASE_LABELS: Record<UploadPhase, string> = {
+  IDLE: "",
+  PREPARING: "Preparing image...",
+  PRESIGNING: "Connecting...",
+  UPLOADING_DIRECT: "Uploading...",
+  UPLOADING_PROXY: "Uploading...",
+  CONFIRMED_STORED: "Photo stored. Analyzing...",
+  ANALYZING: "Jae is reviewing your photo...",
+  MEMORY_SAVING: "Saving to journal...",
+  COMPLETE_SUCCESS: "Done!",
+  FAILED: "",
+  CANCELED: "",
 };
 
 export default function Chat() {
@@ -32,7 +37,11 @@ export default function Chat() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
-  const { uploadFile, setAnalyzing, setSuccess, setFailed, status: uploadStatus, error: uploadError, compressInfo, cancel: cancelUpload, reset: resetUpload } = useUpload();
+  const {
+    uploadFile, setAnalyzing, setMemorySaving, setCompleteSuccess, fail,
+    phase, isBusy, error: uploadError, compressInfo,
+    cancel: cancelUpload, reset: resetUpload, attemptId
+  } = useUpload();
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -67,8 +76,10 @@ export default function Chat() {
 
   const photoMutation = useMutation({
     mutationFn: async ({ file, caption }: { file: File; caption: string }) => {
-      const objectPath = await uploadFile(file);
-      if (!objectPath) throw new Error("Upload failed");
+      const uploadResult = await uploadFile(file);
+      if (!uploadResult) throw new Error("Upload failed");
+
+      const { objectPath, attemptId: uploadAttemptId } = uploadResult;
 
       setAnalyzing();
 
@@ -79,11 +90,16 @@ export default function Chat() {
           photoUrl: objectPath,
           caption: caption || undefined,
           localDate,
+          uploadAttemptId,
         });
-        setSuccess();
+
+        setMemorySaving();
+        await new Promise((r) => setTimeout(r, 200));
+
+        setCompleteSuccess();
         return result;
       } catch (err: any) {
-        setFailed(err.message || "Analysis failed. Your photo was saved.", "ANALYSIS_FAILED", true);
+        fail(err.message || "Analysis failed. Your photo was saved.", "ANALYSIS_FAILED", true);
         throw err;
       }
     },
@@ -110,7 +126,7 @@ export default function Chat() {
 
   const handleSend = () => {
     if (photoPreview) {
-      if (photoMutation.isPending || uploadStatus !== "idle" && uploadStatus !== "error") return;
+      if (photoMutation.isPending || (phase !== "IDLE" && phase !== "FAILED" && phase !== "CANCELED")) return;
       photoMutation.mutate({ file: photoPreview.file, caption: input.trim() });
       return;
     }
@@ -156,14 +172,13 @@ export default function Chat() {
 
   if (!userId) return null;
 
-  const isBusy = uploadStatus === "compressing" || uploadStatus === "uploading" || uploadStatus === "analyzing";
-  const isPhotoProcessing = photoMutation.isPending || isBusy;
+  const isPhotoProcessing = isBusy || photoMutation.isPending;
   const isTextSending = sendMutation.isPending;
-  const photoFailed = (photoMutation.isError || uploadStatus === "error") && !isBusy;
+  const photoFailed = (phase === "FAILED" || photoMutation.isError) && !isBusy;
   const photoErrorMsg = uploadError?.message || photoMutation.error?.message || "Upload failed. Try again.";
   const canRetry = uploadError?.retryable !== false;
 
-  const activeStatusLabel = isBusy ? STATUS_LABELS[uploadStatus] : (photoMutation.isPending ? "Sending to Jae..." : "");
+  const activeStatusLabel = isBusy ? PHASE_LABELS[phase] : (photoMutation.isPending && phase === "IDLE" ? "Starting..." : "");
 
   return (
     <div className="h-full flex flex-col bg-background relative">
@@ -302,7 +317,7 @@ export default function Chat() {
                     <Loader2 className="w-5 h-5 text-white animate-spin" />
                   </div>
                 )}
-                {!isPhotoProcessing && !photoFailed && (
+                {!isPhotoProcessing && !photoFailed && phase !== "CANCELED" && (
                   <button
                     onClick={clearPreview}
                     className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
@@ -317,7 +332,7 @@ export default function Chat() {
                 {isPhotoProcessing && activeStatusLabel && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">{activeStatusLabel}</span>
-                    {compressInfo && (
+                    {compressInfo && phase === "PREPARING" && (
                       <span className="text-[10px] text-muted-foreground/60">
                         {(compressInfo.compressedSize / 1024).toFixed(0)}KB
                       </span>
@@ -333,20 +348,22 @@ export default function Chat() {
                   </div>
                 )}
 
-                {photoFailed && (
+                {(photoFailed || phase === "CANCELED") && (
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-xs text-red-600 font-medium" data-testid="text-upload-error">{photoErrorMsg}</span>
-                    {uploadError?.code && (
+                    <span className="text-xs text-red-600 font-medium" data-testid="text-upload-error">
+                      {phase === "CANCELED" ? "Upload cancelled." : photoErrorMsg}
+                    </span>
+                    {uploadError?.code && phase !== "CANCELED" && (
                       <span className="text-[10px] text-red-400 font-mono" data-testid="text-error-code">[{uploadError.code}]</span>
                     )}
-                    {uploadError?.details && (
+                    {uploadError?.details && phase !== "CANCELED" && (
                       <details className="text-[10px] text-muted-foreground">
                         <summary className="cursor-pointer hover:text-foreground">Details</summary>
                         <pre className="mt-1 whitespace-pre-wrap break-all bg-muted/50 p-1.5 rounded text-[9px] max-h-20 overflow-y-auto">{uploadError.details}</pre>
                       </details>
                     )}
                     <div className="flex gap-2">
-                      {canRetry && (
+                      {(canRetry || phase === "CANCELED") && (
                         <button
                           onClick={handleRetryPhoto}
                           className="text-xs text-primary flex items-center gap-1 hover:underline"

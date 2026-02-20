@@ -1,0 +1,139 @@
+You are repairing the Mustard Seed App photo upload pipeline.
+
+CURRENT OBSERVATIONS (FROM MOBILE SCREENSHOTS)
+- The UI sometimes shows “📷 Photo uploaded” and later fails.
+- Direct upload sometimes fails with: [GCS_PUT_FAILED] and “Failed to fetch”.
+- Fallback proxy sometimes fails with: [PROXY_UPLOAD_FAILED].
+- Sometimes upload succeeds, analysis runs, and water is awarded (+3).
+
+THIS IS NOT A UI REDESIGN TASK.
+THIS IS A RELIABILITY + STATE MACHINE CORRECTNESS TASK.
+
+GOAL
+Make photo uploads deterministic and truthful.
+
+NON-NEGOTIABLE RULES
+1) The app must NEVER display “Photo uploaded” until the file is CONFIRMED STORED (direct OR proxy).
+2) The app must NEVER run analysis or award water until storage is CONFIRMED.
+3) The fallback must be automatic, robust, and logged with clear reason codes.
+4) Final outcome must be exactly one of: SUCCESS, FAILED, or CANCELED — never ambiguous.
+5) No duplicate awards, no duplicate memory attachments, even across retries.
+
+REQUIRED: IMPLEMENT ONE AUTHORITATIVE UPLOAD STATE MACHINE
+Create a single, centralized upload flow with explicit states:
+
+IDLE
+PREPARING          (compression/resizing + metadata)
+PRESIGNING
+UPLOADING_DIRECT
+UPLOADING_PROXY
+CONFIRMED_STORED
+ANALYZING
+MEMORY_SAVING
+COMPLETE_SUCCESS
+FAILED
+CANCELED
+
+UI TRUTH RULES (LOCKED)
+- “📷 Photo uploaded” may ONLY render at CONFIRMED_STORED or later.
+- Before CONFIRMED_STORED: show “Uploading…” or equivalent.
+- If any failure occurs: show FAILED + Retry.
+- If user taps Cancel: transition to CANCELED, and NO further steps may continue in background.
+
+REQUIRED: FIX THE “FALSE SUCCESS” BUG
+Right now “Photo uploaded” is being triggered too early (image selected, preview rendered, presign returned, upload started).
+This is WRONG.
+
+Change logic so “uploaded” means ONLY:
+- Direct PUT returned 2xx AND you received a confirmed object key/url
+OR
+- Proxy upload returned 2xx AND you received a confirmed object key/url
+
+Anything else is still UPLOADING or FAILED.
+
+REQUIRED: HARDEN THE DIRECT → FALLBACK LOGIC
+Flow MUST be:
+
+1) Attempt direct GCS PUT once
+2) If direct PUT throws “Failed to fetch” OR any non-2xx → switch to proxy upload automatically
+3) If proxy fails → mark FAILED with PROXY_UPLOAD_FAILED
+
+IMPORTANT:
+- Do NOT attempt analysis if direct AND proxy did not confirm storage.
+- Do NOT show “Photo uploaded” until confirmed storage.
+
+REQUIRED: ADD IDEMPOTENCY (STOP DUPLICATES)
+Generate an uploadAttemptId for EACH image selection.
+Pass uploadAttemptId through:
+- presign
+- direct upload OR proxy upload
+- analysis
+- memory save
+- water award
+
+Ensure:
+- retries do NOT create duplicate memory photo entries
+- retries do NOT award water twice
+- any completed attempt cannot be “completed” again
+
+REQUIRED: PROXY UPLOAD MUST WORK FOR MOBILE LARGE FILES
+Proxy endpoint must:
+- accept multipart form data reliably
+- explicitly handle large images (5–10MB)
+- stream upload server-side to storage
+- return { objectKey, url (if used), contentType, size, uploadAttemptId }
+
+If proxy fails, return a clear error payload and log:
+- request id
+- uploadAttemptId
+- file name/type/size
+- rejection reason (limit, parse error, storage error, etc.)
+
+REQUIRED: SEPARATE ERROR CODES (NO MISLABELING)
+Do NOT collapse errors into “upload failed.”
+
+Use distinct reason codes:
+PRESIGN_FAILED
+DIRECT_UPLOAD_FAILED (includes GCS_PUT_FAILED)
+PROXY_UPLOAD_FAILED
+ANALYSIS_FAILED
+MEMORY_SAVE_FAILED
+CANCELED_BY_USER
+
+Ensure the UI shows the correct code.
+
+REQUIRED: WATER + MEMORY GATING (LOCK IT)
+Water can ONLY be awarded after ALL of these succeed:
+
+1) CONFIRMED_STORED
+2) ANALYZING completed successfully
+3) MEMORY_SAVING completed successfully (photo attached to correct date)
+
+If any step fails:
+- 0 water
+- no partial memory photo reference
+- state becomes FAILED with correct reason code
+
+REQUIRED: RETRY BEHAVIOR (CLEAN RESET)
+Retry must:
+- reset state cleanly back to PREPARING
+- request a NEW presigned URL (never reuse)
+- maintain uploadAttemptId rules to avoid duplicates
+- never award water twice
+- never attach the same photo twice
+
+DELIVERABLE
+After implementing, return:
+
+1) The final upload flow in 6–10 lines (direct → fallback → confirm → analyze → memory → reward)
+2) The exact list of files changed
+3) Confirmation that “Photo uploaded” only appears after CONFIRMED_STORED
+4) A test checklist with PASS/FAIL for:
+   - mobile gallery small image (~100–500KB)
+   - mobile gallery large image (~5–10MB)
+   - mobile camera capture
+   - airplane mode mid-upload → retry
+   - cancel during upload → no water, no memory, no analysis
+   - repeated retry → no duplicates
+
+END

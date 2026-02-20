@@ -118,15 +118,21 @@ export function registerObjectStorageRoutes(app: Express): void {
     proxyHitCount++;
     const hitNum = proxyHitCount;
     const startTime = Date.now();
+    const userAgent = (req.get("user-agent") || "unknown").substring(0, 80);
 
     try {
       const file = req.file;
       if (!file) {
-        console.log(`[PROXY #${hitNum}] No file in request`);
+        console.log(`[PROXY #${hitNum}] No file in request body. ua=${userAgent}`);
         return res.status(400).json({ ok: false, error: "No file uploaded", code: "NO_FILE" });
       }
 
-      console.log(`[PROXY #${hitNum}] Received: name=${file.originalname} size=${file.size} type=${file.mimetype}`);
+      console.log(`[PROXY #${hitNum}] Received: name=${file.originalname} size=${file.size} (${(file.size / 1024 / 1024).toFixed(2)}MB) type=${file.mimetype} ua=${userAgent}`);
+
+      if (file.size > 10 * 1024 * 1024) {
+        console.log(`[PROXY #${hitNum}] Rejected: file too large after multer (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+        return res.status(413).json({ ok: false, error: "File too large", code: "FILE_TOO_LARGE" });
+      }
 
       const privateDir = objectStorageService.getPrivateObjectDir();
       const objectId = randomUUID();
@@ -143,9 +149,7 @@ export function registerObjectStorageRoutes(app: Express): void {
         const stream = gcsFile.createWriteStream({
           resumable: false,
           contentType: file.mimetype,
-          metadata: {
-            contentType: file.mimetype,
-          },
+          metadata: { contentType: file.mimetype },
         });
         stream.on("error", (err) => reject(err));
         stream.on("finish", () => resolve());
@@ -154,13 +158,21 @@ export function registerObjectStorageRoutes(app: Express): void {
 
       const objectPath = `/objects/uploads/${objectId}`;
       const elapsed = Date.now() - startTime;
-      console.log(`[PROXY #${hitNum}] OK: objectPath=${objectPath} ${elapsed}ms`);
+      console.log(`[PROXY #${hitNum}] OK: objectPath=${objectPath} size=${file.size} ${elapsed}ms`);
 
-      res.json({ ok: true, objectPath });
+      res.json({
+        ok: true,
+        objectPath,
+        contentType: file.mimetype,
+        size: file.size,
+      });
     } catch (err: any) {
       const elapsed = Date.now() - startTime;
-      console.error(`[PROXY #${hitNum}] ERROR (${elapsed}ms):`, err?.message || err);
-      res.status(500).json({ ok: false, error: "Server upload failed", code: "PROXY_SERVER_ERROR" });
+      const fileName = req.file?.originalname || "unknown";
+      const fileSize = req.file?.size || 0;
+      const fileType = req.file?.mimetype || "unknown";
+      console.error(`[PROXY #${hitNum}] ERROR (${elapsed}ms): name=${fileName} size=${fileSize} type=${fileType} err=${err?.message || err}`);
+      res.status(500).json({ ok: false, error: "Server upload failed", code: "PROXY_UPLOAD_FAILED" });
     }
   });
 
