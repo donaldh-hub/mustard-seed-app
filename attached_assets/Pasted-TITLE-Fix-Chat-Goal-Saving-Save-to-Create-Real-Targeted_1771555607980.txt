@@ -1,0 +1,58 @@
+TITLE: Fix Chat Goal Saving (Save:) to Create Real Targeted/Identity Goals + Sync UI
+
+CONTEXT
+In /chat, users can type goal commands like:
+- "Save: lose 50 pnds in 6 months"
+Jae confirms it is stored, and the text appears in Memory entries, but no actual goal object is created. As a result:
+- Growth dashboard still shows "No targeted goal planted yet"
+- Asking "What's my goal?" returns "No active goals on file"
+This is a false confirmation problem.
+
+REQUIRED FIX (NO NEW FEATURES, WIRE EXISTING SYSTEMS)
+1) Implement intent routing in chat so that when messages match goal-save patterns, the app creates/updates real goals using the same existing goal creation logic used by the Growth modals.
+
+2) Supported chat patterns must include (case-insensitive):
+- "Save: <goal text>"
+- "Set goal: <goal text>"
+- "My goal is <goal text>"
+- "Plant goal: <goal text>"
+- "Plant identity: <identity goal text>"
+- "Set identity goal: <identity goal text>"
+
+3) Classification rules:
+A) If the text includes an explicit timeline or deadline (e.g., "in 6 months", "by July 18", "90 days") OR a numeric metric change (e.g., "lose 50 pounds", "drop to 250"):
+   -> Create/Update ACTIVE TARGETED GOAL
+B) If the user explicitly says "identity" OR phrase is identity-style ("become the kind of person who...", "I want to be consistent...", "I’m building the habit of..."):
+   -> Create/Update ACTIVE IDENTITY GOAL
+C) If ambiguous:
+   -> Ask ONE clarification question (targeted vs identity) and do not falsely confirm saving.
+
+4) After successful save:
+- Growth dashboard must immediately reflect the new Targeted Goal and/or Identity Goal
+- Profile must reflect Identity Goal under “Big Goal” (per product rule: Big Goal = Identity Goal)
+- Chat response must confirm specifics (what was saved, which type, and what to do next)
+
+5) Fix "What's my goal?" response:
+- It must pull from ACTIVE GOAL OBJECTS (targeted + identity), not from chat text logs.
+- If none exist, it can instruct to plant one.
+
+6) Safety:
+- Do NOT award water for goal saving alone (goal creation is not an action).
+- Do NOT break existing manual goal planting.
+- Keep existing database schema; use existing goal storage functions.
+
+ACCEPTANCE TESTS
+1) In /chat, type: "Save: lose 50 pounds in 6 months"
+   Expected:
+   - Targeted Goal is created
+   - Growth dashboard shows it
+   - Asking "What's my goal?" returns it
+2) In /chat, type: "Set identity goal: become consistent with workouts 4x/week"
+   Expected:
+   - Identity Goal is created
+   - Profile “Big Goal” shows it
+3) No false confirmations:
+   - If parsing fails, Jae asks a clarification instead of saying "stored."
+
+DELIVERABLE
+Wire chat goal saving to real goal creation and ensure UI reflects the saved goals across Chat, Growth, and Profile consistently.
