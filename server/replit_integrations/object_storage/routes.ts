@@ -42,23 +42,40 @@ export function registerObjectStorageRoutes(app: Express): void {
       if (!name) {
         return res.status(400).json({
           error: "Missing required field: name",
+          code: "MISSING_NAME",
         });
       }
 
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const MAX_FILE_SIZE = 10 * 1024 * 1024;
+      const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 
-      // Extract object path from the presigned URL for later reference
+      if (size && size > MAX_FILE_SIZE) {
+        return res.status(413).json({
+          error: `File too large (${(size / 1024 / 1024).toFixed(1)}MB). Maximum is ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          code: "FILE_TOO_LARGE",
+        });
+      }
+
+      if (contentType && !ALLOWED_TYPES.includes(contentType)) {
+        return res.status(400).json({
+          error: "Unsupported file type. Use JPEG, PNG, or WebP.",
+          code: "INVALID_TYPE",
+        });
+      }
+
+      console.log(`[UPLOAD] Presign requested: name=${name} size=${size || "unknown"} type=${contentType || "unknown"}`);
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
       const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
       res.json({
         uploadURL,
         objectPath,
-        // Echo back the metadata for client convenience
         metadata: { name, size, contentType },
       });
     } catch (error) {
       console.error("Error generating upload URL:", error);
-      res.status(500).json({ error: "Failed to generate upload URL" });
+      res.status(500).json({ error: "Failed to generate upload URL", code: "SERVER_ERROR" });
     }
   });
 

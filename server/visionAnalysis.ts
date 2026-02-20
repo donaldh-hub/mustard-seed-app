@@ -11,6 +11,7 @@ export interface VisionAnalysisResult {
   action_type: string;
   proof_level: number;
   water_award: number;
+  action_points?: number;
   water_reason: string;
   risk_flags: string[];
   tags: string[];
@@ -98,7 +99,11 @@ RESPONSE FORMAT (strict JSON only, no markdown fences):
       });
     }
 
-    const response = await openai.chat.completions.create({
+    console.log(`[VISION] Starting analysis for ${photoUrl.substring(0, 80)}...`);
+    const startTime = Date.now();
+
+    const ANALYSIS_TIMEOUT = 45000;
+    const analysisPromise = openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
@@ -107,6 +112,13 @@ RESPONSE FORMAT (strict JSON only, no markdown fences):
       max_tokens: 500,
       temperature: 0.2,
     });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Vision analysis timed out after 45s")), ANALYSIS_TIMEOUT)
+    );
+
+    const response = await Promise.race([analysisPromise, timeoutPromise]);
+    console.log(`[VISION] Analysis completed in ${Date.now() - startTime}ms`);
 
     const raw = response.choices[0]?.message?.content?.trim() || "";
     const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();

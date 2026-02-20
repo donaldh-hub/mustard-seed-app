@@ -1808,16 +1808,19 @@ export async function registerRoutes(
   // ─── Photo Upload + Vision Analysis ───
 
   app.post("/api/users/:userId/messages/photo", async (req, res) => {
+    const startTime = Date.now();
     try {
       const userId = req.params.userId;
       const { photoUrl, caption, localDate } = req.body;
 
-      if (!photoUrl) return res.status(400).json({ message: "photoUrl is required" });
+      if (!photoUrl) return res.status(400).json({ ok: false, message: "photoUrl is required", code: "MISSING_PHOTO" });
 
       const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user) return res.status(404).json({ ok: false, message: "User not found", code: "USER_NOT_FOUND" });
 
       const dateKey = localDate || todayStr();
+
+      console.log(`[PHOTO] Start: userId=${userId} photoUrl=${photoUrl.substring(0, 60)} caption="${(caption || "").substring(0, 40)}"`);
 
       const photoMessage = await storage.createMessage({
         userId,
@@ -1861,8 +1864,8 @@ export async function registerRoutes(
           untargetedGoal?.title || null,
           user.name || ""
         );
-      } catch (analysisErr) {
-        console.error("Vision analysis failed:", analysisErr);
+      } catch (analysisErr: any) {
+        console.error(`[PHOTO] Vision analysis failed after ${Date.now() - startTime}ms:`, analysisErr?.message || analysisErr);
         analysis = {
           labels: [],
           confidence: 0,
@@ -1949,15 +1952,18 @@ export async function registerRoutes(
         analysisJson: analysis as any,
       });
 
+      console.log(`[PHOTO] Complete: ${Date.now() - startTime}ms | AP=${photoAP} | water_award=${analysis.water_award}`);
+
       return res.json({
+        ok: true,
         photoMessage,
         jaeResponse,
         analysis,
         photoMemory,
       });
-    } catch (err) {
-      console.error("Photo upload error:", err);
-      return res.status(500).json({ message: "Photo upload failed" });
+    } catch (err: any) {
+      console.error(`[PHOTO] Error after ${Date.now() - startTime}ms:`, err?.message || err);
+      return res.status(500).json({ ok: false, message: "Photo upload failed. Please try again.", code: "SERVER_ERROR" });
     }
   });
 

@@ -7,10 +7,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useUpload } from "@/hooks/use-upload";
+import { useUpload, type UploadStatus } from "@/hooks/use-upload";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
+
+const STATUS_LABELS: Record<UploadStatus, string> = {
+  idle: "",
+  compressing: "Preparing image...",
+  uploading: "Uploading...",
+  analyzing: "Analyzing...",
+  success: "Done!",
+  error: "",
+};
 
 export default function Chat() {
   const userId = useStore((s) => s.userId);
@@ -23,7 +32,7 @@ export default function Chat() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
-  const { uploadFile, isUploading, status: uploadStatus, error: uploadError, cancel: cancelUpload, reset: resetUpload } = useUpload();
+  const { uploadFile, setAnalyzing, setSuccess, setFailed, status: uploadStatus, error: uploadError, compressInfo, cancel: cancelUpload, reset: resetUpload } = useUpload();
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -58,16 +67,25 @@ export default function Chat() {
 
   const photoMutation = useMutation({
     mutationFn: async ({ file, caption }: { file: File; caption: string }) => {
-      const uploadResult = await uploadFile(file);
-      if (!uploadResult) throw new Error("Upload failed");
+      const objectPath = await uploadFile(file);
+      if (!objectPath) throw new Error("Upload failed");
+
+      setAnalyzing();
 
       const localDate = new Date().toISOString().split("T")[0];
 
-      return api.sendPhoto(userId!, {
-        photoUrl: uploadResult.objectPath,
-        caption: caption || undefined,
-        localDate,
-      });
+      try {
+        const result = await api.sendPhoto(userId!, {
+          photoUrl: objectPath,
+          caption: caption || undefined,
+          localDate,
+        });
+        setSuccess();
+        return result;
+      } catch (err: any) {
+        setFailed(err.message || "Analysis failed. Your photo was saved.", "ANALYSIS_FAILED", true);
+        throw err;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
@@ -75,12 +93,13 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["photo-memories", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
-      setPhotoPreview(null);
-      setInput("");
-      resetUpload();
+      setTimeout(() => {
+        setPhotoPreview(null);
+        setInput("");
+        resetUpload();
+      }, 800);
     },
-    onError: () => {
-    },
+    onError: () => {},
   });
 
   useEffect(() => {
@@ -91,7 +110,7 @@ export default function Chat() {
 
   const handleSend = () => {
     if (photoPreview) {
-      if (photoMutation.isPending || isUploading) return;
+      if (photoMutation.isPending || uploadStatus !== "idle" && uploadStatus !== "error") return;
       photoMutation.mutate({ file: photoPreview.file, caption: input.trim() });
       return;
     }
@@ -117,7 +136,6 @@ export default function Chat() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
-    if (file.size > 10 * 1024 * 1024) return;
 
     resetUpload();
     photoMutation.reset();
@@ -138,10 +156,14 @@ export default function Chat() {
 
   if (!userId) return null;
 
-  const isPhotoProcessing = photoMutation.isPending || isUploading;
+  const isBusy = uploadStatus === "compressing" || uploadStatus === "uploading" || uploadStatus === "analyzing";
+  const isPhotoProcessing = photoMutation.isPending || isBusy;
   const isTextSending = sendMutation.isPending;
-  const photoFailed = photoMutation.isError || uploadStatus === "error";
+  const photoFailed = (photoMutation.isError || uploadStatus === "error") && !isBusy;
   const photoErrorMsg = uploadError?.message || photoMutation.error?.message || "Upload failed. Try again.";
+  const canRetry = uploadError?.retryable !== false;
+
+  const activeStatusLabel = isBusy ? STATUS_LABELS[uploadStatus] : (photoMutation.isPending ? "Sending to Jae..." : "");
 
   return (
     <div className="h-full flex flex-col bg-background relative">
@@ -280,7 +302,7 @@ export default function Chat() {
                     <Loader2 className="w-5 h-5 text-white animate-spin" />
                   </div>
                 )}
-                {!isPhotoProcessing && (
+                {!isPhotoProcessing && !photoFailed && (
                   <button
                     onClick={clearPreview}
                     className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
@@ -292,9 +314,14 @@ export default function Chat() {
               </div>
 
               <div className="flex flex-col gap-1 min-w-0">
-                {isPhotoProcessing && (
+                {isPhotoProcessing && activeStatusLabel && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Uploading & analyzing...</span>
+                    <span className="text-xs text-muted-foreground">{activeStatusLabel}</span>
+                    {compressInfo && (
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {(compressInfo.compressedSize / 1024).toFixed(0)}KB
+                      </span>
+                    )}
                     <button
                       onClick={handleCancelUpload}
                       className="text-xs text-red-500 flex items-center gap-1 hover:underline"
@@ -310,14 +337,16 @@ export default function Chat() {
                   <div className="flex flex-col gap-1.5">
                     <span className="text-xs text-red-600" data-testid="text-upload-error">{photoErrorMsg}</span>
                     <div className="flex gap-2">
-                      <button
-                        onClick={handleRetryPhoto}
-                        className="text-xs text-primary flex items-center gap-1 hover:underline"
-                        data-testid="button-retry-upload"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Retry
-                      </button>
+                      {canRetry && (
+                        <button
+                          onClick={handleRetryPhoto}
+                          className="text-xs text-primary flex items-center gap-1 hover:underline"
+                          data-testid="button-retry-upload"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Retry
+                        </button>
+                      )}
                       <button
                         onClick={clearPreview}
                         className="text-xs text-muted-foreground hover:underline"

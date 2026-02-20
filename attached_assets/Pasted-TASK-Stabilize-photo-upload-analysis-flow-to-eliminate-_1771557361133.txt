@@ -1,0 +1,70 @@
+TASK: Stabilize photo upload + analysis flow to eliminate the recurring "Failed to fetch" error on mobile (and desktop). This must be a production-grade fix: no placeholders, no vague suggestions.
+
+CONTEXT / SYMPTOMS (confirmed):
+- User selects an image, sees local preview, then upload fails with “Failed to fetch”.
+- Retrying multiple times still fails.
+- Some smaller images/screenshots may work; camera photos or larger images often fail.
+- We need reliable uploads across mobile + desktop.
+
+GOALS:
+1) Upload must NOT hang or crash on large images; it must return a clear JSON error if limits are exceeded.
+2) Upload must succeed consistently by:
+   - enforcing server-side multipart limits
+   - compressing/resizing client-side before upload
+   - adding a server-side timeout and abort logic around AI/image analysis
+   - ensuring CORS/headers are correct
+   - ensuring fetch always receives JSON (success or failure)
+3) Do not award water if analysis fails or upload fails.
+4) Save the photo memory ONLY after upload succeeds and analysis returns valid result.
+5) Provide visible user feedback: uploading → analyzing → success OR a clear actionable error.
+
+IMPLEMENTATION REQUIREMENTS:
+A) Server (Express/Node):
+- Ensure multipart handling uses a well-defined upload middleware (multer or equivalent).
+- Set explicit limits: fileSize, files, fieldSize.
+- Reject unsupported mime types (only image/jpeg, image/png, image/webp, image/heic if supported).
+- Add global request timeout for the upload/analysis route (e.g., 60–90s max).
+- Add per-step timeouts: upload persistence, AI analysis, DB writes.
+- Wrap the entire route in try/catch and ALWAYS respond with JSON:
+  { ok: true, ... } or { ok: false, errorCode, message }
+- Add an error middleware to normalize multer + payload errors:
+  - LIMIT_FILE_SIZE
+  - LIMIT_FIELD_VALUE
+  - Unexpected field
+  - PayloadTooLarge
+Return friendly error messages.
+
+B) Client (web/mobile responsive):
+- Before upload, compress/resize images:
+  - Max width/height: 1280px (or 1600px)
+  - JPEG quality ~0.75–0.85
+  - If PNG, consider converting to JPEG for photos unless transparency required.
+- Show upload progress state + disable send while uploading.
+- If the user retries, ensure we cancel any previous pending request (AbortController).
+- Handle server JSON errors and show them.
+- If server returns “file too large”, prompt user to pick a smaller image (or auto-compress more).
+
+C) Networking:
+- Confirm fetch uses correct endpoint and includes credentials if needed.
+- Confirm CORS allows the preview origin and supports multipart POST.
+- Ensure server sets proper response headers and does not drop connection silently.
+
+D) Logging + Debug (minimal but useful):
+- Log upload start/end with file size and mime type.
+- Log when analysis starts/ends and duration.
+- If any step fails, log error and return JSON error.
+
+ACCEPTANCE TESTS (must pass):
+1) Upload a screenshot (small) → succeeds, analysis runs, memory entry created, water logic applied correctly (only if qualifies).
+2) Upload a large camera photo (3–8MB) → should succeed due to compression; if still too large, user gets a clear “Image too large” message (JSON), no freeze.
+3) Turn on airplane mode mid-upload → client shows clear network error and returns to idle state.
+4) Retry upload after failure → succeeds, no stuck “Failed to fetch” loop.
+5) No duplicate memory entries are created on retries.
+
+DELIVERABLE:
+- Implement changes in both server and client.
+- Identify the exact files edited.
+- Provide a brief summary of what changed and why.
+- Then run the app and verify the acceptance tests.
+
+BEGIN NOW.
