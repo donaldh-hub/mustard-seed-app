@@ -1,0 +1,39 @@
+TITLE: Fix Mobile Modal Stacking + Blocked Submit Button (Plant Targeted Goal)
+
+CONTEXT
+In the Growth Dashboard (/progress), the “Plant Targeted Goal” modal is unusable on mobile because the bottom navigation bar overlays the modal content. This blocks inputs and the primary submit/complete action. The issue persists in both portrait and landscape.
+
+PROBLEM (REPRO)
+1) Open app on mobile viewport (common Android + iPhone sizes).
+2) Go to Growth → tap “Plant Goal” (Targeted Goal).
+3) Modal opens.
+4) Bottom navigation renders ABOVE the modal, covering the lower section (including action buttons).
+5) User cannot complete/save the goal.
+
+REQUIRED FIX (UI ONLY — DO NOT CHANGE BUSINESS LOGIC)
+1) Ensure the Plant Targeted Goal modal renders ABOVE all other UI layers, including the fixed bottom navigation.
+2) Modal must use a true overlay layer:
+   - full-viewport overlay (covers entire screen)
+   - highest z-index / stacking priority
+   - blocks clicks/taps to underlying UI (including bottom nav)
+3) While modal is open:
+   - bottom nav must not be clickable (either hidden or fully covered by overlay)
+   - background scroll must be locked (no page scroll behind modal)
+4) Inside the modal:
+   - content must be vertically scrollable if screen height is constrained
+   - the primary action button(s) (Save/Plant/Submit) must always be reachable (either via scroll + safe bottom padding, or via a sticky modal footer that sits above safe-area)
+5) Respect mobile safe-area insets so nothing important is hidden at the bottom.
+
+ACCEPTANCE TESTS (MUST PASS)
+A) Mobile portrait (small screen):
+   - Open Plant Targeted Goal modal
+   - Scroll through all fields
+   - Primary action button is visible and tappable
+   - Bottom nav does NOT overlap modal and is NOT clickable while modal is open
+B) Mobile landscape:
+   - Same as above
+C) Desktop:
+   - Modal still works normally (no regressions)
+
+DELIVERABLE
+Implement the UI layering and scrolling fix so the modal is fully usable on mobile. Keep all existing goal creation logic unchanged.
