@@ -335,7 +335,16 @@ export default function Chat() {
 
                 {photoFailed && (
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-xs text-red-600" data-testid="text-upload-error">{photoErrorMsg}</span>
+                    <span className="text-xs text-red-600 font-medium" data-testid="text-upload-error">{photoErrorMsg}</span>
+                    {uploadError?.code && (
+                      <span className="text-[10px] text-red-400 font-mono" data-testid="text-error-code">[{uploadError.code}]</span>
+                    )}
+                    {uploadError?.details && (
+                      <details className="text-[10px] text-muted-foreground">
+                        <summary className="cursor-pointer hover:text-foreground">Details</summary>
+                        <pre className="mt-1 whitespace-pre-wrap break-all bg-muted/50 p-1.5 rounded text-[9px] max-h-20 overflow-y-auto">{uploadError.details}</pre>
+                      </details>
+                    )}
                     <div className="flex gap-2">
                       {canRetry && (
                         <button

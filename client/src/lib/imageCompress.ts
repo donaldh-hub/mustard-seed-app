@@ -17,14 +17,21 @@ export function validateImageType(file: File): string | null {
     return "Could not determine file type. Please select a JPEG, PNG, or WebP image.";
   }
 
-  const type = file.type.toLowerCase();
+  const type = (file.type || "").toLowerCase();
   const ext = file.name?.split(".").pop()?.toLowerCase() || "";
 
   if (type.includes("heic") || type.includes("heif") || ext === "heic" || ext === "heif") {
     return "HEIC/HEIF images aren't supported by your browser. Please select a JPEG or PNG instead.";
   }
 
-  if (!type.startsWith("image/") && !["jpg", "jpeg", "png", "webp", "gif", "bmp"].includes(ext)) {
+  const validTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"];
+  const validExts = ["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+
+  if (type && !validTypes.includes(type) && !type.startsWith("image/")) {
+    return "Please select an image file (JPEG, PNG, or WebP).";
+  }
+
+  if (!type && ext && !validExts.includes(ext)) {
     return "Please select an image file (JPEG, PNG, or WebP).";
   }
 
@@ -34,24 +41,21 @@ export function validateImageType(file: File): string | null {
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
 
     const timeout = setTimeout(() => {
-      reject(new Error("Image load timed out"));
-    }, 15000);
+      img.onload = null;
+      img.onerror = null;
+      reject(new Error("Image load timed out after 10s"));
+    }, 10000);
 
     img.onload = () => {
       clearTimeout(timeout);
-      if (typeof img.decode === "function") {
-        img.decode().then(() => resolve(img)).catch(() => resolve(img));
-      } else {
-        resolve(img);
-      }
+      resolve(img);
     };
 
-    img.onerror = () => {
+    img.onerror = (_e) => {
       clearTimeout(timeout);
-      reject(new Error("Browser could not decode this image"));
+      reject(new Error("Browser could not load this image"));
     };
 
     img.src = src;
@@ -61,36 +65,40 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export async function compressImage(file: File): Promise<CompressResult> {
   const originalSize = file.size;
 
-  if (file.size <= 500 * 1024 && file.type === "image/jpeg") {
-    return { file, originalSize, compressedSize: file.size, width: 0, height: 0 };
+  console.log(`[compress] Starting: name=${file.name} type=${file.type} size=${(originalSize / 1024).toFixed(0)}KB`);
+
+  if (originalSize <= 400 * 1024 && (file.type === "image/jpeg" || file.type === "image/png")) {
+    console.log("[compress] Small file, skipping compression");
+    return { file, originalSize, compressedSize: originalSize, width: 0, height: 0 };
   }
 
   let url: string | null = null;
 
   try {
     url = URL.createObjectURL(file);
+
     const img = await loadImage(url);
     let { width, height } = img;
 
+    console.log(`[compress] Image loaded: ${width}x${height}`);
+
     if (width <= 0 || height <= 0) {
-      throw new Error("Image has zero dimensions");
+      throw new Error("Image has invalid dimensions (0x0)");
     }
 
     if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
       const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
       width = Math.round(width * ratio);
       height = Math.round(height * ratio);
-    }
-
-    if (width <= 0 || height <= 0) {
-      throw new Error("Image dimensions invalid after resize calculation");
+      console.log(`[compress] Resized to: ${width}x${height}`);
     }
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas not supported");
+    if (!ctx) throw new Error("Canvas 2D context not available");
+
     ctx.drawImage(img, 0, 0, width, height);
 
     let quality = JPEG_QUALITY;
@@ -100,19 +108,26 @@ export async function compressImage(file: File): Promise<CompressResult> {
       blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", quality)
       );
-      if (blob && blob.size <= MAX_FILE_SIZE) break;
+      if (blob && blob.size <= MAX_FILE_SIZE) {
+        console.log(`[compress] Attempt ${attempt + 1}: ${(blob.size / 1024).toFixed(0)}KB at quality=${quality.toFixed(2)}`);
+        break;
+      }
       quality -= 0.15;
     }
+
+    canvas.width = 0;
+    canvas.height = 0;
 
     if (!blob) throw new Error("Canvas toBlob returned null");
 
     if (blob.size > MAX_FILE_SIZE) {
-      throw new Error("Compressed image still too large");
+      throw new Error("Still too large after compression");
     }
 
-    const compressedFile = new File([blob], file.name.replace(/\.\w+$/, ".jpg"), {
-      type: "image/jpeg",
-    });
+    const ext = file.name.replace(/\.\w+$/, "");
+    const compressedFile = new File([blob], `${ext}.jpg`, { type: "image/jpeg" });
+
+    console.log(`[compress] Done: ${(originalSize / 1024).toFixed(0)}KB -> ${(compressedFile.size / 1024).toFixed(0)}KB`);
 
     return {
       file: compressedFile,
@@ -122,9 +137,11 @@ export async function compressImage(file: File): Promise<CompressResult> {
       height,
     };
   } catch (err) {
-    console.warn("[imageCompress] Compression failed, attempting fallback:", (err as Error).message);
+    const msg = (err as Error).message || "Unknown compression error";
+    console.warn(`[compress] Failed: ${msg}. Checking fallback...`);
 
     if (originalSize <= FALLBACK_MAX) {
+      console.log(`[compress] Fallback: uploading original (${(originalSize / 1024).toFixed(0)}KB)`);
       return {
         file,
         originalSize,
@@ -135,7 +152,9 @@ export async function compressImage(file: File): Promise<CompressResult> {
       };
     }
 
-    throw new Error("This image couldn't be processed and is too large to upload as-is. Please select a smaller JPEG or PNG photo.");
+    throw new Error(
+      `This image couldn't be processed and is too large (${(originalSize / 1024 / 1024).toFixed(1)}MB) to upload as-is. Please select a smaller JPEG or PNG.`
+    );
   } finally {
     if (url) {
       URL.revokeObjectURL(url);

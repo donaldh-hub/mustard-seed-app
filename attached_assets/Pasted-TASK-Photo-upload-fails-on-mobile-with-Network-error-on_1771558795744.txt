@@ -1,0 +1,56 @@
+TASK: Photo upload fails on mobile with "Network error" on BOTH Wi-Fi and cellular. We need definitive diagnostics + a fix.
+
+GOAL:
+Make gallery photo upload succeed reliably on mobile web. If it fails, show a SPECIFIC error (status + reason), not generic "network error".
+
+STEP 1 — ADD DIAGNOSTICS (must be visible in UI + logs)
+Client:
+1) Wrap the photo upload request in try/catch and capture:
+   - request URL (full)
+   - method
+   - file name, file type, file size (bytes)
+   - whether using FormData + field names used
+2) If fetch fails, display a toast/modal that includes:
+   - "Upload failed"
+   - reason (err.message)
+   - request URL
+   - file size
+3) Log same details to console.
+
+Server:
+1) Add request logging on the upload endpoint:
+   - hit count
+   - origin header
+   - content-length
+   - parsed fields present
+2) On errors, always return JSON with:
+   - ok:false
+   - error_code
+   - message
+   - details
+
+STEP 2 — FIX MOST LIKELY ROOT CAUSES
+1) Ensure mobile uses correct API base URL:
+   - If client currently uses relative URL, keep it.
+   - If it uses localhost or an environment variable, ensure it points to the SAME domain serving the app.
+2) Fix CORS:
+   - Allow the exact web origin(s) (preview + published domains).
+   - Allow credentials if used.
+   - Ensure OPTIONS preflight works.
+3) Fix body/file limits:
+   - Set explicit max upload size (e.g. 10MB) and return clear "FILE_TOO_LARGE" if exceeded.
+4) Fix multipart parsing:
+   - Confirm server expects the same FormData field name the client sends.
+   - If mismatch, align them.
+5) Fix https/mixed content:
+   - Ensure requests are https when page is https.
+
+STEP 3 — ACCEPTANCE TESTS (PHONE)
+1) Pick existing photo from gallery -> upload succeeds -> image appears in chat.
+2) If you pick a huge file, app says "File too large" (not network error).
+3) If CORS blocked, app shows the blocked origin and server logs show no hit.
+
+DELIVERABLE:
+- Tell me the exact endpoint URL used on mobile
+- Show what server logs display when mobile attempts upload
+- Confirm final behavior on mobile
