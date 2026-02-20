@@ -20,6 +20,140 @@ interface UseUploadOptions {
   onError?: (error: UploadError) => void;
 }
 
+async function requestPresignedUrl(
+  file: File,
+  signal: AbortSignal
+): Promise<{ ok: true; data: UploadResponse } | { ok: false; error: UploadError }> {
+  const uploadMeta = `name=${file.name} type=${file.type} size=${file.size}bytes`;
+  try {
+    const res = await fetch("/api/uploads/request-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: file.name,
+        size: file.size,
+        contentType: file.type || "image/jpeg",
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: "Server error" }));
+      return {
+        ok: false,
+        error: {
+          message: errData.error || `Server error (${res.status})`,
+          code: errData.code || "PRESIGN_ERROR",
+          retryable: res.status !== 413 && errData.code !== "INVALID_TYPE",
+          details: `Presign HTTP ${res.status}: ${JSON.stringify(errData)}`,
+        },
+      };
+    }
+
+    const data: UploadResponse = await res.json();
+    return { ok: true, data };
+  } catch (fetchErr: any) {
+    return {
+      ok: false,
+      error: {
+        message: "Could not reach the server. Check your connection and try again.",
+        code: "PRESIGN_NETWORK_ERROR",
+        retryable: true,
+        details: `POST /api/uploads/request-url failed: ${fetchErr.message}. ${uploadMeta}`,
+      },
+    };
+  }
+}
+
+async function directPutToGCS(
+  gcsUrl: string,
+  file: File,
+  signal: AbortSignal
+): Promise<{ ok: true } | { ok: false; code: string; detail: string }> {
+  const gcsHost = new URL(gcsUrl).hostname;
+  const uploadMeta = `name=${file.name} type=${file.type} size=${file.size}bytes`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+
+  const combinedSignal = signal;
+
+  try {
+    const putRes = await fetch(gcsUrl, {
+      method: "PUT",
+      mode: "cors",
+      body: file,
+      headers: {
+        "Content-Type": file.type || "image/jpeg",
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (combinedSignal.aborted) {
+      return { ok: false, code: "ABORT", detail: "Cancelled" };
+    }
+
+    if (!putRes.ok) {
+      const putBody = await putRes.text().catch(() => "");
+      return {
+        ok: false,
+        code: "DIRECT_PUT_HTTP_ERROR",
+        detail: `PUT ${gcsHost} HTTP ${putRes.status}: ${putBody.substring(0, 200)}`,
+      };
+    }
+
+    return { ok: true };
+  } catch (putErr: any) {
+    clearTimeout(timeout);
+    if (putErr.name === "AbortError") {
+      return { ok: false, code: "DIRECT_PUT_TIMEOUT", detail: `PUT ${gcsHost} timed out. ${uploadMeta}` };
+    }
+    return { ok: false, code: "DIRECT_PUT_FAILED", detail: `PUT ${gcsHost} failed: ${putErr.message}. ${uploadMeta}` };
+  }
+}
+
+async function proxyUpload(
+  file: File,
+  signal: AbortSignal
+): Promise<{ ok: true; objectPath: string } | { ok: false; code: string; detail: string }> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
+
+    const res = await fetch("/api/uploads/proxy", {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (signal.aborted) {
+      return { ok: false, code: "ABORT", detail: "Cancelled" };
+    }
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ error: "Proxy error" }));
+      return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Proxy HTTP ${res.status}: ${JSON.stringify(errData)}` };
+    }
+
+    const data = await res.json();
+    if (!data.ok || !data.objectPath) {
+      return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Proxy returned invalid response: ${JSON.stringify(data)}` };
+    }
+
+    return { ok: true, objectPath: data.objectPath };
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      return { ok: false, code: "PROXY_TIMEOUT", detail: "Proxy upload timed out after 90s" };
+    }
+    return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Proxy fetch failed: ${err.message}` };
+  }
+}
+
 export function useUpload(options: UseUploadOptions = {}) {
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<UploadError | null>(null);
@@ -102,107 +236,79 @@ export function useUpload(options: UseUploadOptions = {}) {
         const file = compressed.file;
         const uploadMeta = `name=${file.name} type=${file.type} size=${file.size}bytes`;
 
-        // Step 1: Get presigned URL from our server
-        console.log(`[upload] Step 1: Requesting presigned URL. ${uploadMeta}`);
-        let urlRes: Response;
-        try {
-          urlRes = await fetch("/api/uploads/request-url", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: file.name,
-              size: file.size,
-              contentType: file.type || "image/jpeg",
-            }),
-            signal,
-          });
-        } catch (fetchErr: any) {
-          const detail = `POST /api/uploads/request-url failed: ${fetchErr.message}. ${uploadMeta}`;
-          console.error(`[upload] ${detail}`);
-          setFailed(
-            "Could not reach the server. Check your connection and try again.",
-            "PRESIGN_NETWORK_ERROR",
-            true,
-            detail
-          );
-          return null;
+        // ─── STEP 1: Try direct GCS PUT (attempt 1) ───
+        console.log(`[upload] Step 1: Direct PUT attempt 1. ${uploadMeta}`);
+
+        const presign1 = await requestPresignedUrl(file, signal);
+        if (!presign1.ok) {
+          console.warn(`[upload] Presign 1 failed: ${presign1.error.code}`);
+          // If presign itself fails, skip to proxy
+          console.log(`[upload] Skipping to proxy fallback`);
         }
 
-        if (!urlRes.ok) {
-          const errData = await urlRes.json().catch(() => ({ error: "Server error" }));
-          const detail = `Presign HTTP ${urlRes.status}: ${JSON.stringify(errData)}`;
-          console.error(`[upload] ${detail}`);
-          if (urlRes.status === 413 || errData.code === "FILE_TOO_LARGE") {
-            setFailed("Image is too large. Please pick a smaller image.", "FILE_TOO_LARGE", false, detail);
-          } else if (errData.code === "INVALID_TYPE") {
-            setFailed("Unsupported image format. Use JPEG, PNG, or WebP.", "INVALID_TYPE", false, detail);
+        let directSuccess = false;
+        let objectPath: string | null = null;
+
+        if (presign1.ok) {
+          setProgress(25);
+          console.log(`[upload] Direct PUT 1 to ${new URL(presign1.data.uploadURL).hostname}`);
+
+          const put1 = await directPutToGCS(presign1.data.uploadURL, file, signal);
+          if (put1.ok) {
+            directSuccess = true;
+            objectPath = presign1.data.objectPath;
+            console.log(`[upload] Direct PUT 1 succeeded: ${objectPath}`);
           } else {
-            setFailed(errData.error || `Server error (${urlRes.status})`, errData.code || "PRESIGN_ERROR", true, detail);
+            console.warn(`[upload] Direct PUT 1 failed: [${put1.code}] ${put1.detail}`);
+
+            // ─── STEP 2: Retry with fresh presigned URL ───
+            if (put1.code !== "ABORT") {
+              console.log(`[upload] Step 2: Retrying with fresh presigned URL`);
+              setProgress(35);
+
+              const presign2 = await requestPresignedUrl(file, signal);
+              if (presign2.ok) {
+                const put2 = await directPutToGCS(presign2.data.uploadURL, file, signal);
+                if (put2.ok) {
+                  directSuccess = true;
+                  objectPath = presign2.data.objectPath;
+                  console.log(`[upload] Direct PUT 2 (retry) succeeded: ${objectPath}`);
+                } else {
+                  console.warn(`[upload] Direct PUT 2 failed: [${put2.code}] ${put2.detail}`);
+                }
+              } else {
+                console.warn(`[upload] Presign 2 failed: ${presign2.error.code}`);
+              }
+            }
           }
-          return null;
         }
 
-        const uploadResponse: UploadResponse = await urlRes.json();
-        const gcsUrl = uploadResponse.uploadURL;
-        const gcsHost = new URL(gcsUrl).hostname;
-        setProgress(30);
-        console.log(`[upload] Step 1 OK: objectPath=${uploadResponse.objectPath} gcsHost=${gcsHost}`);
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
-        // Step 2: PUT file directly to GCS presigned URL
-        console.log(`[upload] Step 2: PUT to GCS. size=${file.size} type=${file.type} host=${gcsHost}`);
+        // ─── STEP 3: Proxy fallback ───
+        if (!directSuccess) {
+          console.log(`[upload] Step 3: Proxy fallback. ${uploadMeta}`);
+          setProgress(45);
 
-        const uploadTimeout = setTimeout(() => {
-          if (!signal.aborted) {
-            console.error(`[upload] Step 2: PUT timed out after 60s`);
-            controller.abort();
-          }
-        }, 60000);
-
-        let putRes: Response;
-        try {
-          putRes = await fetch(gcsUrl, {
-            method: "PUT",
-            body: file,
-            headers: {
-              "Content-Type": file.type || "image/jpeg",
-            },
-            signal,
-          });
-          clearTimeout(uploadTimeout);
-        } catch (putErr: any) {
-          clearTimeout(uploadTimeout);
-          const detail = `PUT ${gcsHost} failed: ${putErr.message}. File: ${uploadMeta}`;
-          console.error(`[upload] ${detail}`);
-
-          if (putErr.name === "AbortError" || signal.aborted) {
-            setFailed(
-              "Upload timed out. Your connection may be slow — try a smaller image or better Wi-Fi.",
-              "GCS_TIMEOUT",
-              true,
-              detail
-            );
+          const proxyResult = await proxyUpload(file, signal);
+          if (proxyResult.ok) {
+            objectPath = proxyResult.objectPath;
+            console.log(`[upload] Proxy succeeded: ${objectPath}`);
           } else {
+            console.error(`[upload] Proxy failed: [${proxyResult.code}] ${proxyResult.detail}`);
             setFailed(
-              `Upload to storage failed: ${putErr.message}. Try again.`,
-              "GCS_PUT_FAILED",
+              "Photo upload failed after all attempts. Please try again on a stronger connection.",
+              proxyResult.code,
               true,
-              detail
+              proxyResult.detail
             );
+            return null;
           }
-          return null;
-        }
-
-        if (!putRes.ok) {
-          const putBody = await putRes.text().catch(() => "");
-          const detail = `PUT ${gcsHost} HTTP ${putRes.status}: ${putBody.substring(0, 200)}`;
-          console.error(`[upload] ${detail}`);
-          setFailed(`Storage rejected the file (HTTP ${putRes.status}). Try again.`, "GCS_PUT_HTTP_ERROR", true, detail);
-          return null;
         }
 
         setProgress(80);
-        console.log(`[upload] Step 2 OK: File stored successfully`);
-        return uploadResponse.objectPath;
+        console.log(`[upload] Upload complete via ${directSuccess ? "direct" : "proxy"}: ${objectPath}`);
+        return objectPath;
       } catch (err: any) {
         if (err.name === "AbortError" || signal?.aborted) {
           setFailed("Upload was cancelled or timed out. Try again.", "ABORT", true);

@@ -1,5 +1,7 @@
 import type { Express } from "express";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import multer from "multer";
+import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
+import { randomUUID } from "crypto";
 
 /**
  * Register object storage routes for file uploads.
@@ -94,6 +96,71 @@ export function registerObjectStorageRoutes(app: Express): void {
     } catch (error: any) {
       console.error(`[UPLOAD #${hitNum}] Presign ERROR:`, error?.message || error);
       res.status(500).json({ ok: false, error: "Failed to generate upload URL", code: "SERVER_ERROR" });
+    }
+  });
+
+  const proxyUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error("Unsupported file type"));
+      }
+    },
+  });
+
+  let proxyHitCount = 0;
+
+  app.post("/api/uploads/proxy", proxyUpload.single("file"), async (req, res) => {
+    proxyHitCount++;
+    const hitNum = proxyHitCount;
+    const startTime = Date.now();
+
+    try {
+      const file = req.file;
+      if (!file) {
+        console.log(`[PROXY #${hitNum}] No file in request`);
+        return res.status(400).json({ ok: false, error: "No file uploaded", code: "NO_FILE" });
+      }
+
+      console.log(`[PROXY #${hitNum}] Received: name=${file.originalname} size=${file.size} type=${file.mimetype}`);
+
+      const privateDir = objectStorageService.getPrivateObjectDir();
+      const objectId = randomUUID();
+      const fullPath = `${privateDir}/uploads/${objectId}`;
+
+      const pathParts = fullPath.startsWith("/") ? fullPath.slice(1).split("/") : fullPath.split("/");
+      const bucketName = pathParts[0];
+      const objectName = pathParts.slice(1).join("/");
+
+      const bucket = objectStorageClient.bucket(bucketName);
+      const gcsFile = bucket.file(objectName);
+
+      await new Promise<void>((resolve, reject) => {
+        const stream = gcsFile.createWriteStream({
+          resumable: false,
+          contentType: file.mimetype,
+          metadata: {
+            contentType: file.mimetype,
+          },
+        });
+        stream.on("error", (err) => reject(err));
+        stream.on("finish", () => resolve());
+        stream.end(file.buffer);
+      });
+
+      const objectPath = `/objects/uploads/${objectId}`;
+      const elapsed = Date.now() - startTime;
+      console.log(`[PROXY #${hitNum}] OK: objectPath=${objectPath} ${elapsed}ms`);
+
+      res.json({ ok: true, objectPath });
+    } catch (err: any) {
+      const elapsed = Date.now() - startTime;
+      console.error(`[PROXY #${hitNum}] ERROR (${elapsed}ms):`, err?.message || err);
+      res.status(500).json({ ok: false, error: "Server upload failed", code: "PROXY_SERVER_ERROR" });
     }
   });
 

@@ -1,7 +1,8 @@
 const MAX_DIMENSION = 1280;
-const JPEG_QUALITY = 0.80;
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const FALLBACK_MAX = 8 * 1024 * 1024;
+const INITIAL_QUALITY = 0.80;
+const TARGET_SIZE = 2 * 1024 * 1024;
+const ABSOLUTE_MAX = 10 * 1024 * 1024;
+const FALLBACK_MAX = 5 * 1024 * 1024;
 
 export interface CompressResult {
   file: File;
@@ -101,31 +102,34 @@ export async function compressImage(file: File): Promise<CompressResult> {
 
     ctx.drawImage(img, 0, 0, width, height);
 
-    let quality = JPEG_QUALITY;
+    let quality = INITIAL_QUALITY;
     let blob: Blob | null = null;
+    let bestBlob: Blob | null = null;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", quality)
       );
-      if (blob && blob.size <= MAX_FILE_SIZE) {
+      if (blob) {
+        bestBlob = blob;
         console.log(`[compress] Attempt ${attempt + 1}: ${(blob.size / 1024).toFixed(0)}KB at quality=${quality.toFixed(2)}`);
-        break;
+        if (blob.size <= TARGET_SIZE) break;
       }
-      quality -= 0.15;
+      quality -= 0.12;
+      if (quality < 0.3) quality = 0.3;
     }
 
     canvas.width = 0;
     canvas.height = 0;
 
-    if (!blob) throw new Error("Canvas toBlob returned null");
+    if (!bestBlob) throw new Error("Canvas toBlob returned null");
 
-    if (blob.size > MAX_FILE_SIZE) {
+    if (bestBlob.size > ABSOLUTE_MAX) {
       throw new Error("Still too large after compression");
     }
 
     const ext = file.name.replace(/\.\w+$/, "");
-    const compressedFile = new File([blob], `${ext}.jpg`, { type: "image/jpeg" });
+    const compressedFile = new File([bestBlob], `${ext}.jpg`, { type: "image/jpeg" });
 
     console.log(`[compress] Done: ${(originalSize / 1024).toFixed(0)}KB -> ${(compressedFile.size / 1024).toFixed(0)}KB`);
 
