@@ -1,0 +1,92 @@
+You are repairing the Mustard Seed App photo upload pipeline.
+
+Current error observed on mobile:
+
+Upload to storage failed: Failed to fetch
+[GCS_PUT_FAILED]
+PUT storage.googleapis.com failed: Failed to fetch
+
+The presigned URL request succeeds.
+The failure occurs during the direct PUT to Google Cloud Storage.
+
+This is a transport-layer reliability repair.
+This is not a UI change.
+This is not a Jae logic change.
+This is not a growth or water logic redesign.
+
+Objective:
+
+Make photo uploads reliable on both mobile and desktop.
+If direct PUT to GCS fails for any reason (CORS, network, header mismatch, browser restriction), the system must automatically fall back to a server-side upload route and complete successfully.
+
+Required actions:
+
+Harden the direct PUT upload:
+
+Use method PUT.
+
+Use mode cors.
+
+Do not manually set Content-Length.
+
+Ensure Content-Type exactly matches what the presigned URL expects.
+
+Compress images before upload to a safe mobile size (target under ~2MB).
+
+If compression fails, continue to fallback instead of aborting.
+
+If direct PUT fails, retry once with a fresh presigned URL before fallback.
+
+Implement automatic proxy fallback:
+
+If direct PUT throws “Failed to fetch” or returns non-2xx, immediately route to a server endpoint (for example: /api/uploads/proxy).
+
+Server endpoint must accept multipart upload.
+
+Server must upload to the same object storage using server credentials.
+
+Server returns final object key or URL.
+
+Client treats proxy success as full upload success.
+
+User should not see which path was used.
+
+Enforce reward gating:
+
+Do not grant water when file is selected.
+
+Do not grant water when presign succeeds.
+
+Only grant water after:
+
+Upload succeeds (direct or proxy),
+
+Image analysis succeeds,
+
+Memory entry successfully saves with photo reference.
+
+If any step fails, award zero water.
+
+Strengthen diagnostics:
+
+Log clearly whether failure occurred at:
+PRESIGN_FAILED
+DIRECT_PUT_FAILED
+PROXY_UPLOAD_FAILED
+MEMORY_ATTACH_FAILED
+
+Log file name, size, and type.
+
+Do not expose signed URLs in client-visible errors.
+
+Return a confirmation summary after implementation describing:
+
+The final upload flow (direct → retry → proxy → memory → reward).
+
+What was changed.
+
+What guarantees reliability on mobile.
+
+Do not remove any existing system logic.
+Do not redesign architecture.
+Only repair and harden the upload pipeline.
