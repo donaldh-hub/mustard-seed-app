@@ -116,7 +116,61 @@ export async function registerRoutes(
 
       const textLower = rawText.toLowerCase();
       let jaeText = "";
-      
+
+      if (/^(targeted|identity)$/i.test(textLower.trim())) {
+        const recentMessages = await storage.getMessages(userId);
+        const lastJae = recentMessages.filter(m => m.sender === "jae").sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())[0];
+        if (lastJae) {
+          const pendingMatch = lastJae.text.match(/Is "(.+?)" a \*\*targeted goal\*\*/);
+          if (pendingMatch) {
+            const pendingGoalText = pendingMatch[1];
+            const chosenType = textLower.trim() === "targeted" ? "targeted" as const : "untargeted" as const;
+
+            const existingOfType = activeGoals.find((g) => g.goalType === chosenType);
+            if (existingOfType) {
+              const typeLabel = chosenType === "targeted" ? "targeted goal" : "identity goal";
+              jaeText = `${greeting}you already have an active ${typeLabel}: "${existingOfType.title}". Complete or archive it first.`;
+              const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+              return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+            }
+
+            const limits = getFeatureLimits(user);
+            if (activeGoals.length >= limits.maxGoals) {
+              jaeText = `${greeting}you've reached your goal limit. Upgrade to Premium or archive an existing goal first.`;
+              const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+              return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+            }
+
+            await storage.createGoal({
+              userId,
+              title: pendingGoalText,
+              goalType: chosenType,
+              status: "active",
+              emotionalWhy: "",
+              focusArea: "",
+              metricType: "actions",
+              deadline: null,
+              baselineMetric: null,
+              targetMetric: null,
+              percentComplete: 0,
+              microHabit: "",
+              weeklyTarget: 3,
+              streakCount: 0,
+              momentumScore: 0,
+              consistencyRate: 0,
+              treeGrowthScore: 0,
+              isActive: 1,
+            });
+
+            await storage.createEntry({ userId, date: todayStr(), summary: `Goal planted: ${pendingGoalText}`, mood: "neutral" });
+
+            const typeLabel = chosenType === "targeted" ? "Targeted Goal" : "Identity Goal";
+            jaeText = `${greeting}${typeLabel} planted: "${pendingGoalText}". Check your Growth dashboard to see it.\n\nWhat's your first action toward this?`;
+            const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+            return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+          }
+        }
+      }
 
       const asksStage = /what('?s| is) my stage/i.test(textLower) || /my stage/i.test(textLower) || /current stage/i.test(textLower);
       const asksFocus = /what should i focus/i.test(textLower) || /focus.*week/i.test(textLower) || /what should i do today/i.test(textLower);
@@ -376,10 +430,29 @@ export async function registerRoutes(
         /my struggle/i.test(textLower) ||
         /remind me.*obstacle/i.test(textLower);
 
+      const goalSavePatterns = [
+        { re: /^save:\s*(.+)/i, extract: 1 },
+        { re: /^set goal:\s*(.+)/i, extract: 1 },
+        { re: /^plant goal:\s*(.+)/i, extract: 1 },
+        { re: /^plant identity:\s*(.+)/i, extract: 1, forceIdentity: true },
+        { re: /^set identity goal:\s*(.+)/i, extract: 1, forceIdentity: true },
+        { re: /^my goal is\s+(.+)/i, extract: 1 },
+      ];
+
+      let goalSaveMatch: { text: string; forceIdentity?: boolean } | null = null;
+      for (const p of goalSavePatterns) {
+        const m = rawText.match(p.re);
+        if (m && m[p.extract]) {
+          goalSaveMatch = { text: m[p.extract].trim(), forceIdentity: !!(p as any).forceIdentity };
+          break;
+        }
+      }
+
       const isSave =
-        /^save:/i.test(textLower) ||
         /save that/i.test(textLower) ||
         /remember this/i.test(textLower);
+
+      const isGoalSave = !!goalSaveMatch && !isSave;
 
       const isLog =
         /^log:/i.test(textLower) ||
@@ -494,21 +567,143 @@ export async function registerRoutes(
           : `\n\n${pick(noGoalFollowups)}`;
         jaeText = `${greeting}${parts.join(". ")}.${next}`;
 
+      } else if (isGoalSave) {
+        const goalText = goalSaveMatch!.text;
+        const hasTimeline = /\b(in \d+|by \w+ \d+|\d+ days|\d+ weeks|\d+ months|deadline|by end of)\b/i.test(goalText);
+        const hasMetric = /\b(lose|gain|drop|reach|hit|save|earn|make|run|lift|weigh)\b.*\b\d+/i.test(goalText);
+        const isIdentityStyle = goalSaveMatch!.forceIdentity ||
+          /\b(identity|become|becoming|i am becoming|i want to be|i.m building the habit|kind of person)\b/i.test(goalText);
+
+        let goalType: "targeted" | "untargeted";
+        if (isIdentityStyle && !hasTimeline && !hasMetric) {
+          goalType = "untargeted";
+        } else if (hasTimeline || hasMetric) {
+          goalType = "targeted";
+        } else {
+          jaeText = `${greeting}I want to make sure I save this correctly. Is "${goalText}" a **targeted goal** (has a deadline or measurable outcome) or an **identity goal** (about who you're becoming)?\n\nJust reply "targeted" or "identity" and I'll plant it.`;
+          const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+          return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+        }
+
+        const existingOfType = activeGoals.find((g) => g.goalType === goalType);
+        if (existingOfType) {
+          const typeLabel = goalType === "targeted" ? "targeted goal" : "identity goal";
+          jaeText = `${greeting}you already have an active ${typeLabel}: "${existingOfType.title}". Complete or archive it on the Growth dashboard before planting a new one.`;
+          const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+          return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+        }
+
+        const limits = getFeatureLimits(user);
+        if (activeGoals.length >= limits.maxGoals) {
+          jaeText = `${greeting}you've reached your goal limit. Upgrade to Premium to plant a second goal, or complete/archive an existing one first.`;
+          const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+          return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+        }
+
+        let deadline: string | null = null;
+        let baselineMetric: number | null = null;
+        let targetMetric: number | null = null;
+
+        if (goalType === "targeted") {
+          const monthsMatch = goalText.match(/in (\d+) months?/i);
+          const daysMatch = goalText.match(/in (\d+) days?/i);
+          const weeksMatch = goalText.match(/in (\d+) weeks?/i);
+          const byDateMatch = goalText.match(/by (\w+ \d+(?:,? \d{4})?)/i);
+
+          if (monthsMatch) {
+            const d = new Date(); d.setMonth(d.getMonth() + parseInt(monthsMatch[1]));
+            deadline = d.toISOString().split("T")[0];
+          } else if (daysMatch) {
+            const d = new Date(); d.setDate(d.getDate() + parseInt(daysMatch[1]));
+            deadline = d.toISOString().split("T")[0];
+          } else if (weeksMatch) {
+            const d = new Date(); d.setDate(d.getDate() + parseInt(weeksMatch[1]) * 7);
+            deadline = d.toISOString().split("T")[0];
+          } else if (byDateMatch) {
+            const parsed = new Date(byDateMatch[1]);
+            if (!isNaN(parsed.getTime())) deadline = parsed.toISOString().split("T")[0];
+          }
+
+          const metricNumbers = goalText.match(/\d+/g);
+          if (metricNumbers && metricNumbers.length >= 1) {
+            const nums = metricNumbers.map(Number).filter(n => n > 0);
+            if (nums.length >= 2) {
+              baselineMetric = Math.max(...nums);
+              targetMetric = Math.min(...nums);
+            }
+          }
+        }
+
+        const newGoal = await storage.createGoal({
+          userId,
+          title: goalText,
+          goalType,
+          status: "active",
+          emotionalWhy: "",
+          focusArea: "",
+          metricType: "actions",
+          deadline,
+          baselineMetric,
+          targetMetric,
+          percentComplete: 0,
+          microHabit: "",
+          weeklyTarget: 3,
+          streakCount: 0,
+          momentumScore: 0,
+          consistencyRate: 0,
+          treeGrowthScore: 0,
+          isActive: 1,
+        });
+
+        await storage.createEntry({
+          userId,
+          date: todayStr(),
+          summary: `Goal planted: ${goalText}`,
+          mood: "neutral",
+        });
+
+        const typeLabel = goalType === "targeted" ? "Targeted Goal" : "Identity Goal";
+        const goalConfirms = [
+          `${greeting}${typeLabel} planted: "${goalText}".`,
+          `${greeting}"${goalText}" is now your active ${typeLabel}.`,
+          `${greeting}${typeLabel} locked in: "${goalText}".`,
+          `${greeting}"${goalText}" — planted as your ${typeLabel}.`,
+        ];
+        const confirmLines: string[] = [pick(goalConfirms)];
+
+        if (deadline) confirmLines.push(`Deadline: ${deadline}.`);
+        if (baselineMetric !== null && targetMetric !== null) {
+          confirmLines.push(`Baseline: ${baselineMetric} → Target: ${targetMetric}.`);
+        }
+
+        confirmLines.push(`Check your Growth dashboard to see it.`);
+
+        const goalFollowups = [
+          "What's your first action toward this?",
+          "What's one move you can make in the next 24 hours?",
+          "How are you going to start?",
+          "What does the first step look like?",
+          "What's the smallest thing you can do today to move on this?",
+        ];
+        confirmLines.push(`\n${pick(goalFollowups)}`);
+        jaeText = confirmLines.join("\n");
+
+        const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+        return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
+
       } else if (isSave) {
         const payload = rawText.replace(/^save:\s*/i, "").replace(/save that\.?\s*/i, "").replace(/remember this\.?\s*/i, "").trim();
 
-        const goalMatch = rawText.match(/(?:my )?goal (?:is|:)\s*(.+?)(?:\.|,|$)/i);
         const obstacleMatch = rawText.match(/(?:my )?(?:obstacle|struggle) (?:is|:)\s*(.+?)(?:\.|,|$)/i);
 
         const patch: Record<string, any> = {};
-        if (goalMatch?.[1]) patch.goals = [goalMatch[1].trim()];
         if (obstacleMatch?.[1]) patch.struggles = [obstacleMatch[1].trim()];
 
         if (Object.keys(patch).length) {
           await storage.updateUser(userId, patch);
         }
 
-        const savedContent = payload || goalMatch?.[1] || obstacleMatch?.[1] || rawText;
+        const savedContent = payload || obstacleMatch?.[1] || rawText;
         await storage.createEntry({
           userId,
           date: todayStr(),
@@ -527,51 +722,14 @@ export async function registerRoutes(
           `${greeting}stored. I'll reference it from here on.`,
           `${greeting}that's on file now.`,
           `${greeting}captured. You can count on me to remember.`,
-          `${greeting}committed to memory.`,
-          `${greeting}locked in and logged.`,
-          `${greeting}saved and sealed.`,
-          `${greeting}written down. It's official now.`,
-          `${greeting}tracked. This is part of the record.`,
         ];
 
         const confirmLines: string[] = [pick(saveConfirms)];
-        if (patch.goals) {
-          const goalConfirms = [
-            `Goal: "${patch.goals[0]}".`,
-            `Your goal: "${patch.goals[0]}". I'll hold you to it.`,
-            `Goal set: "${patch.goals[0]}".`,
-            `"${patch.goals[0]}" — that's what we're building toward.`,
-            `"${patch.goals[0]}" is now the target.`,
-            `"${patch.goals[0]}" — locked in as your direction.`,
-            `Goal saved: "${patch.goals[0]}". Every response I give will point here.`,
-            `"${patch.goals[0]}" is on the board. Let's make it real.`,
-            `Your north star: "${patch.goals[0]}".`,
-            `"${patch.goals[0]}" — I'll keep bringing you back to this.`,
-            `Goal recorded: "${patch.goals[0]}". I'll track your progress against it.`,
-            `"${patch.goals[0]}" — that's the mission now.`,
-            `Your target: "${patch.goals[0]}". I won't let you forget it.`,
-            `"${patch.goals[0]}" is official.`,
-            `Set: "${patch.goals[0]}". Now let's move on it.`,
-          ];
-          confirmLines.push(pick(goalConfirms));
-        }
         if (patch.struggles) {
           const obsConfirms = [
             `Obstacle: "${patch.struggles[0]}". Now I know what to watch for.`,
             `"${patch.struggles[0]}" — that's the thing to outwork.`,
             `Obstacle saved: "${patch.struggles[0]}". I'll factor that in.`,
-            `"${patch.struggles[0]}" is on my radar now.`,
-            `I see "${patch.struggles[0]}" as the barrier. We'll plan around it.`,
-            `"${patch.struggles[0]}" — noted. I'll help you build around it.`,
-            `Obstacle tracked: "${patch.struggles[0]}". We'll strategize against it.`,
-            `"${patch.struggles[0]}" is the thing to beat. I'll keep that in mind.`,
-            `Barrier identified: "${patch.struggles[0]}". Knowing it is step one.`,
-            `"${patch.struggles[0]}" — that's the pattern we're breaking.`,
-            `Obstacle logged: "${patch.struggles[0]}". Now we can work with it.`,
-            `"${patch.struggles[0]}" — I'll reference this when coaching you.`,
-            `Your obstacle: "${patch.struggles[0]}". Naming it gives you power over it.`,
-            `"${patch.struggles[0]}" saved. Every plan we make accounts for this.`,
-            `Noted: "${patch.struggles[0]}". We'll plan our way around it.`,
           ];
           confirmLines.push(pick(obsConfirms));
         }
@@ -581,19 +739,7 @@ export async function registerRoutes(
           "What does action on this look like today?",
           "What's the first step you're taking?",
           "How are you going to start?",
-          "What's the smallest thing you can do right now to act on this?",
           "What comes next?",
-          "How will you make progress on this today?",
-          "What's one thing you can do before the day ends?",
-          "What's the most important action tied to this?",
-          "Ready to move on this — what's your first step?",
-          "What would progress look like by tonight?",
-          "What's one thing you can do in the next hour to act on this?",
-          "Where do you want to start?",
-          "What's the simplest version of the next step?",
-          "How will today be different because of this?",
-          "What will you do first?",
-          "If you could only take one action on this today, what would it be?",
         ];
         confirmLines.push(`\n${pick(saveFollowups)}`);
         jaeText = confirmLines.join("\n");
