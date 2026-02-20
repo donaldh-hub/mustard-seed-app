@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Plus, Camera, Image, X, Droplets, Loader2 } from "lucide-react";
+import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -23,7 +23,7 @@ export default function Chat() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
 
-  const { uploadFile, isUploading } = useUpload();
+  const { uploadFile, isUploading, status: uploadStatus, error: uploadError, cancel: cancelUpload, reset: resetUpload } = useUpload();
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -77,6 +77,9 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["garden", userId] });
       setPhotoPreview(null);
       setInput("");
+      resetUpload();
+    },
+    onError: () => {
     },
   });
 
@@ -88,6 +91,7 @@ export default function Chat() {
 
   const handleSend = () => {
     if (photoPreview) {
+      if (photoMutation.isPending || isUploading) return;
       photoMutation.mutate({ file: photoPreview.file, caption: input.trim() });
       return;
     }
@@ -97,12 +101,26 @@ export default function Chat() {
     sendMutation.mutate(text);
   };
 
+  const handleRetryPhoto = () => {
+    if (!photoPreview) return;
+    resetUpload();
+    photoMutation.reset();
+    photoMutation.mutate({ file: photoPreview.file, caption: input.trim() });
+  };
+
+  const handleCancelUpload = () => {
+    cancelUpload();
+    photoMutation.reset();
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
     if (file.size > 10 * 1024 * 1024) return;
 
+    resetUpload();
+    photoMutation.reset();
     const url = URL.createObjectURL(file);
     setPhotoPreview({ file, url });
     setShowAttach(false);
@@ -113,12 +131,17 @@ export default function Chat() {
     if (photoPreview) {
       URL.revokeObjectURL(photoPreview.url);
       setPhotoPreview(null);
+      resetUpload();
+      photoMutation.reset();
     }
   };
 
   if (!userId) return null;
 
-  const isBusy = sendMutation.isPending || photoMutation.isPending || isUploading;
+  const isPhotoProcessing = photoMutation.isPending || isUploading;
+  const isTextSending = sendMutation.isPending;
+  const photoFailed = photoMutation.isError || uploadStatus === "error";
+  const photoErrorMsg = uploadError?.message || photoMutation.error?.message || "Upload failed. Try again.";
 
   return (
     <div className="h-full flex flex-col bg-background relative">
@@ -225,7 +248,7 @@ export default function Chat() {
           ))}
         </AnimatePresence>
 
-        {isBusy && (
+        {isTextSending && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -236,7 +259,7 @@ export default function Chat() {
               <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
               <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce" />
             </div>
-            {photoMutation.isPending || isUploading ? "Uploading & analyzing..." : "Jae is thinking..."}
+            Jae is thinking...
           </motion.div>
         )}
       </div>
@@ -248,22 +271,70 @@ export default function Chat() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-primary shadow-md"
+              className="flex items-start gap-3"
             >
-              <img src={photoPreview.url} alt="Preview" className="w-full h-full object-cover" />
-              <button
-                onClick={clearPreview}
-                className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
-                data-testid="button-clear-preview"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-primary shadow-md shrink-0">
+                <img src={photoPreview.url} alt="Preview" className="w-full h-full object-cover" />
+                {isPhotoProcessing && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  </div>
+                )}
+                {!isPhotoProcessing && (
+                  <button
+                    onClick={clearPreview}
+                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
+                    data-testid="button-clear-preview"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-0">
+                {isPhotoProcessing && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Uploading & analyzing...</span>
+                    <button
+                      onClick={handleCancelUpload}
+                      className="text-xs text-red-500 flex items-center gap-1 hover:underline"
+                      data-testid="button-cancel-upload"
+                    >
+                      <Ban className="w-3 h-3" />
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {photoFailed && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-red-600" data-testid="text-upload-error">{photoErrorMsg}</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleRetryPhoto}
+                        className="text-xs text-primary flex items-center gap-1 hover:underline"
+                        data-testid="button-retry-upload"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Retry
+                      </button>
+                      <button
+                        onClick={clearPreview}
+                        className="text-xs text-muted-foreground hover:underline"
+                        data-testid="button-dismiss-upload"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         <AnimatePresence>
-          {showAttach && (
+          {showAttach && !isPhotoProcessing && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -300,7 +371,7 @@ export default function Chat() {
             variant="ghost"
             className="rounded-full h-12 w-12 shrink-0 border border-border shadow-sm bg-white hover:bg-muted"
             onClick={() => setShowAttach(!showAttach)}
-            disabled={isBusy}
+            disabled={isPhotoProcessing}
             data-testid="button-attach"
           >
             <Plus className={`w-5 h-5 transition-transform ${showAttach ? 'rotate-45' : ''}`} />
@@ -310,16 +381,21 @@ export default function Chat() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={photoPreview ? "Add a caption (optional)..." : "Type a message..."}
             className="rounded-full bg-white border border-border shadow-lg h-12 px-6 focus-visible:ring-1 focus-visible:ring-primary"
+            disabled={isPhotoProcessing}
             data-testid="input-chat"
           />
           <Button
             type="submit"
             size="icon"
             className="rounded-full h-12 w-12 shrink-0 bg-primary hover:bg-primary/90 shadow-md"
-            disabled={(!input.trim() && !photoPreview) || isBusy}
+            disabled={(!input.trim() && !photoPreview) || isPhotoProcessing || isTextSending}
             data-testid="button-send"
           >
-            <Send className="w-5 h-5" />
+            {isPhotoProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
           </Button>
         </form>
 

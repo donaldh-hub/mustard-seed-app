@@ -1,0 +1,79 @@
+TITLE: Fix Mobile Photo Upload Freeze (Stabilize Uploader + Prevent Full UI Lock)
+
+CURRENT BROKEN BEHAVIOR
+When uploading a photo (progress image, weigh-in image, or memory image) on mobile:
+- The app freezes during upload
+- UI becomes unresponsive
+- No visible loading state or timeout handling
+- Sometimes fake placeholder images appear
+- User cannot cancel or recover
+
+This is a stability issue. It must not freeze the entire app.
+
+GOAL
+Stabilize the uploader so:
+- Upload is isolated from main UI thread
+- UI remains responsive
+- Clear loading + error states exist
+- Users can retry or cancel
+- No fake placeholder images render
+
+REQUIREMENTS (NO NEW FEATURES — FIX EXISTING FLOW)
+
+1) Isolate Upload State
+   - Move upload into its own async function with proper try/catch
+   - Prevent blocking synchronous operations
+   - Never block main UI rendering while uploading
+
+2) Add Explicit Upload States
+   - idle
+   - uploading
+   - success
+   - error
+
+3) While uploading:
+   - Show spinner or progress indicator
+   - Disable only the upload button (NOT entire screen)
+   - Allow user to cancel upload
+
+4) Add Timeout Guard
+   - If upload exceeds reasonable threshold (e.g., 15 seconds), abort and return error state
+   - Show retry option
+
+5) Prevent Fake/Placeholder Images
+   - Only render image preview after successful upload response
+   - Do not render base64 temp images as permanent memory
+   - If upload fails, do NOT create memory entry
+
+6) Error Handling
+   - If upload fails:
+       - Show clear message (“Upload failed. Try again.”)
+       - Do not freeze
+       - Do not corrupt memory or water logic
+
+7) Safety
+   - Do NOT award water unless upload completes AND image is valid
+   - Do NOT affect existing goal logic
+   - Do NOT modify modal layering fixes
+
+ACCEPTANCE TESTS
+
+1) Mobile:
+   - Upload image
+   - UI stays responsive
+   - Spinner shows
+   - Upload completes
+   - Memory entry appears only after success
+
+2) Simulate failure (turn off WiFi mid-upload):
+   - Upload fails gracefully
+   - UI does NOT freeze
+   - Retry option appears
+   - No memory entry created
+
+3) Rapid multiple taps:
+   - Only one upload request processed
+   - No duplicate entries
+
+DELIVERABLE
+Refactor uploader to be fully async, non-blocking, state-driven, and resilient to failure without freezing the app.
