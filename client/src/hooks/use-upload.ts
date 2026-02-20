@@ -68,15 +68,16 @@ async function requestPresignedUrl(
 async function directPutToGCS(
   gcsUrl: string,
   file: File,
-  signal: AbortSignal
+  parentSignal: AbortSignal
 ): Promise<{ ok: true } | { ok: false; code: string; detail: string }> {
   const gcsHost = new URL(gcsUrl).hostname;
   const uploadMeta = `name=${file.name} type=${file.type} size=${file.size}bytes`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-  const combinedSignal = signal;
+  const onParentAbort = () => controller.abort();
+  parentSignal.addEventListener("abort", onParentAbort);
 
   try {
     const putRes = await fetch(gcsUrl, {
@@ -88,11 +89,7 @@ async function directPutToGCS(
       },
       signal: controller.signal,
     });
-    clearTimeout(timeout);
-
-    if (combinedSignal.aborted) {
-      return { ok: false, code: "ABORT", detail: "Cancelled" };
-    }
+    clearTimeout(timeoutId);
 
     if (!putRes.ok) {
       const putBody = await putRes.text().catch(() => "");
@@ -105,11 +102,16 @@ async function directPutToGCS(
 
     return { ok: true };
   } catch (putErr: any) {
-    clearTimeout(timeout);
+    clearTimeout(timeoutId);
+    if (parentSignal.aborted) {
+      return { ok: false, code: "ABORT", detail: "Cancelled by user" };
+    }
     if (putErr.name === "AbortError") {
-      return { ok: false, code: "DIRECT_PUT_TIMEOUT", detail: `PUT ${gcsHost} timed out. ${uploadMeta}` };
+      return { ok: false, code: "DIRECT_PUT_TIMEOUT", detail: `PUT ${gcsHost} timed out after 60s. ${uploadMeta}` };
     }
     return { ok: false, code: "DIRECT_PUT_FAILED", detail: `PUT ${gcsHost} failed: ${putErr.message}. ${uploadMeta}` };
+  } finally {
+    parentSignal.removeEventListener("abort", onParentAbort);
   }
 }
 
