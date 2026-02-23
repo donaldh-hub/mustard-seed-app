@@ -608,7 +608,7 @@ const QUESTION_GENERAL = [
   "What's the one thing you're avoiding that would actually help?",
   "What area of your life needs the most honesty right now?",
   "What drained your energy this week — and what refilled it?",
-  "If you were coaching yourself, what would you say?",
+  "If you had to be honest with yourself right now, what would you say?",
   "What would you need to let go of to move forward?",
   "What's one area where you're holding yourself to someone else's standard?",
   "What would today look like if you gave yourself full permission to try?",
