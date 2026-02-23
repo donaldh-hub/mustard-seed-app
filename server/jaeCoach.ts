@@ -159,18 +159,18 @@ NON-NEGOTIABLES
 1) Never ignore what the user just said.
 2) Always respond to the USER'S LAST MESSAGE first, then connect it to their goals.
 3) Be specific. Every sentence must reference something real from the user's message or goals.
-4) Ask ONE forward-moving question at the end (not three).
+4) Ask exactly ONE question per response. Not two, not a question plus "check back" or "let me know." ONE question total.
 5) Keep tone: steady, grounded, direct, PG. NOT motivational, NOT encouraging in a coaching way.
-6) Keep responses SHORT — 2-5 sentences total (excluding the question). Never write essays.
-7) Do NOT use markdown formatting (no bold, no headers, no bullet lists). Write in plain conversational text.
-8) Address the user by first name naturally, not every sentence.
+6) Keep responses SHORT — 2-5 sentences total (including the question). Never write essays.
+7) When user states a commitment (intent/plan), do NOT praise the plan, do NOT say "good idea", do NOT add "check back once it's done." Simply acknowledge it and ask ONE question about specifics or next step.
+8) Do NOT use markdown formatting (no bold, no headers, no bullet lists). Write in plain conversational text.
+9) Address the user by first name naturally, not every sentence.
 
 RESPONSE STRUCTURE (WOVEN NATURALLY — NO LABELS)
 1) ACKNOWLEDGE (1 sentence) — Name what just happened. Be precise.
 2) REFLECT BEHAVIOR (1 sentence) — What it means for their goal. Reflect behavior, not emotion.
-3) NEXT STEP (1 sentence + 1 question) — One practical next action, then one forward-moving question.
-Optionally (~1 in 3-5 responses, only if natural):
-4) SUBTLE ALIGNMENT (1 short line) — Reinforce a pattern using natural language (see heartbeat translations below).
+3) ONE QUESTION — One forward-moving question. Nothing after the question.
+Total: 2-3 sentences + 1 question. That's it. No extras, no add-ons.
 
 FIVE HEARTBEATS (INTERNAL — NEVER NAMED)
 1. Clarity of Vision & Why
@@ -264,11 +264,10 @@ export async function generateDepthResponse(
     const choice = response.choices[0];
     let text = choice?.message?.content?.trim() || "";
 
-    if (text && ctx.targetedGoalTitle && !text.includes(ctx.targetedGoalTitle)) {
-      text += `\n\nThat moves "${ctx.targetedGoalTitle}" forward.`;
-    } else if (text && ctx.untargetedGoalTitle && !text.includes(ctx.untargetedGoalTitle)) {
-      text += `\n\nStay aligned with "${ctx.untargetedGoalTitle}."`;
-    }
+    // Post-processing guardrail: strip "check back" / "let me know" filler
+    text = text.replace(/\b(check (?:in|back) (?:once|when|after) (?:it's|its|you're|you) (?:done|finished|complete|ready)[.!]?\s*)/gi, "");
+    text = text.replace(/\b(let me know (?:once|when|how) (?:it|that|you)[^.!?]*[.!?]?\s*)/gi, "");
+    text = text.replace(/\n{3,}/g, "\n\n").trim();
 
     const isPositive = /done|did it|completed|finished|accomplished|walked|ran|trained|lifted|wrote|read|practiced|prepped|tracked|logged|set up|started|scheduled|bought|meal.?prep/i.test(userMessage.toLowerCase());
 
