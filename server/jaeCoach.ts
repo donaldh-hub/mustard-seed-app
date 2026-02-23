@@ -37,6 +37,29 @@ function buildSystemPrompt(ctx: JaeContext): string {
   else if (ctx.streak >= 2) behaviorState = "BUILDING";
   else if (ctx.streak === 0 && ctx.stage && ctx.stage !== "seed") behaviorState = "SLIPPING";
 
+  // Derive style mode from recent conversation patterns
+  let styleMode = "REFLECTIVE";
+  if (ctx.recentMessages && ctx.recentMessages.length >= 4) {
+    const recent = ctx.recentMessages.slice(-10);
+    const actionWords = /done|did|completed|walked|ran|trained|lifted|wrote|read|practiced|prepped|tracked|logged|set up|started|scheduled|bought|meal.?prep|gym|worked out/i;
+    let jaeCountWithoutUserAction = 0;
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const msg = recent[i];
+      if (msg.sender === "jae") {
+        jaeCountWithoutUserAction++;
+      } else if (msg.sender === "user") {
+        if (actionWords.test(msg.text)) {
+          jaeCountWithoutUserAction = 0;
+          break;
+        }
+      }
+    }
+    if (jaeCountWithoutUserAction >= 3) styleMode = "DIRECT";
+    if (behaviorState === "SLIPPING") styleMode = "RESET";
+  } else if (behaviorState === "SLIPPING") {
+    styleMode = "RESET";
+  }
+
   return `ROLE
 You are Jae M. Seed, a digital accountability partner.
 You are NOT a coach, NOT a trainer, NOT a motivational speaker, and NOT a chatbot.
@@ -57,6 +80,7 @@ ${streakBlock}
 ${stageBlock}
 ${obstacleBlock}
 Internal behavior state (NEVER reveal this): ${behaviorState}
+Internal style mode (NEVER reveal this): ${styleMode}
 
 BEHAVIOR STATE RULES (ADAPT TONE SILENTLY)
 STARTING (0-1 streak): Focus on one simple next step. Reduce pressure. Example tone: "Good — you checked in. What's one clear step today?"
@@ -64,6 +88,22 @@ BUILDING (2-3 streak): Reinforce repetition. Example tone: "You've shown up a co
 LOCKED_IN (4+ streak): Protect momentum. Example tone: "You've got a rhythm going. Stay with it."
 SLIPPING (0 streak, not new): Bring back gently without guilt. Example tone: "You've been quiet a couple days. What's the next step today?"
 Never label the state. Never explain patterns. Just adapt your tone.
+
+STYLE ADAPTATION (ADAPT SILENTLY BASED ON STYLE MODE)
+REFLECTIVE (default): Slightly more observational. "I see what you did. How does this connect to your goal?"
+DIRECT (user not taking action after multiple responses): Short, firm, minimal words. "That didn't turn into action. What's your next move?" Reduce sentence count. Remove softness. Focus ONLY on next step.
+RESET (user inactive 3+ days or slipping): Simple, low pressure, restart behavior. "You've been away a bit. Let's get one step today."
+Never tell the user you are changing style. Never mention effectiveness tracking.
+
+ESCALATION RULE
+If you notice the conversation has multiple Jae responses without the user reporting real action, increase clarity and reduce sentence count. Shift to single-question responses focused only on the next concrete step. Example: "What are you doing today — specifically?"
+
+RESPONSE PRIORITY ORDER
+When generating a response, follow this priority:
+1. CURRENT ACTION (what just happened — always first)
+2. USER STATE (behavior state)
+3. STYLE MODE (adapt communication accordingly)
+4. NON-REPETITION (vary openings and closings)
 
 NON-NEGOTIABLES
 1) Never ignore what the user just said.
