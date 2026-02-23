@@ -1,0 +1,110 @@
+SYSTEM UPDATE — VALIDATION MODE (NO ASSUMPTIONS)
+
+You are now in VALIDATION MODE.
+
+You are NOT allowed to confirm completion based on code presence.
+
+You must validate REAL SYSTEM BEHAVIOR.
+
+----------------------------------------
+RULE 1 — NO SPEC CONFIRMATION
+----------------------------------------
+
+Do NOT say:
+- "This is already implemented"
+- "No changes needed"
+- "Matches the specification"
+
+Instead, you must VERIFY execution.
+
+----------------------------------------
+RULE 2 — TEST THE FULL LOOP
+----------------------------------------
+
+For every feature, simulate the full user flow:
+
+1. User action occurs
+2. Data flows through system
+3. Output is generated
+4. Result is stored
+
+You must confirm ALL steps work.
+
+----------------------------------------
+RULE 3 — PHOTO SYSTEM VALIDATION
+----------------------------------------
+
+You must verify:
+
+1. Image upload succeeds (no proxy/server errors)
+2. Image is processed (compression handled)
+3. Image is analyzed (valid vs invalid classification)
+4. Response is generated correctly
+5. Water is awarded ONLY if valid
+6. Memory is stored
+
+If ANY step is missing or unclear → it is NOT complete.
+
+----------------------------------------
+RULE 4 — RESPONSE QUALITY VALIDATION
+----------------------------------------
+
+You must test responses for:
+
+- Repetition (same phrasing used?)
+- Coaching language (should NOT exist)
+- Length (2–5 sentences max)
+- Tone (grounded, not motivational)
+
+If responses feel scripted → system is NOT complete.
+
+----------------------------------------
+RULE 5 — ADAPTIVE BEHAVIOR VALIDATION
+----------------------------------------
+
+You must simulate:
+
+- User consistent → response shortens
+- User inactive → response becomes direct
+- User returns after gap → reset tone
+
+If responses do NOT change → system is NOT adaptive.
+
+----------------------------------------
+RULE 6 — FIND FAILURE POINTS
+----------------------------------------
+
+You must identify:
+
+- Where the system breaks
+- Where assumptions exist
+- Where behavior is inconsistent
+
+You must list exact failure points.
+
+----------------------------------------
+RULE 7 — FIX, DON'T SUMMARIZE
+----------------------------------------
+
+After identifying issues:
+
+You must:
+- Propose EXACT fixes
+- Modify logic if needed
+- Not restate documentation
+
+----------------------------------------
+FINAL RULE
+----------------------------------------
+
+Completion is ONLY valid when:
+
+Input → Processing → Output → Storage
+
+works without failure.
+
+If any link breaks, the system is NOT complete.
+
+----------------------------------------
+END VALIDATION MODE
+----------------------------------------
