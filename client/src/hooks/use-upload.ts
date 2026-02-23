@@ -264,7 +264,17 @@ export function useUpload(options: UseUploadOptions = {}) {
         try {
           compressed = await compressImage(rawFile);
           setCompressInfo(compressed);
-          console.log(`[upload:${currentAttemptId}] COMPRESSED: original=${compressed.originalSize} result=${compressed.compressedSize} serverCompress=${!!compressed.needsServerCompress}`);
+          console.log(`[upload:${currentAttemptId}] OPTIMIZATION RESULT:`, {
+            original_size_bytes: compressed.originalSize,
+            optimized_size_bytes: compressed.compressedSize,
+            upload_payload_size_bytes: compressed.file.size,
+            optimized_dimensions: `${compressed.width}x${compressed.height}`,
+            needsServerCompress: !!compressed.needsServerCompress,
+            wasFallback: !!compressed.wasFallback,
+            reduction: compressed.originalSize > compressed.compressedSize
+              ? `${(((compressed.originalSize - compressed.compressedSize) / compressed.originalSize) * 100).toFixed(0)}%`
+              : "none (server will compress)"
+          });
         } catch (compErr: any) {
           fail(compErr.message || "Failed to process image", "COMPRESS_FAILED", false, fileMeta);
           return null;

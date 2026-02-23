@@ -4,29 +4,41 @@ import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "
 import { randomUUID } from "crypto";
 
 const MAX_UPLOAD_DIMENSION = 1280;
-const MAX_COMPRESSED_BYTES = 1.5 * 1024 * 1024;
+const TARGET_COMPRESSED_BYTES = 900 * 1024;
 
 async function compressWithSharp(buffer: Buffer, mimetype: string): Promise<{ data: Buffer; contentType: string }> {
+  const originalSize = buffer.length;
   let pipeline = sharp(buffer).rotate();
 
   const metadata = await pipeline.metadata();
   const { width, height } = metadata;
+  const origDims = `${width || 0}x${height || 0}`;
 
   if (width && height && (width > MAX_UPLOAD_DIMENSION || height > MAX_UPLOAD_DIMENSION)) {
     pipeline = pipeline.resize(MAX_UPLOAD_DIMENSION, MAX_UPLOAD_DIMENSION, { fit: "inside", withoutEnlargement: true });
   }
 
-  pipeline = pipeline.jpeg({ quality: 80, mozjpeg: true });
-
+  pipeline = pipeline.jpeg({ quality: 75, mozjpeg: true });
   let result = await pipeline.toBuffer();
 
-  if (result.length > MAX_COMPRESSED_BYTES) {
+  if (result.length > TARGET_COMPRESSED_BYTES) {
     result = await sharp(buffer)
       .rotate()
       .resize(MAX_UPLOAD_DIMENSION, MAX_UPLOAD_DIMENSION, { fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 60, mozjpeg: true })
+      .jpeg({ quality: 55, mozjpeg: true })
       .toBuffer();
   }
+
+  if (result.length > TARGET_COMPRESSED_BYTES) {
+    result = await sharp(buffer)
+      .rotate()
+      .resize(960, 960, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 45, mozjpeg: true })
+      .toBuffer();
+  }
+
+  const finalMeta = await sharp(result).metadata();
+  console.log(`[sharp] original=${(originalSize / 1024).toFixed(0)}KB (${origDims}) → compressed=${(result.length / 1024).toFixed(0)}KB (${finalMeta.width}x${finalMeta.height})`);
 
   return { data: result, contentType: "image/jpeg" };
 }

@@ -1,0 +1,95 @@
+SYSTEM ROLE: You are responsible for eliminating PROXY_UPLOAD_FAILED by enforcing pre-upload optimization and ensuring the upload payload is NEVER the original large file. You do not explain. You implement and verify.
+
+OBJECTIVE:
+Fix photo uploads that fail with "Image is 5.6MB" and [PROXY_UPLOAD_FAILED] by:
+1) enforcing client-side optimization BEFORE upload
+2) guaranteeing the actual upload request uses the optimized file (payload replacement)
+3) adding verification logs of original vs optimized size
+4) adding an automatic fallback upload path if proxy still fails
+
+---------------------------------------
+CONFIRMED BUG:
+
+Uploads still fail with:
+"Upload failed. Image is 5.6MB — try a smaller photo."
+[PROXY_UPLOAD_FAILED]
+
+This proves the system is uploading the ORIGINAL file, not an optimized one.
+
+---------------------------------------
+NON-NEGOTIABLE REQUIREMENTS:
+
+A) PRE-UPLOAD OPTIMIZATION MUST RUN BEFORE ANY UPLOAD ATTEMPT
+- Downscale and compress immediately after image selection
+- Produce an optimized asset (new uri/blob/file)
+- Store optimized asset in persistent state
+
+B) PAYLOAD REPLACEMENT (CRITICAL)
+- The upload request MUST use ONLY the optimized asset
+- The original asset must never be passed to the upload function
+- Block upload if optimized asset does not exist
+
+C) SIZE TARGETS
+- Hard max size to attempt upload: 900KB
+- Max width: 1280px
+- JPEG compression quality: 0.7–0.8
+- Strip EXIF/metadata
+
+D) VERIFICATION (REQUIRED FOR TESTING)
+Log (internally) at upload time:
+- original_size_bytes
+- optimized_size_bytes
+- original_dimensions
+- optimized_dimensions
+- upload_payload_size_bytes
+If optimized_size_bytes is not smaller than original, optimization is broken.
+
+E) UI/TRUTHFUL STATUS
+- Do NOT show "Photo uploaded" until the server confirms success.
+- While processing: show "Uploading..." only.
+- On failure: show error + Retry, and keep the optimized asset for retry.
+
+---------------------------------------
+FALLBACK (ONLY IF PROXY STILL FAILS AFTER OPTIMIZATION):
+
+If optimized upload still returns PROXY_UPLOAD_FAILED:
+- Automatically switch to a fallback upload method that bypasses the proxy bottleneck.
+Examples of acceptable fallbacks:
+1) direct-to-storage upload using signed URL
+2) chunked/resumable upload
+3) alternate endpoint not routed through proxy
+
+Fallback must be automatic; user should not have to retake or resize.
+
+---------------------------------------
+RETRY REQUIREMENTS:
+
+- Retry must reuse the optimized asset (no re-selection)
+- Retry must not re-run optimization unless the optimized asset is missing
+- If fallback was triggered once, retry should use fallback path by default
+
+---------------------------------------
+VALIDATION TESTS (MUST PASS):
+
+Test 1 (Large file):
+Select a 5MB+ image -> optimization runs -> upload payload is < 900KB -> upload succeeds
+
+Test 2 (Verify replacement):
+Confirm via logs that upload_payload_size_bytes == optimized_size_bytes (not original)
+
+Test 3 (No user resizing):
+User never sees "try a smaller photo" message again
+
+Test 4 (Proxy failure fallback):
+Force proxy fail -> fallback triggers -> upload succeeds without user action
+
+---------------------------------------
+CONSTRAINTS:
+
+- Do NOT change reward rules
+- Do NOT change AI response tone
+- Do NOT redesign UI
+- Only fix optimization, payload replacement, truthful status, and fallback
+
+---------------------------------------
+EXECUTE FIX.

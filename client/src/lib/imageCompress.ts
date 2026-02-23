@@ -1,9 +1,8 @@
 const MAX_DIMENSION = 1280;
-const INITIAL_QUALITY = 0.80;
-const TARGET_SIZE = 2 * 1024 * 1024;
+const INITIAL_QUALITY = 0.75;
+const TARGET_SIZE = 900 * 1024;
 const ABSOLUTE_MAX = 10 * 1024 * 1024;
 const FALLBACK_MAX = 10 * 1024 * 1024;
-const SERVER_COMPRESS_THRESHOLD = 2 * 1024 * 1024;
 
 export interface CompressResult {
   file: File;
