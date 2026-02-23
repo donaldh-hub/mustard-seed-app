@@ -1,5 +1,4 @@
 import express, { type Express } from "express";
-import multer from "multer";
 import sharp from "sharp";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { randomUUID } from "crypto";
@@ -128,177 +127,6 @@ export function registerObjectStorageRoutes(app: Express): void {
     }
   });
 
-  const proxyUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 },
-    fileFilter: (_req, file, cb) => {
-      const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
-      if (allowed.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new Error("Unsupported file type"));
-      }
-    },
-  });
-
-  let proxyHitCount = 0;
-
-  app.post("/api/uploads/proxy", proxyUpload.single("file"), async (req, res) => {
-    proxyHitCount++;
-    const hitNum = proxyHitCount;
-    const startTime = Date.now();
-    const userAgent = (req.get("user-agent") || "unknown").substring(0, 80);
-
-    try {
-      const file = req.file;
-      if (!file) {
-        console.log(`[PROXY #${hitNum}] No file in request body. ua=${userAgent}`);
-        return res.status(400).json({ ok: false, error: "No file uploaded", code: "NO_FILE" });
-      }
-
-      console.log(`[PROXY #${hitNum}] Received: name=${file.originalname} size=${file.size} (${(file.size / 1024 / 1024).toFixed(2)}MB) type=${file.mimetype} ua=${userAgent}`);
-
-      if (file.size > 10 * 1024 * 1024) {
-        console.log(`[PROXY #${hitNum}] Rejected: file too large after multer (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
-        return res.status(413).json({ ok: false, error: "File too large", code: "FILE_TOO_LARGE" });
-      }
-
-      let uploadBuffer = file.buffer;
-      let uploadContentType = file.mimetype;
-
-      if (file.size > 1.5 * 1024 * 1024) {
-        try {
-          console.log(`[PROXY #${hitNum}] Compressing with sharp: ${(file.size / 1024).toFixed(0)}KB`);
-          const compressed = await compressWithSharp(file.buffer, file.mimetype);
-          uploadBuffer = compressed.data;
-          uploadContentType = compressed.contentType;
-          console.log(`[PROXY #${hitNum}] Compressed: ${(file.size / 1024).toFixed(0)}KB -> ${(uploadBuffer.length / 1024).toFixed(0)}KB`);
-        } catch (compErr: any) {
-          console.warn(`[PROXY #${hitNum}] Sharp compression failed: ${compErr.message}. Uploading original.`);
-        }
-      }
-
-      const privateDir = objectStorageService.getPrivateObjectDir();
-      const objectId = randomUUID();
-      const fullPath = `${privateDir}/uploads/${objectId}`;
-
-      const pathParts = fullPath.startsWith("/") ? fullPath.slice(1).split("/") : fullPath.split("/");
-      const bucketName = pathParts[0];
-      const objectName = pathParts.slice(1).join("/");
-
-      const bucket = objectStorageClient.bucket(bucketName);
-      const gcsFile = bucket.file(objectName);
-
-      await new Promise<void>((resolve, reject) => {
-        const stream = gcsFile.createWriteStream({
-          resumable: false,
-          contentType: uploadContentType,
-          metadata: { contentType: uploadContentType },
-        });
-        stream.on("error", (err) => reject(err));
-        stream.on("finish", () => resolve());
-        stream.end(uploadBuffer);
-      });
-
-      const objectPath = `/objects/uploads/${objectId}`;
-      const elapsed = Date.now() - startTime;
-      console.log(`[PROXY #${hitNum}] OK: objectPath=${objectPath} original=${file.size} stored=${uploadBuffer.length} ${elapsed}ms`);
-
-      res.json({
-        ok: true,
-        objectPath,
-        contentType: uploadContentType,
-        size: uploadBuffer.length,
-      });
-    } catch (err: any) {
-      const elapsed = Date.now() - startTime;
-      const fileName = req.file?.originalname || "unknown";
-      const fileSize = req.file?.size || 0;
-      const fileType = req.file?.mimetype || "unknown";
-      console.error(`[PROXY #${hitNum}] ERROR (${elapsed}ms): name=${fileName} size=${fileSize} type=${fileType} err=${err?.message || err}`);
-      res.status(500).json({ ok: false, error: "Server upload failed", code: "PROXY_UPLOAD_FAILED" });
-    }
-  });
-
-  const rawBodyParser = express.raw({ type: ["image/*", "application/octet-stream"], limit: "10mb" });
-
-  let rawHitCount = 0;
-
-  app.post("/api/uploads/proxy-raw", rawBodyParser, async (req, res) => {
-    rawHitCount++;
-    const hitNum = rawHitCount;
-    const startTime = Date.now();
-    const userAgent = (req.get("user-agent") || "unknown").substring(0, 80);
-    const originalName = req.get("x-original-name") || "upload.jpg";
-    const contentType = req.get("content-type") || "image/jpeg";
-
-    try {
-      const rawBuffer = req.body as Buffer;
-      if (!rawBuffer || rawBuffer.length === 0) {
-        console.log(`[RAW-PROXY #${hitNum}] No body received. ua=${userAgent}`);
-        return res.status(400).json({ ok: false, error: "No file data", code: "NO_FILE" });
-      }
-
-      console.log(`[RAW-PROXY #${hitNum}] Received: name=${originalName} size=${rawBuffer.length} (${(rawBuffer.length / 1024 / 1024).toFixed(2)}MB) type=${contentType} ua=${userAgent}`);
-
-      if (rawBuffer.length > 10 * 1024 * 1024) {
-        return res.status(413).json({ ok: false, error: "File too large", code: "FILE_TOO_LARGE" });
-      }
-
-      let uploadBuffer = rawBuffer;
-      let uploadContentType = contentType;
-
-      if (rawBuffer.length > 1.5 * 1024 * 1024) {
-        try {
-          console.log(`[RAW-PROXY #${hitNum}] Compressing with sharp: ${(rawBuffer.length / 1024).toFixed(0)}KB`);
-          const compressed = await compressWithSharp(rawBuffer, contentType);
-          uploadBuffer = compressed.data;
-          uploadContentType = compressed.contentType;
-          console.log(`[RAW-PROXY #${hitNum}] Compressed: ${(rawBuffer.length / 1024).toFixed(0)}KB -> ${(uploadBuffer.length / 1024).toFixed(0)}KB`);
-        } catch (compErr: any) {
-          console.warn(`[RAW-PROXY #${hitNum}] Sharp compression failed: ${compErr.message}. Uploading original.`);
-        }
-      }
-
-      const privateDir = objectStorageService.getPrivateObjectDir();
-      const objectId = randomUUID();
-      const fullPath = `${privateDir}/uploads/${objectId}`;
-
-      const pathParts = fullPath.startsWith("/") ? fullPath.slice(1).split("/") : fullPath.split("/");
-      const bucketName = pathParts[0];
-      const objectName = pathParts.slice(1).join("/");
-
-      const bucket = objectStorageClient.bucket(bucketName);
-      const gcsFile = bucket.file(objectName);
-
-      await new Promise<void>((resolve, reject) => {
-        const stream = gcsFile.createWriteStream({
-          resumable: false,
-          contentType: uploadContentType,
-          metadata: { contentType: uploadContentType },
-        });
-        stream.on("error", (err) => reject(err));
-        stream.on("finish", () => resolve());
-        stream.end(uploadBuffer);
-      });
-
-      const objectPath = `/objects/uploads/${objectId}`;
-      const elapsed = Date.now() - startTime;
-      console.log(`[RAW-PROXY #${hitNum}] OK: objectPath=${objectPath} original=${rawBuffer.length} stored=${uploadBuffer.length} ${elapsed}ms`);
-
-      res.json({
-        ok: true,
-        objectPath,
-        contentType: uploadContentType,
-        size: uploadBuffer.length,
-      });
-    } catch (err: any) {
-      const elapsed = Date.now() - startTime;
-      console.error(`[RAW-PROXY #${hitNum}] ERROR (${elapsed}ms): ${err?.message || err}`);
-      res.status(500).json({ ok: false, error: "Server upload failed", code: "RAW_PROXY_UPLOAD_FAILED" });
-    }
-  });
-
   const MAX_PENDING_UPLOADS = 10;
   const MAX_TOTAL_FILE_SIZE = 10 * 1024 * 1024;
   const MAX_CHUNKS_PER_UPLOAD = 12;
@@ -307,8 +135,10 @@ export function registerObjectStorageRoutes(app: Express): void {
 
   setInterval(() => {
     const now = Date.now();
-    for (const [id, data] of pendingChunks) {
-      if (now - data.createdAt > 5 * 60 * 1000) pendingChunks.delete(id);
+    const ids = Array.from(pendingChunks.keys());
+    for (const id of ids) {
+      const data = pendingChunks.get(id);
+      if (data && now - data.createdAt > 5 * 60 * 1000) pendingChunks.delete(id);
     }
   }, 60000);
 
@@ -377,18 +207,18 @@ export function registerObjectStorageRoutes(app: Express): void {
 
       console.log(`[CHUNK] Assembled: ${(fullBuffer.length / 1024).toFixed(0)}KB from ${totalChunks} chunks`);
 
-      let uploadBuffer = fullBuffer;
-      let uploadContentType = contentType;
+      let uploadBuffer: Buffer;
+      let uploadContentType: string;
 
-      if (fullBuffer.length > 1.5 * 1024 * 1024) {
-        try {
-          const compressed = await compressWithSharp(fullBuffer, contentType);
-          uploadBuffer = compressed.data;
-          uploadContentType = compressed.contentType;
-          console.log(`[CHUNK] Compressed: ${(fullBuffer.length / 1024).toFixed(0)}KB -> ${(uploadBuffer.length / 1024).toFixed(0)}KB`);
-        } catch (compErr: any) {
-          console.warn(`[CHUNK] Sharp failed: ${compErr.message}. Using original.`);
-        }
+      try {
+        console.log(`[CHUNK] Compressing with sharp: ${(fullBuffer.length / 1024).toFixed(0)}KB`);
+        const compressed = await compressWithSharp(fullBuffer, contentType);
+        uploadBuffer = compressed.data;
+        uploadContentType = compressed.contentType;
+        console.log(`[CHUNK] Compressed: ${(fullBuffer.length / 1024).toFixed(0)}KB -> ${(uploadBuffer.length / 1024).toFixed(0)}KB`);
+      } catch (compErr: any) {
+        console.error(`[CHUNK] Sharp compression failed: ${compErr.message}. Rejecting upload.`);
+        return res.status(422).json({ ok: false, error: "Server could not process this image format. Please try a different photo." });
       }
 
       const privateDir = objectStorageService.getPrivateObjectDir();

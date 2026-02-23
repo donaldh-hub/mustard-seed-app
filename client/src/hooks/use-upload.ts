@@ -120,56 +120,9 @@ async function directPutToGCS(
   }
 }
 
-async function proxyUploadRaw(
-  file: File,
-  parentSignal: AbortSignal
-): Promise<{ ok: true; objectPath: string } | { ok: false; code: string; detail: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120000);
-  const onParentAbort = () => controller.abort();
-  parentSignal.addEventListener("abort", onParentAbort);
-
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-
-    const res = await fetch("/api/uploads/proxy-raw", {
-      method: "POST",
-      headers: {
-        "Content-Type": file.type || "application/octet-stream",
-        "X-Original-Name": file.name,
-      },
-      body: arrayBuffer,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({ error: "Proxy error" }));
-      return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Raw proxy HTTP ${res.status}: ${JSON.stringify(errData)}` };
-    }
-
-    const data = await res.json();
-    if (!data.ok || !data.objectPath) {
-      return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Raw proxy invalid response: ${JSON.stringify(data)}` };
-    }
-
-    return { ok: true, objectPath: data.objectPath };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-    if (err.name === "AbortError") return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: "Raw proxy upload timed out after 120s" };
-    return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Raw proxy fetch failed: ${err.message}` };
-  } finally {
-    parentSignal.removeEventListener("abort", onParentAbort);
-  }
-}
-
 const CHUNK_SIZE = 1024 * 1024;
 
-async function proxyUploadChunked(
+async function serverCompressUpload(
   file: File,
   parentSignal: AbortSignal
 ): Promise<{ ok: true; objectPath: string } | { ok: false; code: string; detail: string }> {
@@ -178,7 +131,7 @@ async function proxyUploadChunked(
     const totalChunks = Math.ceil(totalBytes / CHUNK_SIZE);
     const uploadId = `chu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    console.log(`[chunked] Starting: ${totalChunks} chunks of ${(CHUNK_SIZE / 1024).toFixed(0)}KB each, total=${(totalBytes / 1024).toFixed(0)}KB`);
+    console.log(`[server-compress] Starting: ${totalChunks} chunks, total=${(totalBytes / 1024).toFixed(0)}KB`);
 
     let lastResponse: any = null;
 
@@ -213,72 +166,29 @@ async function proxyUploadChunked(
         parentSignal.removeEventListener("abort", onParentAbort);
 
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({ error: "Chunk error" }));
-          return { ok: false, code: "CHUNK_UPLOAD_FAILED", detail: `Chunk ${i + 1}/${totalChunks} HTTP ${res.status}: ${JSON.stringify(errData)}` };
+          const errData = await res.json().catch(() => ({ error: "Upload error" }));
+          return { ok: false, code: "SERVER_COMPRESS_FAILED", detail: `Chunk ${i + 1}/${totalChunks} HTTP ${res.status}: ${JSON.stringify(errData)}` };
         }
 
         lastResponse = await res.json();
-        console.log(`[chunked] Chunk ${i + 1}/${totalChunks} OK`);
+        console.log(`[server-compress] Chunk ${i + 1}/${totalChunks} OK`);
       } catch (err: any) {
         clearTimeout(timeoutId);
         parentSignal.removeEventListener("abort", onParentAbort);
         if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-        return { ok: false, code: "CHUNK_UPLOAD_FAILED", detail: `Chunk ${i + 1}/${totalChunks} failed: ${err.message}` };
+        return { ok: false, code: "SERVER_COMPRESS_FAILED", detail: `Chunk ${i + 1}/${totalChunks} failed: ${err.message}` };
       }
     }
 
     if (lastResponse?.complete && lastResponse?.objectPath) {
-      console.log(`[chunked] Complete: ${lastResponse.objectPath}`);
+      console.log(`[server-compress] Complete: ${lastResponse.objectPath}`);
       return { ok: true, objectPath: lastResponse.objectPath };
     }
 
-    return { ok: false, code: "CHUNK_UPLOAD_FAILED", detail: `Upload incomplete: ${JSON.stringify(lastResponse)}` };
+    return { ok: false, code: "SERVER_COMPRESS_FAILED", detail: `Upload incomplete: ${JSON.stringify(lastResponse)}` };
   } catch (err: any) {
     if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-    return { ok: false, code: "CHUNK_UPLOAD_FAILED", detail: `Chunked upload error: ${err.message}` };
-  }
-}
-
-async function proxyUploadFormData(
-  file: File,
-  parentSignal: AbortSignal
-): Promise<{ ok: true; objectPath: string } | { ok: false; code: string; detail: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 90000);
-  const onParentAbort = () => controller.abort();
-  parentSignal.addEventListener("abort", onParentAbort);
-
-  try {
-    const formData = new FormData();
-    formData.append("file", file, file.name);
-
-    const res = await fetch("/api/uploads/proxy", {
-      method: "POST",
-      body: formData,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({ error: "Proxy error" }));
-      return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Proxy HTTP ${res.status}: ${JSON.stringify(errData)}` };
-    }
-
-    const data = await res.json();
-    if (!data.ok || !data.objectPath) {
-      return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Proxy returned invalid response: ${JSON.stringify(data)}` };
-    }
-
-    return { ok: true, objectPath: data.objectPath };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    if (parentSignal.aborted) return { ok: false, code: "CANCELED_BY_USER", detail: "Cancelled by user" };
-    if (err.name === "AbortError") return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: "Proxy upload timed out after 90s" };
-    return { ok: false, code: "PROXY_UPLOAD_FAILED", detail: `Proxy fetch failed: ${err.message}` };
-  } finally {
-    parentSignal.removeEventListener("abort", onParentAbort);
+    return { ok: false, code: "SERVER_COMPRESS_FAILED", detail: `Server compress upload error: ${err.message}` };
   }
 }
 
@@ -354,7 +264,7 @@ export function useUpload(options: UseUploadOptions = {}) {
         try {
           compressed = await compressImage(rawFile);
           setCompressInfo(compressed);
-          console.log(`[upload:${currentAttemptId}] PREPARED: original=${compressed.originalSize} compressed=${compressed.compressedSize} fallback=${!!compressed.wasFallback}`);
+          console.log(`[upload:${currentAttemptId}] COMPRESSED: original=${compressed.originalSize} result=${compressed.compressedSize} serverCompress=${!!compressed.needsServerCompress}`);
         } catch (compErr: any) {
           fail(compErr.message || "Failed to process image", "COMPRESS_FAILED", false, fileMeta);
           return null;
@@ -362,108 +272,67 @@ export function useUpload(options: UseUploadOptions = {}) {
 
         if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
 
-        const file = compressed.file;
-        const uploadMeta = `name=${file.name} type=${file.type} size=${file.size}bytes`;
-        const skipDirectPut = !!compressed.needsServerCompress;
-
         let objectPath: string | null = null;
 
-        // ─── PRESIGN + DIRECT PUT (skip if needs server compression) ───
-        if (skipDirectPut) {
-          console.log(`[upload:${currentAttemptId}] Skipping direct PUT — needs server compression`);
+        if (compressed.needsServerCompress) {
+          // ─── PATH 2: SERVER COMPRESSION (chunked upload → server compresses → stores) ───
+          setPhase("UPLOADING_PROXY");
+          setProgress(20);
+          console.log(`[upload:${currentAttemptId}] PATH 2: Server compression via chunked upload`);
+
+          const result = await serverCompressUpload(compressed.file, signal);
+          if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
+
+          if (result.ok) {
+            objectPath = result.objectPath;
+            setUploadMethod("proxy");
+            console.log(`[upload:${currentAttemptId}] SERVER COMPRESS OK: ${objectPath}`);
+          } else {
+            console.error(`[upload:${currentAttemptId}] SERVER COMPRESS FAIL: [${result.code}] ${result.detail}`);
+            fail("Upload failed. Tap Retry to try again.", result.code, true, result.detail);
+            return null;
+          }
         } else {
+          // ─── PATH 1: CLIENT COMPRESSED → DIRECT PUT ───
+          const file = compressed.file;
           setPhase("PRESIGNING");
           setProgress(10);
+          console.log(`[upload:${currentAttemptId}] PATH 1: Client compressed (${(file.size / 1024).toFixed(0)}KB) → direct PUT`);
 
-          const presign1 = await requestPresignedUrl(file, signal);
+          const presign = await requestPresignedUrl(file, signal);
           if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
 
-          if (presign1.ok) {
-            setPhase("UPLOADING_DIRECT");
-            setProgress(25);
-            console.log(`[upload:${currentAttemptId}] DIRECT PUT attempt 1`);
-
-            const put1 = await directPutToGCS(presign1.data.uploadURL, file, signal);
-            if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
-
-            if (put1.ok) {
-              objectPath = presign1.data.objectPath;
-              setUploadMethod("direct");
-              console.log(`[upload:${currentAttemptId}] DIRECT PUT 1 OK: ${objectPath}`);
-            } else {
-              console.warn(`[upload:${currentAttemptId}] DIRECT PUT 1 FAIL: [${put1.code}] ${put1.detail}`);
-              if (put1.code !== "CANCELED_BY_USER") {
-                console.log(`[upload:${currentAttemptId}] Retrying with fresh presigned URL`);
-                setProgress(30);
-                const presign2 = await requestPresignedUrl(file, signal);
-                if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
-
-                if (presign2.ok) {
-                  const put2 = await directPutToGCS(presign2.data.uploadURL, file, signal);
-                  if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
-
-                  if (put2.ok) {
-                    objectPath = presign2.data.objectPath;
-                    setUploadMethod("direct");
-                    console.log(`[upload:${currentAttemptId}] DIRECT PUT 2 OK: ${objectPath}`);
-                  } else {
-                    console.warn(`[upload:${currentAttemptId}] DIRECT PUT 2 FAIL: [${put2.code}] ${put2.detail}`);
-                  }
-                } else {
-                  console.warn(`[upload:${currentAttemptId}] PRESIGN 2 FAIL: [${presign2.error.code}]`);
-                }
-              }
-            }
-          } else {
-            console.warn(`[upload:${currentAttemptId}] PRESIGN FAIL: [${presign1.error.code}] ${presign1.error.details}`);
+          if (!presign.ok) {
+            fail(presign.error.message, presign.error.code, presign.error.retryable, presign.error.details);
+            return null;
           }
-        }
 
-        if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
+          setPhase("UPLOADING_DIRECT");
+          setProgress(30);
 
-        // ─── PROXY FALLBACK (or primary path for server-compressed files) ───
-        if (!objectPath) {
-          setPhase("UPLOADING_PROXY");
-          setProgress(40);
-          console.log(`[upload:${currentAttemptId}] RAW PROXY upload. ${uploadMeta}`);
-
-          const rawResult = await proxyUploadRaw(file, signal);
+          const putResult = await directPutToGCS(presign.data.uploadURL, file, signal);
           if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
 
-          if (rawResult.ok) {
-            objectPath = rawResult.objectPath;
-            setUploadMethod("proxy");
-            console.log(`[upload:${currentAttemptId}] RAW PROXY OK: ${objectPath}`);
+          if (putResult.ok) {
+            objectPath = presign.data.objectPath;
+            setUploadMethod("direct");
+            console.log(`[upload:${currentAttemptId}] DIRECT PUT OK: ${objectPath}`);
           } else {
-            console.warn(`[upload:${currentAttemptId}] RAW PROXY FAIL: [${rawResult.code}] ${rawResult.detail}. Trying chunked upload...`);
+            console.warn(`[upload:${currentAttemptId}] DIRECT PUT FAIL: ${putResult.detail}. Falling back to server compression.`);
 
-            const chunkedResult = await proxyUploadChunked(file, signal);
+            setPhase("UPLOADING_PROXY");
+            setProgress(40);
+
+            const serverResult = await serverCompressUpload(file, signal);
             if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
 
-            if (chunkedResult.ok) {
-              objectPath = chunkedResult.objectPath;
+            if (serverResult.ok) {
+              objectPath = serverResult.objectPath;
               setUploadMethod("proxy");
-              console.log(`[upload:${currentAttemptId}] CHUNKED UPLOAD OK: ${objectPath}`);
+              console.log(`[upload:${currentAttemptId}] SERVER COMPRESS FALLBACK OK: ${objectPath}`);
             } else {
-              console.warn(`[upload:${currentAttemptId}] CHUNKED FAIL: [${chunkedResult.code}] ${chunkedResult.detail}. Trying FormData proxy...`);
-
-              const formResult = await proxyUploadFormData(file, signal);
-              if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
-
-              if (formResult.ok) {
-                objectPath = formResult.objectPath;
-                setUploadMethod("proxy");
-                console.log(`[upload:${currentAttemptId}] FORMDATA PROXY OK: ${objectPath}`);
-              } else {
-                console.error(`[upload:${currentAttemptId}] ALL PROXY METHODS FAILED: [${formResult.code}] ${formResult.detail}`);
-                fail(
-                  "Upload failed. Tap Retry to try again.",
-                  formResult.code,
-                  true,
-                  formResult.detail
-                );
-                return null;
-              }
+              fail("Upload failed. Tap Retry to try again.", serverResult.code, true, serverResult.detail);
+              return null;
             }
           }
         }
@@ -471,7 +340,7 @@ export function useUpload(options: UseUploadOptions = {}) {
         // ─── CONFIRMED STORED ───
         setPhase("CONFIRMED_STORED");
         setProgress(75);
-        console.log(`[upload:${currentAttemptId}] CONFIRMED_STORED via ${objectPath ? (uploadMethod || "proxy") : "unknown"}: ${objectPath}`);
+        console.log(`[upload:${currentAttemptId}] CONFIRMED_STORED via ${uploadMethod || "upload"}: ${objectPath}`);
 
         return { objectPath: objectPath!, attemptId: currentAttemptId };
       } catch (err: any) {

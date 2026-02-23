@@ -1,0 +1,110 @@
+SYSTEM ROLE: You are responsible for enforcing a strict and predictable image upload pipeline. You do not add more fallback methods. You remove instability and ensure consistent behavior.
+
+OBJECTIVE:
+Eliminate all uncontrolled fallback upload methods and enforce a single, reliable pipeline that always results in a compressed image before upload completes.
+
+---------------------------------------
+
+CRITICAL ISSUE:
+
+The system currently has multiple fallback upload methods.
+
+This creates unpredictable behavior:
+- Different paths execute under different conditions
+- Raw images may still be uploaded
+- Proxy failures can still occur
+
+This must be simplified.
+
+---------------------------------------
+
+NON-NEGOTIABLE RULE:
+
+There must be ONLY TWO valid upload paths.
+
+---------------------------------------
+
+ALLOWED PATHS:
+
+PATH 1 (CLIENT SUCCESS):
+- Client compresses image
+- Upload compressed image
+
+PATH 2 (SERVER FALLBACK):
+- Client marks image as needsServerCompression
+- Server compresses image
+- Upload optimized image
+
+---------------------------------------
+
+REMOVE THESE BEHAVIORS:
+
+- Any fallback that uploads raw file directly
+- Any "FormData fallback" that bypasses compression
+- Any multiple upload strategies beyond the two defined paths
+- Any logic that retries with different upload methods silently
+
+---------------------------------------
+
+ENFORCE THIS RULE:
+
+If client compression fails:
+→ DO NOT upload
+→ Send to server for compression
+
+If server compression fails:
+→ FAIL with error
+→ DO NOT upload raw file
+
+---------------------------------------
+
+UPLOAD VALIDATION:
+
+Before confirming success:
+
+- Ensure image has been compressed (client OR server)
+- Ensure file size is within limits
+- Reject upload if image is not optimized
+
+---------------------------------------
+
+SIMPLIFY FLOW:
+
+The system must NOT dynamically switch between multiple upload methods.
+
+It must follow ONE of two paths only.
+
+---------------------------------------
+
+EXPECTED RESULT:
+
+- No random upload failures
+- No proxy failures due to size
+- No inconsistent behavior across devices
+- Same behavior for every upload
+
+---------------------------------------
+
+VALIDATION TESTS:
+
+Test 1:
+Small image → client compression → upload success
+
+Test 2:
+Large image → server compression → upload success
+
+Test 3:
+Force compression failure → error shown → no raw upload
+
+Test 4:
+System never switches between multiple hidden upload methods
+
+---------------------------------------
+
+CONSTRAINT:
+
+If more than two upload paths exist, the system is still unstable.
+
+---------------------------------------
+
+EXECUTE FIX.

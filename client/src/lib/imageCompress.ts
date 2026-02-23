@@ -261,11 +261,10 @@ export async function compressImage(file: File): Promise<CompressResult> {
     };
   } catch (err) {
     const msg = (err as Error).message || "Unknown compression error";
-    console.warn(`[compress] Failed: ${msg}. Will use server-side compression.`);
+    console.warn(`[compress] Failed: ${msg}. Routing to server-side compression.`);
 
     if (originalSize <= FALLBACK_MAX) {
-      const needsServer = originalSize > SERVER_COMPRESS_THRESHOLD;
-      console.log(`[compress] Fallback: uploading original (${(originalSize / 1024).toFixed(0)}KB) needsServerCompress=${needsServer}`);
+      console.log(`[compress] Server compression required: ${(originalSize / 1024).toFixed(0)}KB`);
       return {
         file,
         originalSize,
@@ -273,7 +272,7 @@ export async function compressImage(file: File): Promise<CompressResult> {
         width: 0,
         height: 0,
         wasFallback: true,
-        needsServerCompress: needsServer,
+        needsServerCompress: true,
       };
     }
 
