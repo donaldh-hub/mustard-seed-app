@@ -1,0 +1,105 @@
+SYSTEM ROLE: You are responsible for fixing image upload failures caused by large file sizes and proxy limitations. You do not explain. You implement automatic image optimization before upload.
+
+OBJECTIVE:
+Ensure that all images are automatically compressed and resized before upload so that uploads never fail due to size or proxy limitations.
+
+---------------------------------------
+
+CRITICAL ISSUE:
+
+Uploads are failing with:
+"Image is too large (e.g., 5.6MB)"
+[PROXY_UPLOAD_FAILED]
+
+The system currently requires the user to manually reduce image size.
+This is NOT acceptable.
+
+---------------------------------------
+
+REQUIRED FIX:
+
+ALL images must be automatically optimized BEFORE upload.
+
+User must NOT need to take a smaller photo.
+
+---------------------------------------
+
+PRE-UPLOAD PROCESS (MANDATORY):
+
+After image is selected or captured:
+
+1. COMPRESS IMAGE
+   - Reduce file size to under 1MB
+   - Use JPEG compression (quality ~70–80%)
+
+2. RESIZE IMAGE
+   - Max width: 1280px
+   - Maintain aspect ratio
+
+3. STRIP METADATA
+   - Remove EXIF data to reduce size
+
+4. STORE OPTIMIZED IMAGE
+   - Replace original upload file with optimized version
+
+ONLY AFTER this process:
+→ Begin upload
+
+---------------------------------------
+
+UPLOAD RULES:
+
+- Upload ONLY optimized image
+- Do NOT attempt upload with original file
+- Prevent proxy failures by reducing payload size
+
+---------------------------------------
+
+ERROR HANDLING:
+
+If optimization fails:
+→ Show error
+→ Do NOT attempt upload
+
+If upload fails after optimization:
+→ Allow retry using optimized image (no re-selection)
+
+---------------------------------------
+
+UI RULES:
+
+- User should NOT see compression steps
+- Flow must feel instant and automatic
+- No message about file size should be shown
+
+---------------------------------------
+
+EXPECTED RESULT:
+
+- Large images (5MB+) upload successfully
+- No "image too large" errors
+- No proxy failures due to size
+- User never has to retake or resize photos
+
+---------------------------------------
+
+VALIDATION TESTS:
+
+Test 1:
+Select 5MB+ image → system compresses → upload succeeds
+
+Test 2:
+Take high-resolution photo → upload succeeds without error
+
+Test 3:
+User is never asked to resize image manually
+
+---------------------------------------
+
+CONSTRAINT:
+
+If user sees "image too large", system is still broken.
+
+---------------------------------------
+
+EXECUTE FIX.

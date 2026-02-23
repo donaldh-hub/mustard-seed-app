@@ -3,6 +3,7 @@ const INITIAL_QUALITY = 0.80;
 const TARGET_SIZE = 2 * 1024 * 1024;
 const ABSOLUTE_MAX = 10 * 1024 * 1024;
 const FALLBACK_MAX = 10 * 1024 * 1024;
+const SERVER_COMPRESS_THRESHOLD = 2 * 1024 * 1024;
 
 export interface CompressResult {
   file: File;
@@ -11,6 +12,7 @@ export interface CompressResult {
   width: number;
   height: number;
   wasFallback?: boolean;
+  needsServerCompress?: boolean;
 }
 
 export function validateImageType(file: File): string | null {
@@ -259,10 +261,11 @@ export async function compressImage(file: File): Promise<CompressResult> {
     };
   } catch (err) {
     const msg = (err as Error).message || "Unknown compression error";
-    console.warn(`[compress] Failed: ${msg}. Checking fallback...`);
+    console.warn(`[compress] Failed: ${msg}. Will use server-side compression.`);
 
     if (originalSize <= FALLBACK_MAX) {
-      console.log(`[compress] Fallback: uploading original (${(originalSize / 1024).toFixed(0)}KB)`);
+      const needsServer = originalSize > SERVER_COMPRESS_THRESHOLD;
+      console.log(`[compress] Fallback: uploading original (${(originalSize / 1024).toFixed(0)}KB) needsServerCompress=${needsServer}`);
       return {
         file,
         originalSize,
@@ -270,11 +273,12 @@ export async function compressImage(file: File): Promise<CompressResult> {
         width: 0,
         height: 0,
         wasFallback: true,
+        needsServerCompress: needsServer,
       };
     }
 
     throw new Error(
-      `This image couldn't be processed and is too large (${(originalSize / 1024 / 1024).toFixed(1)}MB) to upload as-is. Please select a smaller JPEG or PNG.`
+      `This image is too large (${(originalSize / 1024 / 1024).toFixed(1)}MB). Maximum is ${(FALLBACK_MAX / 1024 / 1024).toFixed(0)}MB.`
     );
   } finally {
     if (url) {
