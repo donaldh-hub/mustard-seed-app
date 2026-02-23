@@ -221,16 +221,19 @@ export function registerObjectStorageRoutes(app: Express): void {
 
       let uploadBuffer: Buffer;
       let uploadContentType: string;
+      let compressed = false;
 
       try {
         console.log(`[CHUNK] Compressing with sharp: ${(fullBuffer.length / 1024).toFixed(0)}KB`);
-        const compressed = await compressWithSharp(fullBuffer, contentType);
-        uploadBuffer = compressed.data;
-        uploadContentType = compressed.contentType;
-        console.log(`[CHUNK] Compressed: ${(fullBuffer.length / 1024).toFixed(0)}KB -> ${(uploadBuffer.length / 1024).toFixed(0)}KB`);
+        const result = await compressWithSharp(fullBuffer, contentType);
+        uploadBuffer = result.data;
+        uploadContentType = result.contentType;
+        compressed = true;
+        console.log(`[CHUNK] compression_attempted=true compression_success=true original_size=${fullBuffer.length} final_size=${uploadBuffer.length}`);
       } catch (compErr: any) {
-        console.error(`[CHUNK] Sharp compression failed: ${compErr.message}. Rejecting upload.`);
-        return res.status(422).json({ ok: false, error: "Server could not process this image format. Please try a different photo." });
+        console.warn(`[CHUNK] compression_attempted=true compression_success=false fallback_used=true original_size=${fullBuffer.length} error=${compErr.message}`);
+        uploadBuffer = fullBuffer;
+        uploadContentType = contentType || "image/jpeg";
       }
 
       const privateDir = objectStorageService.getPrivateObjectDir();
@@ -248,9 +251,9 @@ export function registerObjectStorageRoutes(app: Express): void {
       });
 
       const objectPath = `/objects/uploads/${objectId}`;
-      console.log(`[CHUNK] OK: ${objectPath} original=${fullBuffer.length} stored=${uploadBuffer.length}`);
+      console.log(`[CHUNK] OK: ${objectPath} original=${fullBuffer.length} stored=${uploadBuffer.length} compressed=${compressed}`);
 
-      res.json({ ok: true, complete: true, objectPath, contentType: uploadContentType, size: uploadBuffer.length });
+      res.json({ ok: true, complete: true, objectPath, contentType: uploadContentType, size: uploadBuffer.length, compressed });
     } catch (err: any) {
       console.error(`[CHUNK] ERROR: ${err?.message || err}`);
       pendingChunks.delete(uploadId);

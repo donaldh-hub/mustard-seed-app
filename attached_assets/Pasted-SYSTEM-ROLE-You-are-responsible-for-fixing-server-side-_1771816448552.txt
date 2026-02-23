@@ -1,0 +1,138 @@
+SYSTEM ROLE: You are responsible for fixing server-side image processing failures. You do not explain. You ensure uploads never fail due to compression errors.
+
+OBJECTIVE:
+Ensure that image uploads NEVER fail due to server compression errors. If compression fails, the system must fallback and still store the image.
+
+---------------------------------------
+
+CRITICAL ISSUE:
+
+Uploads are failing with:
+[SERVER_COMPRESS_FAILED]
+
+This means the server receives the file but fails during compression (sharp).
+
+This must NEVER block the user.
+
+---------------------------------------
+
+NON-NEGOTIABLE RULE:
+
+Image upload must ALWAYS succeed, even if compression fails.
+
+---------------------------------------
+
+REQUIRED SERVER LOGIC:
+
+1) RECEIVE FILE
+- Accept full image file from client
+- Ensure file is valid and complete
+
+---------------------------------------
+
+2) ATTEMPT COMPRESSION
+
+Try:
+- Convert to JPEG
+- Resize to max width 1280px
+- Compress to target size
+
+---------------------------------------
+
+3) IF COMPRESSION SUCCEEDS:
+
+- Store compressed image
+- Return success with image URL
+
+---------------------------------------
+
+4) IF COMPRESSION FAILS (CRITICAL):
+
+- DO NOT throw error
+- DO NOT fail upload
+
+Instead:
+
+- Log error: SERVER_COMPRESS_FAILED
+- Store ORIGINAL file (uncompressed)
+- Ensure correct MIME type
+- Return success with image URL
+
+---------------------------------------
+
+5) FALLBACK STORAGE RULE:
+
+- User must still see image
+- Upload must still be considered successful
+- Do NOT require retry
+
+---------------------------------------
+
+6) VALIDATION SAFETY:
+
+- Ensure stored file is not corrupted
+- Ensure it can be rendered by browser
+
+---------------------------------------
+
+7) LOGGING:
+
+Log:
+
+- compression_attempted: true
+- compression_success: true/false
+- fallback_used: true/false
+- original_size
+- final_size
+
+---------------------------------------
+
+8) RESPONSE FORMAT:
+
+Always return:
+
+{
+  "success": true,
+  "url": "<image_url>",
+  "compressed": true/false
+}
+
+---------------------------------------
+
+UI RULES:
+
+- If fallback used, do NOT show error to user
+- User should not know compression failed
+- Treat upload as success
+
+---------------------------------------
+
+EXPECTED RESULT:
+
+- No upload failures due to compression
+- No SERVER_COMPRESS_FAILED blocking user
+- Images always upload and display
+- System gracefully handles edge cases
+
+---------------------------------------
+
+VALIDATION TESTS:
+
+Test 1:
+Upload problematic image → compression fails → image still uploads
+
+Test 2:
+Image displays correctly after fallback
+
+Test 3:
+No error shown to user for compression failure
+
+---------------------------------------
+
+CONSTRAINT:
+
+If compression failure blocks upload, system is still broken.
+
+---------------------------------------
+
+EXECUTE FIX.
