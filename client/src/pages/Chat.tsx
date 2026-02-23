@@ -51,6 +51,16 @@ export default function Chat() {
   }, [photoPreview, isBusy]);
 
   useEffect(() => {
+    if (!photoActiveRef.current) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [photoPreview, isBusy]);
+
+  useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
     restoreImage().then((restored) => {

@@ -1,0 +1,119 @@
+SYSTEM OVERRIDE: EXECUTION CONSTRAINT MODE
+
+STOP.
+
+Before writing or modifying any code, you must follow these constraints.
+
+---------------------------------------
+
+PRIMARY OBJECTIVE:
+
+Fix ONLY the broken behaviors in the image pipeline.
+
+DO NOT refactor, redesign, or rebuild components.
+
+---------------------------------------
+
+STRICT LIMITS:
+
+You are NOT allowed to:
+
+- Rewrite entire files (Chat.tsx or others)
+- Introduce new architecture
+- Move logic across multiple layers
+- Create new systems beyond what is necessary
+- Change unrelated features
+
+You are ONLY allowed to:
+
+- Patch existing logic
+- Add minimal state persistence
+- Fix upload handling
+- Prevent UI reset
+
+---------------------------------------
+
+FOCUS AREA:
+
+Fix ONLY these:
+
+1. Camera capture causes UI reset → image lost
+2. Gallery upload fails with connection error
+3. Image not persisted before upload
+
+---------------------------------------
+
+REQUIRED APPROACH:
+
+1. Identify EXACT failure points (line-level or function-level)
+2. Apply minimal patch to fix that behavior
+3. Do NOT rewrite full files unless absolutely required
+4. Preserve all existing working functionality
+
+---------------------------------------
+
+PERSISTENCE RULE:
+
+If image is selected, it MUST be stored in a stable variable or store
+that is NOT cleared on re-render.
+
+DO NOT rely on component state that resets.
+
+---------------------------------------
+
+NAVIGATION RULE:
+
+Camera return MUST NOT trigger a re-mount of the screen.
+
+If navigation is causing reset:
+→ Patch navigation behavior ONLY
+→ Do NOT rebuild navigation system
+
+---------------------------------------
+
+UPLOAD RULE:
+
+- Validate file before upload
+- Await upload completion
+- Handle failure with retry
+- Remove generic "connection issue"
+
+---------------------------------------
+
+UNIFIED PIPELINE RULE:
+
+Camera and gallery MUST use the SAME handler function.
+
+---------------------------------------
+
+VALIDATION STEP:
+
+Before implementing, you must:
+
+1. Identify exactly WHY the camera causes reset
+2. Identify exactly WHY upload fails
+3. Identify where image state is lost
+
+Then apply minimal fixes.
+
+---------------------------------------
+
+OUTPUT REQUIREMENT:
+
+Provide ONLY:
+
+- Exact changes made
+- Why those changes fix the issue
+- No extra features
+- No refactor explanations
+
+---------------------------------------
+
+If your solution involves rewriting large portions of code,
+you are doing too much.
+
+SIMPLIFY AND PATCH.
+
+---------------------------------------
+
+EXECUTE UNDER THESE CONSTRAINTS.

@@ -270,8 +270,25 @@ export function useUpload(options: UseUploadOptions = {}) {
           } else {
             console.warn(`[upload:${currentAttemptId}] DIRECT PUT 1 FAIL: [${put1.code}] ${put1.detail}`);
             if (put1.code !== "CANCELED_BY_USER") {
-              // No retry with fresh presign - go straight to proxy
-              console.log(`[upload:${currentAttemptId}] Falling back to proxy`);
+              console.log(`[upload:${currentAttemptId}] Retrying with fresh presigned URL`);
+              setProgress(30);
+              const presign2 = await requestPresignedUrl(file, signal);
+              if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
+
+              if (presign2.ok) {
+                const put2 = await directPutToGCS(presign2.data.uploadURL, file, signal);
+                if (cancelledRef.current || signal.aborted) { setPhase("CANCELED"); return null; }
+
+                if (put2.ok) {
+                  objectPath = presign2.data.objectPath;
+                  setUploadMethod("direct");
+                  console.log(`[upload:${currentAttemptId}] DIRECT PUT 2 OK: ${objectPath}`);
+                } else {
+                  console.warn(`[upload:${currentAttemptId}] DIRECT PUT 2 FAIL: [${put2.code}] ${put2.detail}`);
+                }
+              } else {
+                console.warn(`[upload:${currentAttemptId}] PRESIGN 2 FAIL: [${presign2.error.code}]`);
+              }
             }
           }
         } else {

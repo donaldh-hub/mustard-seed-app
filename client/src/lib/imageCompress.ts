@@ -94,11 +94,13 @@ async function bitmapToCompressed(
     console.log(`[compress] Resized to: ${width}x${height}`);
   }
 
-  const canvas = new OffscreenCanvas(width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) {
     bitmap.close();
-    throw new Error("OffscreenCanvas 2D context not available");
+    throw new Error("Canvas 2D context not available");
   }
 
   ctx.drawImage(bitmap, 0, 0, width, height);
@@ -108,7 +110,9 @@ async function bitmapToCompressed(
   let bestBlob: Blob | null = null;
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", quality)
+    );
     if (blob) {
       bestBlob = blob;
       console.log(`[compress] Bitmap attempt ${attempt + 1}: ${(blob.size / 1024).toFixed(0)}KB at quality=${quality.toFixed(2)}`);
@@ -118,7 +122,10 @@ async function bitmapToCompressed(
     if (quality < 0.3) quality = 0.3;
   }
 
-  if (!bestBlob) throw new Error("OffscreenCanvas convertToBlob returned null");
+  canvas.width = 0;
+  canvas.height = 0;
+
+  if (!bestBlob) throw new Error("Canvas toBlob returned null");
 
   if (bestBlob.size > ABSOLUTE_MAX) {
     throw new Error("Still too large after bitmap compression");
