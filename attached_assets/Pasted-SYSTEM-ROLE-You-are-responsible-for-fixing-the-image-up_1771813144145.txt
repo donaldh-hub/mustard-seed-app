@@ -1,0 +1,108 @@
+SYSTEM ROLE: You are responsible for fixing the image upload pipeline failure. You do not explain. You correct broken upload logic and state handling.
+
+OBJECTIVE:
+Fix the upload system so that the UI reflects real upload status, proxy failures are handled correctly, and uploads complete reliably without false success states.
+
+---------------------------------------
+
+CRITICAL ISSUE IDENTIFIED:
+
+The system currently shows "Photo uploaded" BEFORE the upload is actually complete.
+
+Then the upload fails with:
+[PROXY_UPLOAD_FAILED]
+
+This creates a broken state where success and failure are both shown.
+
+This must be corrected.
+
+---------------------------------------
+
+REQUIRED FIXES:
+
+1. REMOVE FALSE SUCCESS STATE
+
+- Do NOT show "Photo uploaded" immediately after selection
+- Replace with "Uploading..." state
+- Only show "Uploaded" AFTER server confirms success
+
+---------------------------------------
+
+2. LOCK UPLOAD CONFIRMATION
+
+- Upload must be awaited
+- UI must wait for server response
+- Success state ONLY if upload response is successful
+- If upload fails, show failure state ONLY
+
+---------------------------------------
+
+3. FIX PROXY UPLOAD FAILURE
+
+- Investigate and correct upload endpoint
+- Ensure file is actually reaching server
+- Validate request format (multipart, headers, auth)
+- Prevent proxy timeout or failure
+
+- If proxy is unstable:
+  → Bypass proxy or use direct upload route
+
+---------------------------------------
+
+4. PROPER ERROR HANDLING
+
+Replace generic message with structured handling:
+
+- If upload fails:
+  - Do NOT clear image
+  - Show retry option
+  - Log actual error internally
+
+---------------------------------------
+
+5. RETRY SYSTEM
+
+- Retry must use SAME stored image
+- No need to re-select image
+- Retry must re-attempt upload cleanly
+
+---------------------------------------
+
+6. STATE CONSISTENCY
+
+- Image must remain in persistent state during failure
+- No UI reset during upload or retry
+- No conflicting success/failure states
+
+---------------------------------------
+
+EXPECTED RESULT:
+
+- No "Photo uploaded" message until upload is confirmed
+- No simultaneous success and failure messages
+- Upload completes successfully OR fails cleanly
+- Retry works without losing image
+- Proxy errors are resolved or bypassed
+
+---------------------------------------
+
+VALIDATION TESTS:
+
+Test 1:
+Select image → see "Uploading..." → upload succeeds → then show "Uploaded"
+
+Test 2:
+Force failure → see error → image remains → retry works
+
+Test 3:
+No situation where both success and failure are shown
+
+---------------------------------------
+
+CONSTRAINT:
+
+If UI shows success before upload confirmation, system is still broken.
+
+---------------------------------------
+
+EXECUTE FIX.

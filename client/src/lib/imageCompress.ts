@@ -73,6 +73,15 @@ async function tryCreateImageBitmap(file: File): Promise<ImageBitmap | null> {
   }
 }
 
+function readAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("FileReader failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function bitmapToCompressed(
   bitmap: ImageBitmap,
   fileName: string,
@@ -175,7 +184,16 @@ export async function compressImage(file: File): Promise<CompressResult> {
       if (bitmap) {
         return await bitmapToCompressed(bitmap, file.name, originalSize);
       }
-      throw new Error("Browser could not load this image");
+
+      try {
+        console.log("[compress] Trying FileReader data URL approach...");
+        const dataUrl = await readAsDataURL(file);
+        img = await loadImage(dataUrl);
+        imgLoadFailed = false;
+        console.log(`[compress] FileReader approach worked: ${img.width}x${img.height}`);
+      } catch {
+        throw new Error("Browser could not load this image");
+      }
     }
 
     let { width, height } = img;

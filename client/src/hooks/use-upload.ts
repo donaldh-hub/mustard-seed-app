@@ -312,8 +312,11 @@ export function useUpload(options: UseUploadOptions = {}) {
             console.log(`[upload:${currentAttemptId}] PROXY OK: ${objectPath}`);
           } else {
             console.error(`[upload:${currentAttemptId}] PROXY FAIL: [${proxyResult.code}] ${proxyResult.detail}`);
+            const sizeNote = file.size > 3 * 1024 * 1024
+              ? ` Image is ${(file.size / 1024 / 1024).toFixed(1)}MB — try a smaller photo.`
+              : "";
             fail(
-              "Photo upload failed. Please try again on a stronger connection.",
+              `Upload failed.${sizeNote} Tap Retry to try again.`,
               proxyResult.code,
               true,
               proxyResult.detail
