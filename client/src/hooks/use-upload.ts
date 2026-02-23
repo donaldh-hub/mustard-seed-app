@@ -127,7 +127,14 @@ async function serverCompressUpload(
   parentSignal: AbortSignal
 ): Promise<{ ok: true; objectPath: string } | { ok: false; code: string; detail: string }> {
   try {
-    const totalBytes = file.size;
+    let fileBuffer: ArrayBuffer;
+    try {
+      fileBuffer = await file.arrayBuffer();
+    } catch (readErr: any) {
+      return { ok: false, code: "FILE_READ_FAILED", detail: `Could not read file into memory: ${readErr.message}` };
+    }
+
+    const totalBytes = fileBuffer.byteLength;
     const totalChunks = Math.ceil(totalBytes / CHUNK_SIZE);
     const uploadId = `chu_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -140,8 +147,7 @@ async function serverCompressUpload(
 
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, totalBytes);
-      const chunkBlob = file.slice(start, end);
-      const chunkData = await chunkBlob.arrayBuffer();
+      const chunkData = fileBuffer.slice(start, end);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
