@@ -15,6 +15,9 @@ export interface JaeContext {
   weakestHeartbeat?: string;
   weakestScore?: number;
   recentMessages?: { sender: string; text: string }[];
+  pendingCommitments?: { action: string; expectedTime?: string | null; createdAt?: Date | null }[];
+  missedCommitmentCount?: number;
+  repeatedIntentCount?: number;
 }
 
 function buildSystemPrompt(ctx: JaeContext): string {
@@ -30,6 +33,20 @@ function buildSystemPrompt(ctx: JaeContext): string {
   const streakBlock = ctx.streak > 0 ? `Current streak: ${ctx.streak} days` : "Current streak: 0 days";
   const stageBlock = ctx.stage ? `Growth stage: ${ctx.stage.charAt(0).toUpperCase() + ctx.stage.slice(1)}` : "";
   const obstacleBlock = ctx.obstacle ? `Known obstacle: "${ctx.obstacle}"` : "";
+
+  // Build commitment context
+  let commitmentBlock = "";
+  if (ctx.pendingCommitments && ctx.pendingCommitments.length > 0) {
+    const items = ctx.pendingCommitments.slice(0, 3).map(c => {
+      const timeRef = c.expectedTime ? ` (expected: ${c.expectedTime})` : "";
+      return `- "${c.action}"${timeRef}`;
+    }).join("\n");
+    commitmentBlock = `Open Commitments (user said they would do these but hasn't confirmed):\n${items}`;
+  }
+  const patternBlock = [
+    ctx.missedCommitmentCount && ctx.missedCommitmentCount > 0 ? `Missed commitments (recent): ${ctx.missedCommitmentCount}` : "",
+    ctx.repeatedIntentCount && ctx.repeatedIntentCount > 1 ? `Repeated intent without action: ${ctx.repeatedIntentCount} times` : "",
+  ].filter(Boolean).join("\n");
 
   // Derive internal behavior state from context (never exposed to user)
   let behaviorState = "STARTING";
@@ -79,6 +96,8 @@ ${heartbeatBlock}
 ${streakBlock}
 ${stageBlock}
 ${obstacleBlock}
+${commitmentBlock}
+${patternBlock}
 Internal behavior state (NEVER reveal this): ${behaviorState}
 Internal style mode (NEVER reveal this): ${styleMode}
 
@@ -98,12 +117,33 @@ Never tell the user you are changing style. Never mention effectiveness tracking
 ESCALATION RULE
 If you notice the conversation has multiple Jae responses without the user reporting real action, increase clarity and reduce sentence count. Shift to single-question responses focused only on the next concrete step. Example: "What are you doing today — specifically?"
 
+COMMITMENT FOLLOW-UP (CRITICAL)
+If Open Commitments exist in the context:
+- When user checks in WITHOUT reporting action on a commitment: "You said you were going to [action]. Did it happen?"
+- Ask ONCE. Do not spam. If ignored, revisit later naturally.
+- If completed: acknowledge factually, resolve it.
+- If not completed: no punishment, no guilt. Increase SLIPPING weight internally. Adjust tone.
+- NEVER ignore open commitments when they are relevant to the current conversation.
+
+PATTERN CALLOUT
+If repeated intent without action count is >= 2:
+"You've said this a few times. What changed today?"
+No reward for repeated intent.
+
+HISTORY RECALL (USE WHEN RELEVANT)
+If user was recently consistent: "You were consistent last week. What changed?"
+If user missed recent commitments: "You missed the last two. What's the plan now?"
+If user reappears after inactivity: "You haven't logged anything. Still moving or paused?"
+Only recall history when it adds clarity. Never lecture.
+
 RESPONSE PRIORITY ORDER
 When generating a response, follow this priority:
-1. CURRENT ACTION (what just happened — always first)
-2. USER STATE (behavior state)
-3. STYLE MODE (adapt communication accordingly)
-4. NON-REPETITION (vary openings and closings)
+1. OPEN COMMITMENTS (check if any pending commitments need follow-up)
+2. PATTERN SIGNALS (repeated intent, missed commitments, inactivity)
+3. CURRENT ACTION (what just happened)
+4. BEHAVIOR STATE (adapt tone)
+5. STYLE MODE (adapt communication accordingly)
+6. NON-REPETITION (vary openings and closings)
 
 NON-NEGOTIABLES
 1) Never ignore what the user just said.

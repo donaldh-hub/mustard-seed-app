@@ -858,6 +858,12 @@ export async function registerRoutes(
           .slice(-10)
           .map((m: any) => ({ sender: m.sender, text: m.text }));
 
+        const pendingCommitments = await storage.getPendingCommitments(userId);
+        const recentCommitments = await storage.getRecentCommitments(userId, 10);
+        const missedCount = recentCommitments.filter(c => c.status === "missed").length;
+        const ioMessages = last10.filter(m => m.sender === "user" && /\b(i('m| am) going to|i('ll| will)|i plan to|gonna|planning to)\b/i.test(m.text));
+        const repeatedIntentCount = ioMessages.length;
+
         const depthResult = await generateDepthResponse(rawText, {
           userName: name,
           targetedGoalTitle: targetedGoal?.title,
@@ -870,6 +876,13 @@ export async function registerRoutes(
             ? (latestAssessment.heartbeatScores as Record<string, number>)[latestAssessment.weakestHeartbeat || ""] ?? undefined
             : undefined,
           recentMessages: last10,
+          pendingCommitments: pendingCommitments.slice(0, 3).map(c => ({
+            action: c.action,
+            expectedTime: c.expectedTime,
+            createdAt: c.createdAt,
+          })),
+          missedCommitmentCount: missedCount,
+          repeatedIntentCount,
         });
 
         if (depthResult.text) {
@@ -908,12 +921,72 @@ export async function registerRoutes(
       const classifications = classifyMultipleActions(rawText);
       const agg = aggregateClassifications(classifications);
 
+      // --- Commitment Memory Engine ---
+      const COMMITMENT_PATTERNS = [
+        /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to)\s+(.{5,80})/i,
+        /\b(?:tomorrow i(?:'ll| will))\s+(.{5,80})/i,
+        /\b(?:starting (?:tomorrow|monday|next week))\b.*?(?:i(?:'ll| will|'m going to))\s+(.{5,80})/i,
+        /\b(?:tonight|this evening|this morning|at \d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b.*?\b(?:i(?:'ll| will|'m going to))\s+(.{5,40})/i,
+      ];
+      const TIME_PATTERNS = [
+        /\b(?:at|by|around|before|after)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i,
+        /\b(tomorrow|tonight|this evening|this morning|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+        /\b(in \d+ (?:hours?|minutes?|days?))\b/i,
+      ];
+
+      const hasFutureIntent = /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to|tomorrow|tonight|this evening|next week|starting)\b/i.test(rawText);
+      if (hasFutureIntent) {
+        for (const pat of COMMITMENT_PATTERNS) {
+          const match = rawText.match(pat);
+          if (match && match[1]) {
+            let expectedTime: string | null = null;
+            for (const tp of TIME_PATTERNS) {
+              const tm = rawText.match(tp);
+              if (tm) { expectedTime = tm[1] || tm[0]; break; }
+            }
+            await storage.createCommitment({
+              userId,
+              action: match[1].trim().replace(/[.!?,;]+$/, ""),
+              expectedTime: expectedTime || null,
+              status: "pending",
+              sourceMessageId: userMsg.id,
+            });
+            console.log(`[COMMIT] Stored: "${match[1].trim()}" expected=${expectedTime || "unspecified"}`);
+            break;
+          }
+        }
+      }
+
+      // Auto-resolve pending commitments when user takes real action
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+        const pending = await storage.getPendingCommitments(userId);
+        for (const c of pending) {
+          const actionWords = c.action.toLowerCase().split(/\s+/);
+          const messageWords = rawText.toLowerCase();
+          const overlap = actionWords.filter(w => w.length > 3 && messageWords.includes(w));
+          if (overlap.length >= 2 || pending.length === 1) {
+            await storage.resolveCommitment(c.id, "completed");
+            console.log(`[COMMIT] Resolved: "${c.action}" → completed`);
+          }
+        }
+      }
+
       let waterAwarded = false;
       let waterGoalId: string | null = null;
       let growthResult: any = null;
       let apDelta = agg.totalActionPoints;
       let ipDelta = agg.totalInsightPoints;
       let driftDelta = agg.totalDriftMarkers;
+
+      // Micro conversation water: time-bound commitment = +1 AP (rare, small)
+      if (agg.primaryCategory === "IO") {
+        const hasTimeBound = /\b(?:at \d|by \d|tomorrow|tonight|this morning|this evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week)\b/i.test(rawText);
+        const hasCommitment = /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to)\b/i.test(rawText);
+        if (hasTimeBound && hasCommitment) {
+          apDelta += 1;
+          console.log(`[MICRO] +1 AP for time-bound commitment`);
+        }
+      }
 
       const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
       const isCBurnActive = !!(user.cBurnActive);

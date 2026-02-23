@@ -171,6 +171,24 @@ export const insertWeeklyReviewSchema = createInsertSchema(weeklyReviews).omit({
 export type InsertWeeklyReview = z.infer<typeof insertWeeklyReviewSchema>;
 export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 
+export const commitments = pgTable("commitments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  action: text("action").notNull(),
+  expectedTime: text("expected_time"),
+  status: text("status").notNull().default("pending"),
+  sourceMessageId: varchar("source_message_id"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCommitmentSchema = createInsertSchema(commitments).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCommitment = z.infer<typeof insertCommitmentSchema>;
+export type Commitment = typeof commitments.$inferSelect;
+
 export const assessments = pgTable("assessments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),

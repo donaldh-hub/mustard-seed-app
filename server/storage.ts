@@ -5,7 +5,8 @@ import {
   type Assessment, type InsertAssessment, assessments,
   type Goal, type InsertGoal, goals,
   type WeeklyReview, type InsertWeeklyReview, weeklyReviews,
-  type PhotoMemory, type InsertPhotoMemory, photoMemories
+  type PhotoMemory, type InsertPhotoMemory, photoMemories,
+  type Commitment, type InsertCommitment, commitments
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, asc, and, gte } from "drizzle-orm";
@@ -47,6 +48,11 @@ export interface IStorage {
   getPhotoMemoriesByDate(userId: string, dateKey: string): Promise<PhotoMemory[]>;
   getPhotoMemoryByUrl(userId: string, photoUrl: string): Promise<PhotoMemory | undefined>;
   getMessageById(id: string): Promise<Message | undefined>;
+
+  createCommitment(data: InsertCommitment): Promise<Commitment>;
+  getPendingCommitments(userId: string): Promise<Commitment[]>;
+  resolveCommitment(id: string, status: "completed" | "missed"): Promise<Commitment | undefined>;
+  getRecentCommitments(userId: string, limit?: number): Promise<Commitment[]>;
 }
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -217,6 +223,32 @@ export class DatabaseStorage implements IStorage {
   async getMessageById(id: string): Promise<Message | undefined> {
     const [msg] = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
     return msg;
+  }
+
+  async createCommitment(data: InsertCommitment): Promise<Commitment> {
+    const [c] = await db.insert(commitments).values(data).returning();
+    return c;
+  }
+
+  async getPendingCommitments(userId: string): Promise<Commitment[]> {
+    return db.select().from(commitments)
+      .where(and(eq(commitments.userId, userId), eq(commitments.status, "pending")))
+      .orderBy(desc(commitments.createdAt));
+  }
+
+  async resolveCommitment(id: string, status: "completed" | "missed"): Promise<Commitment | undefined> {
+    const [c] = await db.update(commitments)
+      .set({ status, resolvedAt: new Date() })
+      .where(eq(commitments.id, id))
+      .returning();
+    return c;
+  }
+
+  async getRecentCommitments(userId: string, limit = 10): Promise<Commitment[]> {
+    return db.select().from(commitments)
+      .where(eq(commitments.userId, userId))
+      .orderBy(desc(commitments.createdAt))
+      .limit(limit);
   }
 }
 
