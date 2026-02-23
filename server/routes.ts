@@ -1905,8 +1905,25 @@ export async function registerRoutes(
       const validConfidence = typeof analysis.confidence === "number" ? analysis.confidence : 0;
       const validActionType = analysis.action_type || "unknown_or_irrelevant";
 
+      let validationStatus: "valid" | "invalid" | "unclear" = "invalid";
+      let validationReason = "";
+
+      if (validActionType === "unknown_or_irrelevant" || validConfidence < 0.60) {
+        validationStatus = "invalid";
+        validationReason = analysis.water_reason || "Image does not show a recognizable goal-aligned action.";
+      } else if (validConfidence >= 0.60 && validConfidence < 0.75) {
+        validationStatus = "unclear";
+        validationReason = analysis.water_reason || "Image may show an action but confidence is too low to verify.";
+      } else {
+        validationStatus = "valid";
+        validationReason = analysis.water_reason || "Verified goal-aligned action detected.";
+      }
+
+      const validation = { status: validationStatus, reason: validationReason };
+      console.log(`[PHOTO] Validation: status=${validationStatus} confidence=${validConfidence} actionType=${validActionType}`);
+
       let photoAP = 0;
-      if (validActionType !== "unknown_or_irrelevant" && validConfidence >= 0.75) {
+      if (validationStatus === "valid") {
         photoAP = analysis.proof_level >= 2 ? 3 : 2;
       }
 
@@ -1975,10 +1992,11 @@ export async function registerRoutes(
         analysisJson: analysis as any,
       });
 
-      console.log(`[PHOTO] Complete: ${Date.now() - startTime}ms | AP=${photoAP} | water_award=${analysis.water_award}`);
+      console.log(`[PHOTO] Complete: ${Date.now() - startTime}ms | validation=${validationStatus} | AP=${photoAP} | water_award=${analysis.water_award}`);
 
       return res.json({
         ok: true,
+        validation,
         photoMessage,
         jaeResponse,
         analysis,

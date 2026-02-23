@@ -56,11 +56,86 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
     img.onerror = (_e) => {
       clearTimeout(timeout);
-      reject(new Error("Browser could not load this image"));
+      reject(new Error("Browser could not load this image via <img>"));
     };
 
     img.src = src;
   });
+}
+
+async function tryCreateImageBitmap(file: File): Promise<ImageBitmap | null> {
+  if (typeof createImageBitmap !== "function") return null;
+  try {
+    const bitmap = await createImageBitmap(file);
+    return bitmap;
+  } catch {
+    return null;
+  }
+}
+
+async function bitmapToCompressed(
+  bitmap: ImageBitmap,
+  fileName: string,
+  originalSize: number
+): Promise<CompressResult> {
+  let { width, height } = bitmap;
+
+  console.log(`[compress] ImageBitmap loaded: ${width}x${height}`);
+
+  if (width <= 0 || height <= 0) {
+    bitmap.close();
+    throw new Error("Image has invalid dimensions (0x0)");
+  }
+
+  if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+    const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+    width = Math.round(width * ratio);
+    height = Math.round(height * ratio);
+    console.log(`[compress] Resized to: ${width}x${height}`);
+  }
+
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    throw new Error("OffscreenCanvas 2D context not available");
+  }
+
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  let quality = INITIAL_QUALITY;
+  let bestBlob: Blob | null = null;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+    if (blob) {
+      bestBlob = blob;
+      console.log(`[compress] Bitmap attempt ${attempt + 1}: ${(blob.size / 1024).toFixed(0)}KB at quality=${quality.toFixed(2)}`);
+      if (blob.size <= TARGET_SIZE) break;
+    }
+    quality -= 0.12;
+    if (quality < 0.3) quality = 0.3;
+  }
+
+  if (!bestBlob) throw new Error("OffscreenCanvas convertToBlob returned null");
+
+  if (bestBlob.size > ABSOLUTE_MAX) {
+    throw new Error("Still too large after bitmap compression");
+  }
+
+  const ext = fileName.replace(/\.\w+$/, "");
+  const compressedFile = new File([bestBlob], `${ext}.jpg`, { type: "image/jpeg" });
+
+  console.log(`[compress] Bitmap done: ${(originalSize / 1024).toFixed(0)}KB -> ${(compressedFile.size / 1024).toFixed(0)}KB`);
+
+  return {
+    file: compressedFile,
+    originalSize,
+    compressedSize: compressedFile.size,
+    width,
+    height,
+  };
 }
 
 export async function compressImage(file: File): Promise<CompressResult> {
@@ -78,7 +153,24 @@ export async function compressImage(file: File): Promise<CompressResult> {
   try {
     url = URL.createObjectURL(file);
 
-    const img = await loadImage(url);
+    let img: HTMLImageElement | null = null;
+    let imgLoadFailed = false;
+
+    try {
+      img = await loadImage(url);
+    } catch (imgErr) {
+      console.warn(`[compress] <img> load failed: ${(imgErr as Error).message}. Trying createImageBitmap...`);
+      imgLoadFailed = true;
+    }
+
+    if (imgLoadFailed || !img) {
+      const bitmap = await tryCreateImageBitmap(file);
+      if (bitmap) {
+        return await bitmapToCompressed(bitmap, file.name, originalSize);
+      }
+      throw new Error("Browser could not load this image");
+    }
+
     let { width, height } = img;
 
     console.log(`[compress] Image loaded: ${width}x${height}`);

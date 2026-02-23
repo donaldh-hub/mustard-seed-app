@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useUpload, type UploadPhase } from "@/hooks/use-upload";
+import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -35,6 +36,8 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const photoActiveRef = useRef(false);
+  const restoredRef = useRef(false);
   const qc = useQueryClient();
 
   const {
@@ -42,6 +45,21 @@ export default function Chat() {
     phase, isBusy, error: uploadError, compressInfo,
     cancel: cancelUpload, reset: resetUpload, attemptId
   } = useUpload();
+
+  useEffect(() => {
+    photoActiveRef.current = !!photoPreview || isBusy;
+  }, [photoPreview, isBusy]);
+
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    restoreImage().then((restored) => {
+      if (restored && !photoPreview) {
+        console.log("[chat] Restored persisted image after re-mount");
+        setPhotoPreview(restored);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -54,6 +72,7 @@ export default function Chat() {
   });
 
   useEffect(() => {
+    if (photoActiveRef.current) return;
     if (!assessmentLoading && !assessment && userId) {
       setLocation("/assessment");
     }
@@ -109,10 +128,11 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["photo-memories", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
-      setTimeout(() => {
+      setTimeout(async () => {
         setPhotoPreview(null);
         setInput("");
         resetUpload();
+        await clearImage();
       }, 800);
     },
     onError: () => {},
@@ -148,27 +168,30 @@ export default function Chat() {
     photoMutation.reset();
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) return;
+    if (!file.type.startsWith("image/") && !file.name.match(/\.(jpg|jpeg|png|webp|gif|bmp)$/i)) return;
 
     resetUpload();
     photoMutation.reset();
-    const url = URL.createObjectURL(file);
+
+    const url = await persistImage(file);
+
     setPhotoPreview({ file, url });
     setShowAttach(false);
-    e.target.value = "";
-  };
 
-  const clearPreview = () => {
+    e.target.value = "";
+  }, [resetUpload]);
+
+  const handleClearPreview = useCallback(async () => {
     if (photoPreview) {
-      URL.revokeObjectURL(photoPreview.url);
       setPhotoPreview(null);
       resetUpload();
       photoMutation.reset();
+      await clearImage();
     }
-  };
+  }, [photoPreview, resetUpload]);
 
   if (!userId) return null;
 
@@ -319,7 +342,7 @@ export default function Chat() {
                 )}
                 {!isPhotoProcessing && !photoFailed && phase !== "CANCELED" && (
                   <button
-                    onClick={clearPreview}
+                    onClick={handleClearPreview}
                     className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5"
                     data-testid="button-clear-preview"
                   >
@@ -374,7 +397,7 @@ export default function Chat() {
                         </button>
                       )}
                       <button
-                        onClick={clearPreview}
+                        onClick={handleClearPreview}
                         className="text-xs text-muted-foreground hover:underline"
                         data-testid="button-dismiss-upload"
                       >

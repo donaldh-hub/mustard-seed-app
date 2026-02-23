@@ -1,0 +1,155 @@
+SYSTEM ROLE: You are responsible for stabilizing the image capture, upload, and validation pipeline. You do not explain. You do not add new features. You fix stability and validation only.
+
+OBJECTIVE:
+Fix the system so that images from camera and gallery are reliably captured, persisted, uploaded, and validated for authenticity before any reward logic is allowed.
+
+THIS IS A CORE LOOP FIX:
+IMAGE → PERSIST → UPLOAD → VALIDATE
+
+DO NOT implement coaching responses or personality logic.
+
+---------------------------------------
+
+SCOPE:
+
+Fix these issues together:
+
+1. Camera capture resets UI and loses image
+2. Gallery upload fails with "connection issue"
+3. System does not reliably validate image before reward logic
+
+---------------------------------------
+
+NON-NEGOTIABLE RULE:
+
+Image must NEVER be lost and must ALWAYS be validated before being accepted.
+
+---------------------------------------
+
+REQUIRED PIPELINE (MUST BE IDENTICAL FOR CAMERA AND GALLERY):
+
+1. User captures or selects image
+2. Image is immediately saved to persistent state (NOT volatile UI state)
+3. UI does NOT refresh or re-mount
+4. Upload begins ONLY after image is confirmed stored
+5. Upload completes or fails cleanly
+6. If upload succeeds:
+   → Image is passed to validation step
+7. Validation step determines if image represents a valid real-world action
+8. System returns validation result (valid / invalid / unclear)
+9. If upload fails:
+   → Image remains stored
+   → User can retry without re-selecting
+
+---------------------------------------
+
+HARD FIX REQUIREMENTS:
+
+1. REMOVE UI RESET BEHAVIOR
+   - No screen refresh after camera capture
+   - No component re-mount on return
+   - Prevent navigation causing state loss
+
+2. PERSIST IMAGE BEFORE ASYNC ACTIONS
+   - Save image immediately after selection
+   - Must survive re-renders
+
+3. UNIFY CAMERA AND GALLERY LOGIC
+   - Single processing pipeline
+   - No separate logic paths
+
+4. FIX UPLOAD RELIABILITY
+   - Validate file type and size
+   - Ensure permissions are handled correctly
+   - Await upload completion
+   - Replace generic errors with real error handling
+
+5. CONTROL ASYNC FLOW
+   - Prevent race conditions
+   - Prevent UI updates interrupting upload
+
+6. RETRY SYSTEM
+   - Failed uploads keep image
+   - Retry without re-selection
+
+7. VALIDATION LAYER (CRITICAL)
+
+After upload, the system MUST evaluate the image to determine if it represents a real action.
+
+The system must NOT automatically accept every image.
+
+VALIDATION REQUIREMENTS:
+
+- Detect if image is likely:
+  - Gym / workout environment
+  - Meal / food prep
+  - Progress-related activity
+- Reject or flag:
+  - Random images (animals, objects unrelated to progress)
+  - Blank or low-quality images
+- If unclear:
+  - Return "unclear" instead of accepting
+
+VALIDATION OUTPUT MUST BE STRUCTURED:
+
+{
+  "status": "valid" | "invalid" | "unclear",
+  "reason": "brief explanation"
+}
+
+NO long responses.
+NO coaching.
+NO personality.
+
+---------------------------------------
+
+WHAT YOU MUST NOT DO:
+
+- Do NOT add conversational AI responses
+- Do NOT add reward or water logic yet
+- Do NOT modify UI
+- Do NOT expand scope beyond capture, upload, validation
+
+---------------------------------------
+
+EXPECTED RESULT:
+
+- Camera does NOT reset screen
+- Gallery upload does NOT fail
+- Image is ALWAYS preserved
+- Upload completes reliably
+- Validation runs after upload
+- System returns valid / invalid / unclear
+- Retry works without losing image
+
+---------------------------------------
+
+VALIDATION TESTS (MUST PASS):
+
+Test 1:
+Take gym photo → no refresh → upload succeeds → validation returns "valid"
+
+Test 2:
+Upload gym image from gallery → validation returns "valid"
+
+Test 3:
+Upload random image (e.g., animal) → validation returns "invalid"
+
+Test 4:
+Upload unclear image → validation returns "unclear"
+
+Test 5:
+Turn off internet → upload fails → image remains → retry works
+
+Test 6:
+Rapid actions → no crash, no reset, no image loss
+
+---------------------------------------
+
+CONSTRAINT:
+
+If image is lost OR validation is skipped, system is broken.
+
+---------------------------------------
+
+EXECUTE FIX.
