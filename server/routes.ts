@@ -859,10 +859,16 @@ export async function registerRoutes(
           .map((m: any) => ({ sender: m.sender, text: m.text }));
 
         const pendingCommitments = await storage.getPendingCommitments(userId);
-        const recentCommitments = await storage.getRecentCommitments(userId, 10);
+        const recentCommitments = await storage.getRecentCommitments(userId, 20);
         const missedCount = recentCommitments.filter(c => c.status === "missed").length;
+        const completedCount = recentCommitments.filter(c => c.status === "completed").length;
+        const totalResolved = missedCount + completedCount;
+        const followThroughRate = totalResolved > 0 ? Math.round((completedCount / totalResolved) * 100) : 100;
         const ioMessages = last10.filter(m => m.sender === "user" && /\b(i('m| am) going to|i('ll| will)|i plan to|gonna|planning to)\b/i.test(m.text));
         const repeatedIntentCount = ioMessages.length;
+        const actionGapDays = user.lastVerifiedActionAt
+          ? Math.floor((Date.now() - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
+          : undefined;
 
         const depthResult = await generateDepthResponse(rawText, {
           userName: name,
@@ -883,6 +889,8 @@ export async function registerRoutes(
           })),
           missedCommitmentCount: missedCount,
           repeatedIntentCount,
+          followThroughRate,
+          actionGapDays,
         });
 
         if (depthResult.text) {
@@ -924,7 +932,10 @@ export async function registerRoutes(
       // --- Commitment Memory Engine ---
       const COMMITMENT_PATTERNS = [
         /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to)\s+(.{5,80})/i,
-        /\b(?:tomorrow i(?:'ll| will))\s+(.{5,80})/i,
+        /\b(?:tomorrow i(?:'ll| will)?)\s+(.{5,80})/i,
+        /\b(?:tonight i(?:'ll| will)?)\s+(.{5,80})/i,
+        /\b(?:later i(?:'ll| will)?)\s+(.{5,80})/i,
+        /\b(?:after work i(?:'ll| will|'m going to)?)\s+(.{5,80})/i,
         /\b(?:starting (?:tomorrow|monday|next week))\b.*?(?:i(?:'ll| will|'m going to))\s+(.{5,80})/i,
         /\b(?:tonight|this evening|this morning|at \d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b.*?\b(?:i(?:'ll| will|'m going to))\s+(.{5,40})/i,
       ];
@@ -934,7 +945,7 @@ export async function registerRoutes(
         /\b(in \d+ (?:hours?|minutes?|days?))\b/i,
       ];
 
-      const hasFutureIntent = /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to|tomorrow|tonight|this evening|next week|starting)\b/i.test(rawText);
+      const hasFutureIntent = /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to|tomorrow|tonight|later i|after work i|this evening|next week|starting)\b/i.test(rawText);
       if (hasFutureIntent) {
         for (const pat of COMMITMENT_PATTERNS) {
           const match = rawText.match(pat);
@@ -978,15 +989,8 @@ export async function registerRoutes(
       let ipDelta = agg.totalInsightPoints;
       let driftDelta = agg.totalDriftMarkers;
 
-      // Micro conversation water: time-bound commitment = +1 AP (rare, small)
-      if (agg.primaryCategory === "IO") {
-        const hasTimeBound = /\b(?:at \d|by \d|tomorrow|tonight|this morning|this evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week)\b/i.test(rawText);
-        const hasCommitment = /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to)\b/i.test(rawText);
-        if (hasTimeBound && hasCommitment) {
-          apDelta += 1;
-          console.log(`[MICRO] +1 AP for time-bound commitment`);
-        }
-      }
+      // ZERO REWARD FOR TALK OR COMMITMENT — only VA/AR earn AP
+      // Commitments are tracked and followed up, but never rewarded
 
       const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
       const isCBurnActive = !!(user.cBurnActive);
