@@ -163,6 +163,15 @@ export async function registerRoutes(
               isActive: 1,
             });
 
+            const clarGoalIndex = chosenType === "targeted" ? 0 : 1;
+            const clarUser = await storage.getUser(userId);
+            if (clarUser) {
+              const clarGoals = [...(clarUser.goals || [])];
+              while (clarGoals.length <= clarGoalIndex) clarGoals.push("");
+              clarGoals[clarGoalIndex] = pendingGoalText;
+              await storage.updateUser(userId, { goals: clarGoals });
+            }
+
             await storage.createEntry({ userId, date: todayStr(), summary: `Goal planted: ${pendingGoalText}`, mood: "neutral" });
 
             const typeLabel = chosenType === "targeted" ? "Targeted Goal" : "Identity Goal";
@@ -655,6 +664,15 @@ export async function registerRoutes(
           treeGrowthScore: 0,
           isActive: 1,
         });
+
+        const goalIndex = goalType === "targeted" ? 0 : 1;
+        const currentUser = await storage.getUser(userId);
+        if (currentUser) {
+          const updatedGoals = [...(currentUser.goals || [])];
+          while (updatedGoals.length <= goalIndex) updatedGoals.push("");
+          updatedGoals[goalIndex] = goalText;
+          await storage.updateUser(userId, { goals: updatedGoals });
+        }
 
         await storage.createEntry({
           userId,
@@ -1310,6 +1328,20 @@ export async function registerRoutes(
       };
 
       const goal = await storage.createGoal(data);
+
+      const apiGoalIndex = goalType === "targeted" ? 0 : 1;
+      const apiGoals = [...(user.goals || [])];
+      while (apiGoals.length <= apiGoalIndex) apiGoals.push("");
+      apiGoals[apiGoalIndex] = data.title;
+      await storage.updateUser(userId, { goals: apiGoals });
+
+      await storage.createEntry({
+        userId,
+        date: new Date().toISOString().split("T")[0],
+        summary: `Goal planted: ${data.title}`,
+        mood: "neutral",
+      });
+
       return res.json(goal);
     } catch (err) {
       console.error(err);
