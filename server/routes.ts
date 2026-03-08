@@ -987,6 +987,7 @@ export async function registerRoutes(
       }
 
       // Auto-resolve pending commitments when user takes real action
+      const resolvedCommitments: string[] = [];
       if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
         const pending = await storage.getPendingCommitments(userId);
         for (const c of pending) {
@@ -995,6 +996,7 @@ export async function registerRoutes(
           const overlap = actionWords.filter(w => w.length > 3 && messageWords.includes(w));
           if (overlap.length >= 2 || pending.length === 1) {
             await storage.resolveCommitment(c.id, "completed");
+            resolvedCommitments.push(c.action);
             console.log(`[COMMIT] Resolved: "${c.action}" → completed`);
           }
         }
@@ -1078,6 +1080,75 @@ export async function registerRoutes(
           summary: rawText,
           mood: "happy",
         });
+
+        // --- PROGRESS MODE: Anime Celebration Engine ---
+        const CELEBRATIONS = [
+          "YES! That's a clean win.",
+          "Nice! Momentum just leveled up.",
+          "Boom. That's progress.",
+          "You said you'd do it — and you did.",
+          "That's how seeds grow.",
+          "Small step. Big energy.",
+          "Let's go! That counts.",
+          "That move just strengthened your roots.",
+          "Action confirmed. Respect.",
+          "Momentum unlocked.",
+          "You just watered the seed.",
+          "That's a real step forward.",
+          "Nice follow-through.",
+          "You showed up today.",
+          "That's how the story moves forward.",
+          "That's a win. No doubt.",
+          "You just built momentum.",
+          "Another step in the right direction.",
+          "That action matters.",
+          "Seed status: stronger.",
+          "Consistency in action.",
+          "That's how progress stacks.",
+          "Good work — that was real effort.",
+          "You moved the mission forward.",
+          "Momentum continues.",
+        ];
+
+        const celebrationLine = CELEBRATIONS[Math.floor(Math.random() * CELEBRATIONS.length)];
+
+        const commitCallback = resolvedCommitments.length > 0
+          ? `You said you'd ${resolvedCommitments[0]} — and you followed through.`
+          : (() => {
+              let actionText = rawText.toLowerCase().replace(/^i\s+/i, "").replace(/\bmy\b/g, "your").replace(/\bi'm\b/gi, "you're").replace(/\bi was\b/gi, "you were").replace(/\bi\b/g, "you");
+              if (actionText.length > 60) actionText = actionText.substring(0, 57) + "...";
+              return `You ${actionText}.`;
+            })();
+
+        const emotionPatterns = /nervous|scared|afraid|anxious|stressed|worried|tough|hard|difficult|struggle|didn.?t feel like|wasn.?t easy|uncomfortable/i;
+        const emotionMatch = rawText.match(emotionPatterns);
+        const emotionLine = emotionMatch
+          ? `Doing it even when it felt ${emotionMatch[0].toLowerCase()} takes real courage.`
+          : "";
+
+        const waterLine = waterAwarded ? "That action added water to your seed." : "";
+
+        const nextStepOptions = [
+          "What feels like the next small step while the momentum is here?",
+          "What's the next move while you're rolling?",
+          "Where do you go from here?",
+          "What's the next step?",
+          "Next move when you're ready.",
+        ];
+        const nextStepLine = nextStepOptions[Math.floor(Math.random() * nextStepOptions.length)];
+
+        const celebrationParts = [
+          celebrationLine,
+          commitCallback,
+          emotionLine,
+          waterLine,
+          nextStepLine,
+        ].filter(Boolean);
+
+        const celebrationText = celebrationParts.join(" ");
+
+        await storage.updateMessage(jaeMsg.id, { text: celebrationText });
+        jaeMsg.text = celebrationText;
       } else {
         if (ipDelta > 0) {
           const matchGoal = targetedGoal || untargetedGoal;

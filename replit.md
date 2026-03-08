@@ -38,3 +38,16 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Handles subscription management, including checkout, billing portal, and webhook processing for various subscription states.
 - **Replit Object Storage**: Used for storing user-uploaded photos.
 - **Google Fonts**: For loading DM Sans and Lora fonts.
+### Progress Recognition + Anime Celebration Engine
+- **Trigger**: TITAN classifies message as VA (Verified Action) or AR (Adaptive Recovery)
+- **Response structure**: 1) Random anime celebration line (25-item pool), 2) Action acknowledgment (echoes user's action or references resolved commitment), 3) Emotion validation if detected (nervous, anxious, hard, etc.), 4) Water reward acknowledgment when water is awarded, 5) Random next-step reinforcement question
+- **Commitment callback**: When VA/AR auto-resolves a pending commitment, celebration references it: "You said you'd [action] — and you followed through."
+- **Pronoun swap**: Action echo converts first-person to second-person (I→you, my→your, I was→you were)
+- **Memory storage**: VA/AR entries stored in entries table with mood="happy" and summary=rawText
+
+### Onboarding Flow
+- **Screens**: Welcome → Orientation → Assessment → Home
+- **One-time only**: `onboardingCompleted` flag in localStorage (Zustand store) prevents re-display
+- **Route guards**: Welcome, Orientation, and Assessment all check onboardingCompleted and redirect to /home with replace navigation
+- **No back-nav**: All onboarding transitions use `{ replace: true }` to prevent browser back-button access
+- **Profile goal display**: Reads from garden-summary (goals table) as primary source, falls back to users.goals array
