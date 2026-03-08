@@ -117,7 +117,9 @@ export async function registerRoutes(
       const textLower = rawText.toLowerCase();
       let jaeText = "";
 
-      if (/^(targeted|identity)$/i.test(textLower.trim())) {
+      const trimmedLower = textLower.trim();
+      const isGoalTypeConfirm = /^(targeted|target|identity)$/i.test(trimmedLower);
+      if (isGoalTypeConfirm) {
         const recentMessages = await storage.getMessages(userId);
         const recentJae = recentMessages.filter(m => m.sender === "jae").sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()).slice(0, 5);
         const clarificationMsg = recentJae.find(m => m.text.includes('a **targeted goal**'));
@@ -125,7 +127,7 @@ export async function registerRoutes(
           const pendingMatch = clarificationMsg.text.match(/Is "(.+?)" a \*\*targeted goal\*\*/);
           if (pendingMatch) {
             const pendingGoalText = pendingMatch[1];
-            const chosenType = textLower.trim() === "targeted" ? "targeted" as const : "untargeted" as const;
+            const chosenType = (trimmedLower === "targeted" || trimmedLower === "target") ? "targeted" as const : "untargeted" as const;
 
             const existingOfType = activeGoals.find((g) => g.goalType === chosenType);
             if (existingOfType) {
@@ -1126,7 +1128,8 @@ export async function registerRoutes(
           ? `Doing it even when it felt ${emotionMatch[0].toLowerCase()} takes real courage.`
           : "";
 
-        const waterLine = waterAwarded ? "Water added to your cup." : "";
+        const matchGoalExists = !!(targetedGoal || untargetedGoal);
+        const waterLine = (apDelta > 0 && matchGoalExists) ? "Water added to your cup." : "";
 
         const nextStepOptions = [
           "What feels like the next small step while the momentum is here?",
@@ -1171,13 +1174,14 @@ export async function registerRoutes(
         cBurnActive: user.cBurnActive || 0,
       });
 
-      if (escalation.driftWarning && !escalation.cBurnTriggered) {
+      const justVerified = agg.primaryCategory === "VA" || agg.primaryCategory === "AR";
+      if (escalation.driftWarning && !escalation.cBurnTriggered && !justVerified) {
         await storage.updateUser(userId, {
           lastDriftWarningAt: new Date(),
           driftWarningCount14d: (user.driftWarningCount14d || 0) + 1,
         } as any);
       }
-      if (escalation.cBurnTriggered) {
+      if (escalation.cBurnTriggered && !justVerified) {
         await storage.updateUser(userId, {
           cBurnActive: 1,
         } as any);
@@ -1190,20 +1194,27 @@ export async function registerRoutes(
         userMessage: userMsg,
         jaeMessage: jaeMsg,
         titan: { category: agg.primaryCategory, actionPoints: apDelta, insightPoints: ipDelta, driftMarkers: driftDelta },
-        escalation: escalation.escalationMessage ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
-        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") ? {
-          awarded: waterAwarded,
-          goalId: waterGoalId || (targetedGoal || untargetedGoal)?.id || null,
-          waterEvents: growthResult?.waterEvents ?? (targetedGoal || untargetedGoal)?.waterEvents ?? 0,
-          cupsFilled: growthResult?.cupsFilled ?? (targetedGoal || untargetedGoal)?.cupsFilled ?? 0,
-          seedStage: growthResult?.seedStage ?? (targetedGoal || untargetedGoal)?.seedStage ?? 0,
-          cupJustFilled: growthResult?.cupJustFilled ?? false,
-          stageAdvanced: growthResult?.stageAdvanced ?? false,
-          fillPercent: waterAwarded ? Math.round((growthResult?.waterEvents / 10) * 100) : Math.round(((targetedGoal || untargetedGoal)?.waterEvents ?? 0) / 10 * 100),
-          preResetFillPercent: growthResult?.preResetFillPercent ?? 0,
-          actionPointsAccumulated: postUpdateAP ?? ((targetedGoal || untargetedGoal)?.actionPoints ?? 0) + apDelta,
-          actionPointsNeeded: 10,
-        } : null,
+        escalation: (escalation.escalationMessage && !justVerified) ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
+        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") ? (() => {
+          const mg = targetedGoal || untargetedGoal;
+          const we = growthResult?.waterEvents ?? (mg?.waterEvents ?? 0);
+          const cf = growthResult?.cupsFilled ?? (mg?.cupsFilled ?? 0);
+          const ap = postUpdateAP ?? ((mg?.actionPoints ?? 0) + apDelta);
+          const fillPct = Math.min(100, Math.round(we * 10 + ap));
+          return {
+            awarded: apDelta > 0 && !!mg,
+            goalId: waterGoalId || mg?.id || null,
+            waterEvents: we,
+            cupsFilled: cf,
+            seedStage: growthResult?.seedStage ?? (mg?.seedStage ?? 0),
+            cupJustFilled: growthResult?.cupJustFilled ?? false,
+            stageAdvanced: growthResult?.stageAdvanced ?? false,
+            fillPercent: fillPct,
+            preResetFillPercent: growthResult?.preResetFillPercent ?? fillPct,
+            actionPointsAccumulated: ap,
+            actionPointsNeeded: 10,
+          };
+        })() : null,
       });
     } catch (err) {
       console.error(err);
@@ -1575,7 +1586,8 @@ export async function registerRoutes(
         const waterEvents = goal.waterEvents ?? 0;
         const cupsFilled = goal.cupsFilled ?? 0;
         const seedStage = goal.seedStage ?? 0;
-        const fillPercent = Math.round((waterEvents / 10) * 100);
+        const actionPoints = goal.actionPoints ?? 0;
+        const fillPercent = Math.min(100, Math.round(waterEvents * 10 + actionPoints));
         const stageInfo = SEED_STAGE_INFO[seedStage] || SEED_STAGE_INFO[0];
 
         const revealedStatements: Record<number, string> = {};
@@ -2172,7 +2184,8 @@ export async function registerRoutes(
       }
 
       const matchGoalForPhoto = targetedGoal || untargetedGoal;
-      const photoWaterAck = photoWaterAwarded ? " Water added to your cup." : "";
+      const effectivePhotoAP = user.cBurnActive ? 0 : photoAP;
+      const photoWaterAck = (effectivePhotoAP > 0 && matchGoalForPhoto) ? " Water added to your cup." : "";
       const jaeResponse = await storage.createMessage({
         userId,
         text: analysis.next_prompt + photoWaterAck,
@@ -2191,14 +2204,22 @@ export async function registerRoutes(
         jaeResponse,
         analysis,
         photoMemory,
-        water: photoWaterAwarded ? {
-          awarded: true,
-          fillPercent: Math.round((photoGrowthResult.waterEvents / 10) * 100),
-          cupsFilled: photoGrowthResult.cupsFilled,
-          cupJustFilled: photoGrowthResult.cupJustFilled,
-          stageAdvanced: photoGrowthResult.stageAdvanced,
-          preResetFillPercent: photoGrowthResult.preResetFillPercent,
-        } : null,
+        water: (effectivePhotoAP > 0 && matchGoalForPhoto) ? (() => {
+          const mg = matchGoalForPhoto;
+          const we = photoGrowthResult?.waterEvents ?? (mg?.waterEvents ?? 0);
+          const cf = photoGrowthResult?.cupsFilled ?? (mg?.cupsFilled ?? 0);
+          const ap = photoGrowthResult ? 0 : ((mg?.actionPoints ?? 0) + effectivePhotoAP);
+          const remainAP = photoGrowthResult ? ((mg?.actionPoints ?? 0) + effectivePhotoAP) % 10 : ap;
+          const fillPct = Math.min(100, Math.round(we * 10 + remainAP));
+          return {
+            awarded: true,
+            fillPercent: fillPct,
+            cupsFilled: cf,
+            cupJustFilled: photoGrowthResult?.cupJustFilled ?? false,
+            stageAdvanced: photoGrowthResult?.stageAdvanced ?? false,
+            preResetFillPercent: photoGrowthResult?.preResetFillPercent ?? fillPct,
+          };
+        })() : null,
       });
     } catch (err: any) {
       console.error(`[PHOTO] Error after ${Date.now() - startTime}ms:`, err?.message || err);

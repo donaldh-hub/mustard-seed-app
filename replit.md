@@ -51,3 +51,13 @@ Preferred communication style: Simple, everyday language.
 - **Route guards**: Welcome, Orientation, and Assessment all check onboardingCompleted and redirect to /home with replace navigation
 - **No back-nav**: All onboarding transitions use `{ replace: true }` to prevent browser back-button access
 - **Profile goal display**: Reads from garden-summary (goals table) as primary source, falls back to users.goals array
+
+### Water Reward System
+- **Cup fill formula**: `fillPercent = min(100, waterEvents * 10 + actionPoints)` — shows AP sub-progress within the current water unit
+- **Water acknowledgment**: Every VA/AR with AP > 0 and an active goal triggers "Water added to your cup." in Jae's celebration text
+- **Mini water cup**: Displayed in Chat header next to Jae's avatar when user has an active goal; shows current fill level with animation on reward
+- **Cup animation**: On water awarded, the mini cup animates fill. If cup just filled (threshold crossed), it shows fill→empty→new-fill sequence
+- **Photo water**: Photo endpoint also returns `water` object and appends " Water added to your cup." to Jae's response when photo AP earns water
+- **cBurn guard**: VA/AR messages clear cBurn; escalation no longer re-sets cBurn after a verified action in the same request
+- **Goal type confirmation**: Accepts "target", "targeted", or "identity" (case-insensitive) for goal type selection
+- **App reset**: Adding `?reset=1` to URL clears localStorage and restarts onboarding for a fresh user

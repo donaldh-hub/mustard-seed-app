@@ -1,0 +1,81 @@
+The water reward update is not fully wired correctly yet.
+
+Current issue:
+I performed a valid progress action after planting a goal, but the expected water reward feedback did NOT appear as required.
+
+Observed behavior:
+- I planted a goal successfully
+- I entered a valid action update: "I wrote the first chapter of my book"
+- Jae responded conversationally
+- BUT Jae did NOT say the required short water acknowledgement
+- AND the visible water reward behavior did not clearly trigger as expected
+
+What should have happened:
+For a valid water-earning action, the system must do ALL of the following in the same flow:
+1. Detect that the message qualifies for water
+2. Award the correct water amount based on the real reward matrix
+3. Immediately update the visible water cup next to the seed
+4. Trigger the cup fill animation
+5. Send a short Jae acknowledgement in chat:
+   "Water added to your cup."
+6. Persist the updated water value in real app state
+
+Required fix:
+Audit and repair the wiring between:
+- chat message evaluation
+- water reward logic
+- cup UI state
+- chat acknowledgement output
+- stored app/database state
+
+Important behavior rules:
+- Do NOT give water for casual chat, intention, or vague statements
+- DO give water for real completed progress steps
+- "I wrote the first chapter of my book" should count as a valid completed action and should trigger a water reward
+- The acknowledgement must only appear when water is actually awarded
+- The acknowledgement must be short and consistent:
+  "Water added to your cup."
+- Do not replace it with a long motivational response only
+- The cup update must be visible immediately after the reward is granted
+
+Specific debugging task:
+Trace the exact flow for this message:
+"I wrote the first chapter of my book"
+
+Check all of the following:
+1. Did the classifier mark it as a valid completed action?
+2. Did the reward engine assign water?
+3. Did the chat response builder include the water acknowledgement?
+4. Did the visible cup UI receive the updated value?
+5. Did the updated value persist in real state?
+6. Did any conditional logic suppress the acknowledgement or UI update?
+
+Repair whatever is blocking the reward flow so this message produces the correct result.
+
+After fixing it, run a real end-to-end test using this exact sequence:
+
+1. Start with a fresh test user
+2. Save a goal:
+   "save: my goal is to write a book"
+3. Confirm targeted
+4. Send:
+   "I wrote the first chapter of my book"
+
+Expected result:
+- goal saves correctly
+- valid progress action is recognized
+- correct water amount is awarded
+- visible cup fills immediately
+- Jae says exactly:
+  "Water added to your cup."
+- updated water value is reflected in the real stored state
+
+Return a structured pass/fail report showing:
+- whether the progress message qualified
+- whether water was awarded
+- whether the acknowledgement fired
+- whether the UI updated
+- whether stored state matched the UI
+- exactly where the wiring failed if any part still breaks
+
+Do not mock the result. Test the real app behavior and repair the real wiring.
