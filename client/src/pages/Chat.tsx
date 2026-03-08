@@ -11,6 +11,31 @@ import { useUpload, type UploadPhase } from "@/hooks/use-upload";
 import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
+function MiniWaterCup({ fillPercent, animating }: { fillPercent: number; animating: boolean }) {
+  const clamped = Math.max(0, Math.min(fillPercent, 100));
+  return (
+    <div className="relative w-7 h-9" data-testid="mini-water-cup">
+      <div className="absolute inset-0 rounded-b-lg rounded-t-sm border-2 border-blue-300/60 bg-blue-50/30 overflow-hidden">
+        <motion.div
+          className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-blue-500 to-blue-400 rounded-b-md"
+          animate={{ height: `${clamped}%` }}
+          transition={{ duration: animating ? 0.6 : 0.3, ease: "easeOut" }}
+          data-testid="mini-water-fill"
+        />
+        {animating && (
+          <motion.div
+            className="absolute inset-0 bg-blue-300/30"
+            initial={{ opacity: 0.7 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: 1.2 }}
+          />
+        )}
+      </div>
+      <Droplets className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-blue-500" />
+    </div>
+  );
+}
+
 const QUICK_GOALS = [
   { label: "Write a Book", command: "save: my goal is to write a book" },
   { label: "Lose Weight", command: "save: my goal is to lose weight" },
@@ -68,6 +93,8 @@ export default function Chat() {
   const [showAttach, setShowAttach] = useState(false);
   const [showCreateOwn, setShowCreateOwn] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string } | null>(null);
+  const [waterAnimating, setWaterAnimating] = useState(false);
+  const [localFillPercent, setLocalFillPercent] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +150,13 @@ export default function Chat() {
   });
 
   const hasNoGoal = !garden?.targeted && !garden?.untargeted;
+  const activeGoal = garden?.targeted || garden?.untargeted;
+  const gardenFillPercent = activeGoal?.fillPercent ?? 0;
+  const displayFillPercent = localFillPercent !== null ? localFillPercent : gardenFillPercent;
+
+  useEffect(() => {
+    if (!waterAnimating) setLocalFillPercent(null);
+  }, [gardenFillPercent]);
 
   useEffect(() => {
     if (photoActiveRef.current) return;
@@ -139,11 +173,29 @@ export default function Chat() {
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => api.sendMessage(userId!, text),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
       qc.invalidateQueries({ queryKey: ["user", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
+      if (data?.water?.awarded) {
+        const w = data.water;
+        if (w.cupJustFilled) {
+          setLocalFillPercent(w.preResetFillPercent);
+          setWaterAnimating(true);
+          setTimeout(() => {
+            setLocalFillPercent(0);
+            setTimeout(() => {
+              setLocalFillPercent(w.fillPercent);
+              setTimeout(() => setWaterAnimating(false), 800);
+            }, 400);
+          }, 1200);
+        } else {
+          setLocalFillPercent(w.fillPercent);
+          setWaterAnimating(true);
+          setTimeout(() => setWaterAnimating(false), 1500);
+        }
+      }
     },
   });
 
@@ -176,12 +228,30 @@ export default function Chat() {
         throw err;
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
       qc.invalidateQueries({ queryKey: ["user", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["photo-memories", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
+      if (data?.water?.awarded) {
+        const w = data.water;
+        if (w.cupJustFilled) {
+          setLocalFillPercent(w.preResetFillPercent);
+          setWaterAnimating(true);
+          setTimeout(() => {
+            setLocalFillPercent(0);
+            setTimeout(() => {
+              setLocalFillPercent(w.fillPercent);
+              setTimeout(() => setWaterAnimating(false), 800);
+            }, 400);
+          }, 1200);
+        } else {
+          setLocalFillPercent(w.fillPercent);
+          setWaterAnimating(true);
+          setTimeout(() => setWaterAnimating(false), 1500);
+        }
+      }
       setTimeout(async () => {
         setPhotoPreview(null);
         setInput("");
@@ -263,7 +333,7 @@ export default function Chat() {
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm overflow-hidden">
           <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="font-serif font-semibold text-lg" data-testid="text-jae-name">Jae M. Seed</h1>
           <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-current-stage">
             {assessment ? (
@@ -278,6 +348,12 @@ export default function Chat() {
             )}
           </p>
         </div>
+        {activeGoal && (
+          <div className="flex flex-col items-center gap-0.5">
+            <MiniWaterCup fillPercent={displayFillPercent} animating={waterAnimating} />
+            <span className="text-[8px] text-muted-foreground font-medium">{activeGoal.cupsFilled ?? 0} cups</span>
+          </div>
+        )}
       </header>
 
       <div

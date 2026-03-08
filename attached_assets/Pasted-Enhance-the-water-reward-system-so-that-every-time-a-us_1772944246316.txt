@@ -1,0 +1,55 @@
+Enhance the water reward system so that every time a user earns water, the action is visibly reflected in the water cup next to the seed AND acknowledged by Jae in the chat.
+
+Current issue:
+Water rewards may occur internally but the user does not always see or hear confirmation that water was added.
+
+Required behavior:
+
+Whenever the system awards water to the user (from any valid reward event), the following must happen in the same flow:
+
+1. Add the correct amount of water to the user's cup container
+2. Immediately update the cup UI next to the seed so the water level visibly rises
+3. Trigger a short visual water-fill animation in the cup
+4. Jae must send a short acknowledgement message in chat confirming the water reward
+
+This must happen for all legitimate water events including:
+- first goal planted
+- verified action taken toward a goal
+- proof-based progress (photos, evidence)
+- milestone completions
+- other valid rule-based rewards defined in the water matrix
+
+Jae acknowledgement rules:
+
+The message must be short and natural. Examples:
+
+"Nice work. Water added to your cup."
+
+or
+
+"Good step forward. Water added to your cup."
+
+Do not generate long explanations or multiple messages. The acknowledgement should be one short sentence confirming that water was added.
+
+Important system rules:
+
+- Every water reward must update the cup UI immediately
+- Water must always appear in the cup next to the seed
+- No water rewards should occur silently
+- The chat acknowledgement must only trigger when water is actually added
+- Casual conversation or non-progress chat must never trigger this message
+
+Cup behavior requirements:
+
+The cup must show clear fill levels:
+0% empty
+25% quarter full
+50% half full
+75% three-quarter full
+100% full
+
+When the cup reaches 100%, trigger the existing pour animation that waters the seed and resets the cup to empty.
+
+Ensure the chat acknowledgement happens at the moment water is added to the cup, not after the seed is watered.
+
+Do not simulate this behavior. Connect the acknowledgement directly to the real water reward logic.

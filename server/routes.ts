@@ -1126,7 +1126,7 @@ export async function registerRoutes(
           ? `Doing it even when it felt ${emotionMatch[0].toLowerCase()} takes real courage.`
           : "";
 
-        const waterLine = waterAwarded ? "That action added water to your seed." : "";
+        const waterLine = waterAwarded ? "Water added to your cup." : "";
 
         const nextStepOptions = [
           "What feels like the next small step while the momentum is here?",
@@ -2127,6 +2127,8 @@ export async function registerRoutes(
         tags: analysis.tags || [],
       });
 
+      let photoWaterAwarded = false;
+      let photoGrowthResult: any = null;
       if (photoAP > 0) {
         const matchGoal = targetedGoal || untargetedGoal;
         if (matchGoal) {
@@ -2141,6 +2143,8 @@ export async function registerRoutes(
               matchGoal.seedStage,
               waterUnits
             );
+            photoGrowthResult = gr;
+            photoWaterAwarded = true;
             await storage.updateGoal(matchGoal.id, {
               actionPoints: remainingAP,
               waterEvents: gr.waterEvents,
@@ -2167,9 +2171,11 @@ export async function registerRoutes(
         }
       }
 
+      const matchGoalForPhoto = targetedGoal || untargetedGoal;
+      const photoWaterAck = photoWaterAwarded ? " Water added to your cup." : "";
       const jaeResponse = await storage.createMessage({
         userId,
-        text: analysis.next_prompt,
+        text: analysis.next_prompt + photoWaterAck,
         sender: "jae",
         messageType: "text",
         status: "sent",
@@ -2185,6 +2191,14 @@ export async function registerRoutes(
         jaeResponse,
         analysis,
         photoMemory,
+        water: photoWaterAwarded ? {
+          awarded: true,
+          fillPercent: Math.round((photoGrowthResult.waterEvents / 10) * 100),
+          cupsFilled: photoGrowthResult.cupsFilled,
+          cupJustFilled: photoGrowthResult.cupJustFilled,
+          stageAdvanced: photoGrowthResult.stageAdvanced,
+          preResetFillPercent: photoGrowthResult.preResetFillPercent,
+        } : null,
       });
     } catch (err: any) {
       console.error(`[PHOTO] Error after ${Date.now() - startTime}ms:`, err?.message || err);

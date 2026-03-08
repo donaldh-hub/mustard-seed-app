@@ -21,7 +21,7 @@ export const api = {
 
   getMessages: (userId: string) => fetchJson<any[]>(`/users/${userId}/messages`),
   sendMessage: (userId: string, text: string) =>
-    fetchJson<{ userMessage: any; jaeMessage: any }>(`/users/${userId}/messages`, {
+    fetchJson<{ userMessage: any; jaeMessage: any; water?: { awarded: boolean; fillPercent: number; cupsFilled: number; cupJustFilled: boolean; stageAdvanced: boolean; preResetFillPercent: number } }>(`/users/${userId}/messages`, {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
