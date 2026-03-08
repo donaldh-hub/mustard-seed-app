@@ -1,0 +1,183 @@
+SYSTEM FIX: PROGRESS RECOGNITION MUST ALSO ISSUE CREDIT REWARDS
+
+Right now the app correctly detects progress language and generates celebration/support responses in chat, but it is NOT issuing the actual point/credit reward tied to the completed action.
+
+This must be fixed.
+
+When a user reports completing a real goal-related action in chat, the system must not stop at encouragement. It must also create the actual reward transaction and update the user’s visible credits immediately.
+
+--------------------------------
+
+CORE PROBLEM
+
+The current system is treating completed-action chat messages as conversational progress only.
+
+It is NOT consistently passing those verified actions into the reward/credit engine.
+
+Result:
+- celebration appears
+- support appears
+- but credits do not increase
+
+That is incorrect behavior.
+
+--------------------------------
+
+REQUIRED FIX
+
+When TITAN / Progress Recognition detects a verified completed action (VA), it must do ALL of the following in one linked workflow:
+
+1. generate the celebration/support chat response
+2. issue water reward
+3. issue credit reward
+4. store the event in memory
+5. update the user’s visible total credits immediately
+6. prevent duplicate payouts for the exact same event
+
+This must happen in the same action pipeline, not as disconnected systems.
+
+--------------------------------
+
+VERIFIED ACTION RULE
+
+If a user states that they completed a real step tied to their active goal, this counts as a verified action unless there is clear evidence it is vague chatter or future intent.
+
+Examples of VERIFIED ACTION:
+
+- "my book idea is outlined"
+- "I drafted the first chapter"
+- "I finished my workout"
+- "I submitted the application"
+- "I went to the gym"
+- "I wrote two pages"
+- "I recorded the weigh in"
+- "I completed my walk"
+
+These are not general conversation.
+These are rewardable actions.
+
+--------------------------------
+
+REWARD PAYOUT RULE
+
+When a verified action is detected, issue credits automatically.
+
+Use the existing app reward economy and make sure the credit transaction is actually written to the same source of truth used by the visible credit display.
+
+For major goal-related completed actions, award the correct major-action credit amount.
+
+For this system, outlining the book is a real completed milestone and should trigger the major action reward.
+
+If the existing intended reward value for this action category is 1200 credits, then the system must award 1200 credits and immediately reflect it in the user’s total.
+
+Do NOT silently skip the credit write.
+
+--------------------------------
+
+ACTION CATEGORY MAPPING
+
+Map completed actions into reward categories.
+
+Examples:
+
+MAJOR_ACTION examples:
+- outlined my book
+- drafted first chapter
+- completed workout
+- finished key milestone
+- submitted major deliverable
+
+MINOR_ACTION examples:
+- wrote a paragraph
+- reviewed notes
+- planned workout
+- brainstormed chapter titles
+
+The reward engine should use category mapping to determine payout.
+
+If "outlined my book" is already defined in the product logic as a major milestone worth 1200 credits, then that exact payout must execute.
+
+--------------------------------
+
+IMMEDIATE UI UPDATE
+
+After reward payout, update all user-facing credit displays immediately:
+
+- chat confirmation if applicable
+- profile credit display
+- growth/dashboard credit display
+- any wallet / reward total / progress header using the same source
+
+Do not require manual refresh if the rest of the app already supports live update.
+If live update is unavailable, trigger the existing refresh/state invalidation so the new credit total appears right away.
+
+--------------------------------
+
+DUPLICATE PROTECTION
+
+The system must prevent duplicate reward farming.
+
+If the exact same verified action has already been rewarded recently, do not re-award it unless the event is clearly new.
+
+Use available safeguards such as:
+- action fingerprint
+- timestamp proximity
+- memory/event log comparison
+- duplicate transaction check
+
+But do NOT block legitimate first-time rewards.
+
+Current problem is under-rewarding, not over-rewarding.
+
+--------------------------------
+
+MEMORY / LOGGING
+
+When a verified action is rewarded, log:
+
+action_type: verified_action
+action_summary: normalized summary of completed task
+goal_id: linked active goal if available
+water_awarded: value
+credits_awarded: actual payout
+reward_category: major_action or minor_action
+source: chat_progress_detection
+timestamp: event time
+
+This log should make it easy to audit why chat celebrated but credits did or did not fire.
+
+--------------------------------
+
+DEBUG / AUDIT REQUIREMENT
+
+Add a clear internal audit trail for these events so progress reward failures can be diagnosed fast.
+
+For each detected verified action, log whether each step succeeded:
+
+- progress_detected = true/false
+- celebration_sent = true/false
+- water_awarded = true/false
+- credits_awarded = true/false
+- credit_amount = number
+- memory_saved = true/false
+- ui_updated = true/false
+- duplicate_blocked = true/false
+
+This is necessary so if chat celebrates but credits do not appear, we can see exactly where the chain broke.
+
+--------------------------------
+
+GOAL
+
+A user who completes a real action in chat must receive the full accountability response:
+
+- recognition
+- encouragement
+- water
+- credits
+- memory
+- visible reward update
+
+If the user says they completed their outline, the system must not just praise them.
+
+It must PAY OUT the reward properly.

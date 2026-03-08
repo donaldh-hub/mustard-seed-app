@@ -34,13 +34,15 @@ const VA_PATTERNS = [
   /\b(made the call|called|emailed|sent|submitted|shipped|posted|published|applied|delivered)\b/i,
   /\b(took the stairs|woke up early|got up at|went to bed|slept (by|before))\b/i,
   /\b(meditated|journaled|wrote|read|studied|practiced|rehearsed)\b/i,
-  /\b(completed|finished|accomplished|done|did it|nailed it)\b/i,
+  /\b(completed|finished|accomplished|done|did it|nailed it|got it done|followed through|kept my promise|made progress)\b/i,
   /\b(tracked|logged|measured|recorded|weighed|counted)\b/i,
   /\b(cleaned|organized|set up|built|created|designed|coded|programmed)\b/i,
   /\b(attended|showed up|went to|participated|enrolled|signed up)\b/i,
   /\b(bought|purchased|invested in|paid for)\b/i,
-  /\b(i (did|made|took|started|went|ran|walked|completed|finished|submitted|shipped|built|wrote|read|cooked|cleaned|organized|practiced|trained|exercised|meditated|journaled|studied|applied|delivered|called|emailed|sent|posted|published|attended|measured|tracked|logged))\b/i,
-  /\b(today i|this morning i|just|i just)\s+(did|made|took|went|ran|walked|completed|finished|submitted|shipped)\b/i,
+  /\b(outlined|drafted|structured|mapped out|planned out|sketched out|laid out)\b/i,
+  /\b(is outlined|is drafted|is done|is finished|is completed|is built|is created|is written|is submitted|is recorded)\b/i,
+  /\b(i (did|made|took|started|went|ran|walked|completed|finished|submitted|shipped|built|wrote|read|cooked|cleaned|organized|practiced|trained|exercised|meditated|journaled|studied|applied|delivered|called|emailed|sent|posted|published|attended|measured|tracked|logged|outlined|drafted|created))\b/i,
+  /\b(today i|this morning i|just|i just)\s+(did|made|took|went|ran|walked|completed|finished|submitted|shipped|outlined|drafted|wrote|built|created)\b/i,
 ];
 
 const AR_PATTERNS = [
@@ -104,6 +106,9 @@ const HEARTBEAT_ACTION_MAP: Record<string, HeartbeatKey> = {
   "journaled": "consistency",
   "gym": "consistency",
   "workout": "consistency",
+  "outlined": "consistency",
+  "drafted": "consistency",
+  "structured": "consistency",
 
   "mindset": "mindset",
   "perspective": "mindset",

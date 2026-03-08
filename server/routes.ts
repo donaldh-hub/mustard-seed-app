@@ -1115,9 +1115,22 @@ export async function registerRoutes(
         const commitCallback = resolvedCommitments.length > 0
           ? `You said you'd ${resolvedCommitments[0]} — and you followed through.`
           : (() => {
-              let actionText = rawText.toLowerCase().replace(/^i\s+/i, "").replace(/\bmy\b/g, "your").replace(/\bi'm\b/gi, "you're").replace(/\bi was\b/gi, "you were").replace(/\bi\b/g, "you");
-              if (actionText.length > 60) actionText = actionText.substring(0, 57) + "...";
-              return `You ${actionText}.`;
+              let actionText = rawText.toLowerCase();
+              const swaps: [RegExp, string][] = [
+                [/\bi was\b/g, "you were"],
+                [/\bi've\b/g, "you've"],
+                [/\bi'm\b/g, "you're"],
+                [/\bi am\b/g, "you are"],
+                [/\bmy\b/g, "your"],
+                [/\bme\b/g, "you"],
+              ];
+              for (const [pat, rep] of swaps) {
+                actionText = actionText.replace(pat, rep);
+              }
+              actionText = actionText.replace(/\bi\b/g, "you");
+              actionText = actionText.replace(/\byou you\b/gi, "you");
+              if (actionText.length > 70) actionText = actionText.substring(0, 67) + "...";
+              return actionText.charAt(0).toUpperCase() + actionText.slice(1) + ".";
             })();
 
         const emotionPatterns = /nervous|scared|afraid|anxious|stressed|worried|tough|hard|difficult|struggle|didn.?t feel like|wasn.?t easy|uncomfortable/i;
@@ -1149,6 +1162,8 @@ export async function registerRoutes(
 
         await storage.updateMessage(jaeMsg.id, { text: celebrationText });
         jaeMsg.text = celebrationText;
+
+        console.log(`[PROGRESS] progress_detected=true | celebration_sent=true | water_awarded=${waterAwarded} | ap_awarded=${apDelta} | credits_awarded=${apDelta > 0} | credit_amount=${apDelta} | goal=${(targetedGoal || untargetedGoal)?.title || "none"} | commitments_resolved=${resolvedCommitments.length} | memory_saved=true | emotion=${emotionMatch ? emotionMatch[0] : "none"} | ui_updated=true`);
       } else {
         if (ipDelta > 0) {
           const matchGoal = targetedGoal || untargetedGoal;
