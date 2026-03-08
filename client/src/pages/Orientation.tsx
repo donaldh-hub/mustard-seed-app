@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
-import jaiOrientation from "@assets/ChatGPT_Image_Mar_7,_2026,_09_50_19_PM_1772938258039.png";
+import jaiOrientation from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
 
 const heartbeats = [
   {
