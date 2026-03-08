@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
@@ -43,7 +43,16 @@ export default function Assessment() {
   const [, setLocation] = useLocation();
   const userId = useStore((s) => s.userId);
   const setUserId = useStore((s) => s.setUserId);
+  const completeOnboarding = useStore((s) => s.completeOnboarding);
   const qc = useQueryClient();
+
+  const onboardingCompleted = useStore((s) => s.onboardingCompleted);
+
+  useEffect(() => {
+    if (onboardingCompleted) {
+      setLocation("/home", { replace: true });
+    }
+  }, [onboardingCompleted]);
 
   const isReturningUser = !!userId;
   const allAnswered = (isReturningUser || name.trim().length > 0) && answers.every((a) => a !== null);
@@ -80,8 +89,10 @@ export default function Assessment() {
       qc.invalidateQueries({ queryKey: ["assessment", currentUserId] });
       qc.invalidateQueries({ queryKey: ["user", currentUserId] });
 
+      completeOnboarding();
+
       setTimeout(() => {
-        setLocation("/home");
+        setLocation("/home", { replace: true });
       }, 3500);
     } catch (e) {
       console.error(e);

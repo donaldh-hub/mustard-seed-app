@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
+import { useStore } from "@/lib/store";
 import jaiOrientation from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
 
 const heartbeats = [
@@ -27,6 +29,15 @@ const heartbeats = [
 
 export default function Orientation() {
   const [, setLocation] = useLocation();
+  const onboardingCompleted = useStore((s) => s.onboardingCompleted);
+
+  useEffect(() => {
+    if (onboardingCompleted) {
+      setLocation("/home", { replace: true });
+    }
+  }, [onboardingCompleted]);
+
+  if (onboardingCompleted) return null;
 
   return (
     <div className="h-full overflow-y-auto no-scrollbar bg-gradient-to-b from-stone-100 via-stone-50 to-stone-200">
@@ -111,7 +122,7 @@ export default function Orientation() {
         >
           <button
             data-testid="button-start-assessment"
-            onClick={() => setLocation("/assessment")}
+            onClick={() => setLocation("/assessment", { replace: true })}
             className="w-full h-14 rounded-full text-lg font-bold text-stone-900 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
             style={{
               background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)",

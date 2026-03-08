@@ -8,23 +8,29 @@ import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_177293551240
 export default function Welcome() {
   const [, setLocation] = useLocation();
   const userId = useStore((s) => s.userId);
+  const onboardingCompleted = useStore((s) => s.onboardingCompleted);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    if (onboardingCompleted && userId) {
+      setLocation("/home", { replace: true });
+      return;
+    }
     if (!userId) {
       setChecking(false);
       return;
     }
     api.getAssessment(userId).then((assessment) => {
       if (assessment) {
-        setLocation("/home");
+        useStore.getState().completeOnboarding();
+        setLocation("/home", { replace: true });
       } else {
-        setLocation("/orientation");
+        setLocation("/orientation", { replace: true });
       }
     }).catch(() => {
       setChecking(false);
     });
-  }, [userId]);
+  }, [userId, onboardingCompleted]);
 
   if (checking && userId) return null;
 
@@ -88,7 +94,7 @@ export default function Welcome() {
       >
         <button
           data-testid="button-begin"
-          onClick={() => setLocation("/orientation")}
+          onClick={() => setLocation("/orientation", { replace: true })}
           className="w-full h-14 rounded-full text-lg font-bold text-stone-900 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
           style={{
             background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)",
