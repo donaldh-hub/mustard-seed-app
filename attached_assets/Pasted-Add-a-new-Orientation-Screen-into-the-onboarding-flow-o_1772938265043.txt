@@ -1,0 +1,135 @@
+Add a new Orientation Screen into the onboarding flow of the Mustard Accountability Partner app.
+
+FLOW STRUCTURE
+
+The onboarding flow should be:
+
+1. Welcome Screen
+2. Orientation Screen
+3. Assessment
+
+When the user taps the gold “Begin” button on the Welcome Screen, they should be taken to the Orientation Screen.
+
+When the user taps the button on the Orientation Screen, they should be taken directly to the Assessment.
+
+This Orientation Screen should only appear for first-time users.
+
+Returning users should continue using the existing redirect logic.
+
+--------------------------------------------------
+
+ORIENTATION SCREEN PURPOSE
+
+This screen introduces the user to the Five Heartbeats framework before they begin the assessment.
+
+The assessment evaluates the user's position across these Five Heartbeats, so the orientation screen provides context before the evaluation begins.
+
+--------------------------------------------------
+
+DESIGN DIRECTION
+
+Match the same visual language used on the Welcome Screen.
+
+Requirements:
+
+• Clean mobile-first layout  
+• Soft neutral background  
+• Centered content structure  
+• Generous spacing  
+• Consistent typography hierarchy  
+• Same gold gradient CTA button style used on the Welcome Screen  
+• Premium, calm onboarding feel  
+
+This screen should feel like a natural continuation of the Welcome Screen.
+
+--------------------------------------------------
+
+SCREEN CONTENT
+
+Headline:
+
+Growth has structure.
+
+Subheadline:
+
+These are the Five Heartbeats we build on.
+
+--------------------------------------------------
+
+HEARTBEAT LIST
+
+1. Clarity of Vision & Why  
+Know exactly what you're building and why it matters before you move.
+
+2. Small Steps + Consistency  
+Progress compounds when small actions are repeated daily.
+
+3. Mindset Over Method  
+Your thinking determines your execution more than any tactic ever will.
+
+4. Feedback & Adaptation  
+Review what happened, adjust what's needed, and keep moving forward.
+
+5. Courageous Action  
+Act even when it's uncomfortable, uncertain, or inconvenient.
+
+IMPORTANT:
+
+Ensure there are exactly five heartbeat items.
+
+Do NOT duplicate Courageous Action.
+
+--------------------------------------------------
+
+TRANSITION COPY
+
+Under the heartbeat list include this line:
+
+Answer honestly. This isn't about perfection — it's about clarity.
+
+--------------------------------------------------
+
+BUTTON
+
+Add a gold CTA button at the bottom of the screen.
+
+Button text must be:
+
+Start Assessment
+
+--------------------------------------------------
+
+BUTTON BEHAVIOR
+
+Welcome Screen button:
+"Begin"
+→ navigates to Orientation Screen
+
+Orientation Screen button:
+"Start Assessment"
+→ launches the Assessment flow
+
+--------------------------------------------------
+
+SYSTEM REQUIREMENTS
+
+• Do not break the current assessment logic
+• Preserve existing routing structure
+• Preserve returning-user redirect logic
+• Insert the Orientation Screen cleanly between Welcome and Assessment
+• Maintain responsive mobile layout
+• Allow smooth scrolling if needed on smaller screens
+
+--------------------------------------------------
+
+FINAL EXPECTED USER FLOW
+
+First-time user experience:
+
+Welcome Screen  
+↓  
+Orientation Screen  
+↓  
+Assessment begins
+
+The Orientation Screen should feel like a fully integrated onboarding step, not a placeholder page.

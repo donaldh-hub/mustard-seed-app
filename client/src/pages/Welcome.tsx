@@ -19,7 +19,7 @@ export default function Welcome() {
       if (assessment) {
         setLocation("/home");
       } else {
-        setLocation("/assessment");
+        setLocation("/orientation");
       }
     }).catch(() => {
       setChecking(false);
@@ -88,7 +88,7 @@ export default function Welcome() {
       >
         <button
           data-testid="button-begin"
-          onClick={() => setLocation("/assessment")}
+          onClick={() => setLocation("/orientation")}
           className="w-full h-14 rounded-full text-lg font-bold text-stone-900 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
           style={{
             background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)",
