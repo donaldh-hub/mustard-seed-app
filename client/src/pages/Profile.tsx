@@ -41,6 +41,12 @@ export default function Profile() {
     enabled: !!userId,
   });
 
+  const { data: garden } = useQuery({
+    queryKey: ["garden", userId],
+    queryFn: () => api.getGardenSummary(userId!),
+    enabled: !!userId,
+  });
+
   const { data: plans } = useQuery({
     queryKey: ["subscription-plans"],
     queryFn: () => api.getSubscriptionPlans(),
@@ -219,7 +225,7 @@ export default function Profile() {
                <div className="mt-1 w-2 h-2 rounded-full bg-primary" />
                <div>
                  <p className="font-medium text-foreground">Big Goal</p>
-                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{user.goals?.[0] || "Not set yet — tell Jae 'Save: my goal is...'"}</p>
+                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || user.goals?.[0] || "Not set yet — tell Jae 'Save: my goal is...'"}</p>
                </div>
              </div>
              <div className="flex items-start gap-3">
