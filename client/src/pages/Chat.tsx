@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban } from "lucide-react";
+import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -10,6 +10,40 @@ import { useLocation } from "wouter";
 import { useUpload, type UploadPhase } from "@/hooks/use-upload";
 import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+
+const QUICK_GOALS = [
+  { label: "Write a Book", command: "save: my goal is to write a book" },
+  { label: "Lose Weight", command: "save: my goal is to lose weight" },
+  { label: "Build a Business", command: "save: my goal is to build a business" },
+  { label: "Get in Shape", command: "save: my goal is to get in shape" },
+  { label: "Improve Discipline", command: "save: my goal is to improve my discipline" },
+];
+
+const WELCOME_TEXT = `Welcome. I'm glad you're here.
+
+I'm Jae — your accountability partner. My job is to help you turn small actions into real growth.
+
+Around here we plant goals like seeds. Every action you take adds water and helps that seed grow.
+
+To plant your first goal, type:
+
+save: my goal is ...
+
+Example:
+save: my goal is to write a book
+
+Or choose one below to get started.
+
+What seed are we planting today?`;
+
+const CREATE_OWN_TEXT = `Great. Your goal does NOT have to be one of the quick-start options.
+
+Type your goal like this:
+
+save: my goal is ...
+
+Example:
+save: my goal is to learn Spanish`;
 
 const stageEmoji: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
 
@@ -32,6 +66,7 @@ export default function Chat() {
   const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
   const [showAttach, setShowAttach] = useState(false);
+  const [showCreateOwn, setShowCreateOwn] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +116,14 @@ export default function Chat() {
     enabled: !!userId,
   });
 
+  const { data: garden } = useQuery({
+    queryKey: ["garden", userId],
+    queryFn: () => api.getGardenSummary(userId!),
+    enabled: !!userId,
+  });
+
+  const hasNoGoal = !garden?.targeted && !garden?.untargeted;
+
   useEffect(() => {
     if (photoActiveRef.current) return;
     if (!assessmentLoading && !assessment && userId) {
@@ -100,6 +143,7 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
       qc.invalidateQueries({ queryKey: ["user", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
+      qc.invalidateQueries({ queryKey: ["garden", userId] });
     },
   });
 
@@ -244,7 +288,74 @@ export default function Chat() {
           <div className="text-center text-muted-foreground text-sm py-8">Loading messages...</div>
         )}
 
-        {!isLoading && messages.length === 0 && (
+        {!isLoading && messages.length === 0 && hasNoGoal && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4"
+            data-testid="welcome-onboarding"
+          >
+            <div className="flex items-end gap-2 justify-start">
+              <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
+                <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+              </div>
+              <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-border/50 whitespace-pre-wrap" data-testid="text-welcome-message">
+                {WELCOME_TEXT}
+              </div>
+            </div>
+
+            <div className="ml-12 space-y-2">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide px-1">Quick Start Examples</p>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_GOALS.map((g) => (
+                  <button
+                    key={g.label}
+                    onClick={() => { setInput(""); sendMutation.mutate(g.command); }}
+                    disabled={sendMutation.isPending}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-white rounded-full border border-primary/30 shadow-sm text-sm font-medium text-primary hover:bg-primary/5 hover:border-primary/50 transition-colors disabled:opacity-50"
+                    data-testid={`button-quickgoal-${g.label.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    <Sprout className="w-3.5 h-3.5" />
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-border/30 mt-3">
+                <button
+                  onClick={() => {
+                    setShowCreateOwn(true);
+                    const inputEl = document.querySelector<HTMLInputElement>('[data-testid="input-chat"]');
+                    if (inputEl) { inputEl.focus(); setInput("save: my goal is "); }
+                  }}
+                  disabled={sendMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-full border border-primary/20 shadow-sm text-sm font-semibold text-foreground hover:from-primary/15 hover:to-secondary/15 transition-colors disabled:opacity-50"
+                  data-testid="button-create-own-goal"
+                >
+                  <PenLine className="w-4 h-4 text-primary" />
+                  Create My Own Goal
+                </button>
+              </div>
+            </div>
+
+            {showCreateOwn && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-end gap-2 justify-start"
+              >
+                <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
+                  <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+                </div>
+                <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-border/50 whitespace-pre-wrap" data-testid="text-create-own-message">
+                  {CREATE_OWN_TEXT}
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+
+        {!isLoading && messages.length === 0 && !hasNoGoal && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

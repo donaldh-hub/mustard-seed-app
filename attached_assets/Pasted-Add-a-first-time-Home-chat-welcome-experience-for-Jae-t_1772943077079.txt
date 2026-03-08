@@ -1,0 +1,84 @@
+Add a first-time Home chat welcome experience for Jae that appears when a user lands on the Home screen and does not yet have a planted goal.
+
+Trigger condition:
+- Show this only if the user has NO targeted goal and NO identity goal saved yet.
+- This should be a first-time instructional onboarding message for the Home chat experience.
+- Once a goal has been successfully planted, do not show this instructional welcome again.
+
+Purpose:
+This message must do four things clearly:
+1. Welcome the user
+2. Explain what Jae does
+3. Explain that goals are planted like seeds and grow through action
+4. Teach the user exactly how to save a goal
+
+Use this exact Jae message:
+
+"Welcome. I’m glad you’re here.
+
+I’m Jae — your accountability partner. My job is to help you turn small actions into real growth.
+
+Around here we plant goals like seeds. Every action you take adds water and helps that seed grow.
+
+To plant your first goal, type:
+
+save: my goal is ...
+
+Example:
+save: my goal is to write a book
+
+Or choose one below to get started.
+
+What seed are we planting today?"
+
+Under this welcome message, add Quick Start goal buttons.
+
+Use these exact 5 quick buttons:
+1. Write a Book
+2. Lose Weight
+3. Build a Business
+4. Get in Shape
+5. Improve Discipline
+
+Each quick button should automatically send the correct goal-saving message into chat using this exact format:
+- Write a Book → save: my goal is to write a book
+- Lose Weight → save: my goal is to lose weight
+- Build a Business → save: my goal is to build a business
+- Get in Shape → save: my goal is to get in shape
+- Improve Discipline → save: my goal is to improve my discipline
+
+Also add a separate sixth button below the five quick-start buttons:
+
+Create My Own Goal
+
+This button must NOT make the user feel limited to the preset list.
+When tapped, Jae should respond with this exact follow-up:
+
+"Great. Your goal does NOT have to be one of the quick-start options.
+
+Type your goal like this:
+
+save: my goal is ...
+
+Example:
+save: my goal is to learn Spanish"
+
+Layout requirement:
+- The five quick-start buttons should appear together as examples
+- The Create My Own Goal button should appear visually separated beneath them so it is clear that users are not limited to the preset list
+- The experience should make it obvious that the listed goals are only examples, not the only supported goals
+
+After a goal is successfully saved, Jae should send this confirmation message:
+
+"Your goal has been planted. Check the Growth tab to see your seed. Every action you take from here adds water and helps it grow."
+
+Functional requirements:
+- The welcome message and buttons must appear on the Home chat screen for first-time users with no saved goal
+- The buttons must trigger the same real goal-save flow as manual text entry
+- Goal saving must still depend on the actual save command format so the backend stays consistent
+- Once a targeted or identity goal exists, suppress this instructional welcome permanently unless intentionally reset for testing
+- Do not use placeholder logic or mock behavior; wire this to the real app state and real saved goal state
+
+Important UX requirement:
+The experience must avoid making users think the app only supports the five preset goals.
+The UI and copy should clearly communicate that users can create their own goal and that any meaningful goal is valid in the system.

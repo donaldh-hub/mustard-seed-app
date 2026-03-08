@@ -175,7 +175,7 @@ export async function registerRoutes(
             await storage.createEntry({ userId, date: todayStr(), summary: `Goal planted: ${pendingGoalText}`, mood: "neutral" });
 
             const typeLabel = chosenType === "targeted" ? "Targeted Goal" : "Identity Goal";
-            jaeText = `${greeting}${typeLabel} planted: "${pendingGoalText}". Check your Growth dashboard to see it.\n\nWhat's your first action toward this?`;
+            jaeText = `${greeting}${typeLabel} planted: "${pendingGoalText}".\n\nYour goal has been planted. Check the Growth tab to see your seed. Every action you take from here adds water and helps it grow.`;
             const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
             return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
           }
@@ -682,29 +682,14 @@ export async function registerRoutes(
         });
 
         const typeLabel = goalType === "targeted" ? "Targeted Goal" : "Identity Goal";
-        const goalConfirms = [
-          `${greeting}${typeLabel} planted: "${goalText}".`,
-          `${greeting}"${goalText}" is now your active ${typeLabel}.`,
-          `${greeting}${typeLabel} locked in: "${goalText}".`,
-          `${greeting}"${goalText}" — planted as your ${typeLabel}.`,
-        ];
-        const confirmLines: string[] = [pick(goalConfirms)];
+        const confirmLines: string[] = [`${greeting}${typeLabel} planted: "${goalText}".`];
 
         if (deadline) confirmLines.push(`Deadline: ${deadline}.`);
         if (baselineMetric !== null && targetMetric !== null) {
           confirmLines.push(`Baseline: ${baselineMetric} → Target: ${targetMetric}.`);
         }
 
-        confirmLines.push(`Check your Growth dashboard to see it.`);
-
-        const goalFollowups = [
-          "What's your first action toward this?",
-          "What's one move you can make in the next 24 hours?",
-          "How are you going to start?",
-          "What does the first step look like?",
-          "What's the smallest thing you can do today to move on this?",
-        ];
-        confirmLines.push(`\n${pick(goalFollowups)}`);
+        confirmLines.push(`\nYour goal has been planted. Check the Growth tab to see your seed. Every action you take from here adds water and helps it grow.`);
         jaeText = confirmLines.join("\n");
 
         const jaeMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
