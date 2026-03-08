@@ -1005,6 +1005,7 @@ export async function registerRoutes(
       let waterAwarded = false;
       let waterGoalId: string | null = null;
       let growthResult: any = null;
+      let postUpdateAP: number | null = null;
       let apDelta = agg.totalActionPoints;
       let ipDelta = agg.totalInsightPoints;
       let driftDelta = agg.totalDriftMarkers;
@@ -1050,6 +1051,7 @@ export async function registerRoutes(
         if (matchGoal && apDelta > 0) {
           const currentAP = matchGoal.actionPoints || 0;
           const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, apDelta);
+          postUpdateAP = remainingAP;
 
           if (waterUnits > 0) {
             growthResult = computeGrowthUpdate(
@@ -1204,16 +1206,18 @@ export async function registerRoutes(
         jaeMessage: jaeMsg,
         titan: { category: agg.primaryCategory, actionPoints: apDelta, insightPoints: ipDelta, driftMarkers: driftDelta },
         escalation: escalation.escalationMessage ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
-        water: waterAwarded ? {
-          awarded: true,
-          goalId: waterGoalId,
-          waterEvents: growthResult?.waterEvents,
-          cupsFilled: growthResult?.cupsFilled,
-          seedStage: growthResult?.seedStage,
-          cupJustFilled: growthResult?.cupJustFilled,
-          stageAdvanced: growthResult?.stageAdvanced,
-          fillPercent: Math.round((growthResult?.waterEvents / 10) * 100),
-          preResetFillPercent: growthResult?.preResetFillPercent,
+        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") ? {
+          awarded: waterAwarded,
+          goalId: waterGoalId || (targetedGoal || untargetedGoal)?.id || null,
+          waterEvents: growthResult?.waterEvents ?? (targetedGoal || untargetedGoal)?.waterEvents ?? 0,
+          cupsFilled: growthResult?.cupsFilled ?? (targetedGoal || untargetedGoal)?.cupsFilled ?? 0,
+          seedStage: growthResult?.seedStage ?? (targetedGoal || untargetedGoal)?.seedStage ?? 0,
+          cupJustFilled: growthResult?.cupJustFilled ?? false,
+          stageAdvanced: growthResult?.stageAdvanced ?? false,
+          fillPercent: waterAwarded ? Math.round((growthResult?.waterEvents / 10) * 100) : Math.round(((targetedGoal || untargetedGoal)?.waterEvents ?? 0) / 10 * 100),
+          preResetFillPercent: growthResult?.preResetFillPercent ?? 0,
+          actionPointsAccumulated: postUpdateAP ?? ((targetedGoal || untargetedGoal)?.actionPoints ?? 0) + apDelta,
+          actionPointsNeeded: 10,
         } : null,
       });
     } catch (err) {
