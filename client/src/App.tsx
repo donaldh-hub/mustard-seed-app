@@ -35,6 +35,12 @@ function Router() {
 }
 
 function App() {
+  if (typeof window !== "undefined" && window.location.search.includes("reset=1")) {
+    localStorage.removeItem("mustard_seed_user_id");
+    localStorage.removeItem("mustard_seed_onboarding_completed");
+    window.location.href = window.location.pathname;
+    return null;
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
