@@ -1,0 +1,101 @@
+After the water acknowledgement + cup update feature is fully implemented, run a full end-to-end test to verify that it is wired correctly across chat, water logic, memory, profile state, and Growth UI.
+
+Test objective:
+Confirm that when a valid water-earning action happens, the system does ALL of the following correctly in one connected flow:
+1. awards the correct amount of water
+2. visibly updates the cup next to the seed
+3. triggers the cup-fill animation
+4. sends a short Jae acknowledgement in chat
+5. preserves correct state in the real app data
+
+Run the following test scenarios:
+
+TEST 1 — First Goal Reward
+- Start with a fresh test user
+- Ensure the user has completed onboarding/assessment
+- Ensure targetedGoal = null
+- Ensure identityGoal = null
+- Ensure water cup starts at 0
+- Plant a first goal using the real save flow:
+  "save: my goal is to write a book"
+- Complete any required confirmation step so the goal is actually saved
+
+Verify all of the following:
+- the goal is saved to the correct profile field
+- the goal appears in the correct Growth/goal state
+- a memory event is created for the goal planting
+- the user receives the first-goal reward amount exactly as defined
+- the cup next to the seed visibly updates by that exact amount
+- the cup animation triggers
+- Jae sends a short acknowledgement message such as:
+  "Nice work. Water added to your cup."
+- the reward is reflected in real stored state, not just UI display
+
+TEST 2 — Valid Progress Action Reward
+- Using the same user, submit a real progress message tied to the planted goal
+- Example:
+  "I wrote my outline today."
+- Let the system evaluate whether this qualifies for water based on the current real matrix
+
+Verify:
+- if the action qualifies, the correct water amount is added
+- the cup visibly increases again
+- the cup-fill animation triggers again
+- Jae sends the acknowledgement message
+- the updated cup value matches the backend/app state exactly
+- a memory/progress event is created if that is part of the current system design
+
+TEST 3 — Non-Qualifying Chat Should NOT Reward Water
+- Send a casual or non-progress message
+- Example:
+  "I'm thinking about working on my book later."
+- Or:
+  "I'm nervous about starting."
+
+Verify:
+- no water is added
+- the cup does not change
+- no water-fill animation plays
+- Jae does not send the water acknowledgement message
+- no false reward is stored in state
+
+TEST 4 — Duplicate Goal Protection
+- Try to re-save the same goal or slightly reword it
+- Example:
+  "save: my goal is to write a book"
+  or
+  "save: my goal is to finish writing a book"
+
+Verify:
+- the system does not incorrectly grant the first-goal reward again
+- the cup does not gain duplicate onboarding water
+- Jae does not send a false water acknowledgement for duplicate first-goal credit
+- stored state shows only one onboarding reward event
+
+TEST 5 — Cup Threshold / Pour Test
+- Continue sending valid reward-earning actions until the cup reaches full
+- Use real qualifying messages only
+
+Verify:
+- each valid action adds the correct water amount
+- the cup level updates correctly at each step
+- when the cup hits 100%, the pour animation triggers
+- the seed receives the water correctly
+- the cup resets correctly after pouring
+- no extra or missing water occurs during the reset/pour transition
+- Jae acknowledgement still happens when water is added to the cup
+
+Final output required from this test:
+Return a structured test report that clearly shows:
+1. each scenario tested
+2. pass/fail for each scenario
+3. what app state fields changed
+4. whether the UI matched the stored state
+5. whether any wiring gaps, timing bugs, duplicate rewards, or display mismatches were found
+
+Important:
+- Use a real test user, not mocked UI-only behavior
+- Use the real save-goal flow and real water reward flow
+- Do not just inspect code; actually test the app behavior
+- If any scenario fails, identify exactly where the wiring broke:
+  chat detection, reward logic, cup UI, memory event, profile state, or Growth dashboard state
