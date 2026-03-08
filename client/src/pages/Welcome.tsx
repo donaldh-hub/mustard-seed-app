@@ -1,10 +1,9 @@
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { Sprout } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
 
 export default function Welcome() {
   const [, setLocation] = useLocation();
@@ -30,62 +29,74 @@ export default function Welcome() {
   if (checking && userId) return null;
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-green-50 to-background">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="mb-8 p-6 bg-primary/10 rounded-full"
-      >
-        <Sprout className="w-16 h-16 text-primary" strokeWidth={1.5} />
-      </motion.div>
+    <div className="h-full flex flex-col items-center justify-between px-6 py-10 text-center bg-gradient-to-b from-stone-100 via-stone-50 to-stone-200">
+      <div className="flex-1 flex flex-col items-center justify-center max-w-sm w-full">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className="mb-6"
+        >
+          <img
+            src={jaiHero}
+            alt="JAI - Your Accountability Partner"
+            data-testid="img-jai-hero"
+            className="w-56 h-56 sm:w-64 sm:h-64 object-cover object-top rounded-2xl mx-auto"
+          />
+        </motion.div>
 
-      <motion.h1 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="text-4xl font-serif text-foreground mb-2"
-      >
-        Mustard Seed
-      </motion.h1>
+        <motion.h1
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          className="text-3xl sm:text-4xl font-bold text-stone-900 mb-4 tracking-tight"
+          data-testid="text-jai-title"
+        >
+          I'm JAI.
+        </motion.h1>
 
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="text-primary font-medium text-lg mb-6"
-        data-testid="text-tagline"
-      >
-        Growth starts small.
-      </motion.p>
+        <motion.p
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.5 }}
+          className="text-lg sm:text-xl font-semibold text-stone-700 leading-relaxed mb-6"
+          data-testid="text-positioning"
+        >
+          I'm not here to hype you up.
+          <br />
+          I'm here to help you grow.
+        </motion.p>
 
-      <motion.p 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
-        className="text-muted-foreground text-base mb-12 max-w-xs leading-relaxed"
-      >
-        Track growth. Stay accountable. Celebrate small wins. Your digital accountability partner for lasting change.
-      </motion.p>
+        <motion.p
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.5 }}
+          className="text-base text-stone-500 leading-relaxed max-w-xs mb-10"
+          data-testid="text-supporting"
+        >
+          You'll answer a few quick questions so I can understand where you are.
+          <br />
+          From there, we build.
+        </motion.p>
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.9 }}
-        className="w-full max-w-xs space-y-4"
+        transition={{ delay: 0.9, duration: 0.5 }}
+        className="w-full max-w-xs pb-4"
       >
-        <Button 
+        <button
           data-testid="button-begin"
-          size="lg" 
-          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-full h-14 text-lg shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
           onClick={() => setLocation("/assessment")}
+          className="w-full h-14 rounded-full text-lg font-bold text-stone-900 shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{
+            background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)",
+            boxShadow: "0 4px 14px rgba(232, 184, 40, 0.4)",
+          }}
         >
-          Begin Journey
-        </Button>
-
-        <p className="text-xs text-muted-foreground/70 italic">
-          Every journey starts with a single seed.
-        </p>
+          Begin
+        </button>
       </motion.div>
     </div>
   );
