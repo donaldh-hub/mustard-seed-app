@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
-import { computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
+import { computeGrowthUpdate, computeGrowthStateFromEntries, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
@@ -761,15 +761,6 @@ export async function registerRoutes(
         jaeText = confirmLines.join("\n");
 
       } else if (isLog) {
-        const payload = rawText.replace(/^log:\s*/i, "").replace(/^logged:\s*/i, "").trim();
-
-        await storage.createEntry({
-          userId,
-          date: todayStr(),
-          summary: payload || rawText,
-          mood: "happy",
-        });
-
         const logConfirms = [
           `${greeting}logged.`,
           `${greeting}tracked.`,
@@ -1660,14 +1651,30 @@ export async function registerRoutes(
       const userId = req.params.userId;
       const activeGoals = await storage.getActiveGoals(userId);
 
+      // Fetch all entries once — used to drive entry-based growth aggregation.
+      // Each happy (VA/AR) entry = 1 water unit for display, counted since
+      // the goal was created so a new goal always starts from 0.
+      const allEntries = await storage.getEntries(userId);
+
       const result: any = { targeted: null, untargeted: null };
 
+      const SEED_ICONS: Record<number, string> = {
+        0: "\u{1F330}", 1: "\u{1F330}", 2: "\u{1FAB4}", 3: "\u{1FAB4}",
+        4: "\u{1F331}", 5: "\u{1F331}", 6: "\u{1FAB4}",
+      };
+
       for (const goal of activeGoals) {
-        const waterEvents = goal.waterEvents ?? 0;
-        const cupsFilled = goal.cupsFilled ?? 0;
-        const seedStage = goal.seedStage ?? 0;
-        const actionPoints = goal.actionPoints ?? 0;
-        const fillPercent = Math.min(100, Math.round(waterEvents * 10 + actionPoints));
+        // Count happy entries since this goal was created.
+        const goalCreatedAt = goal.createdAt ? new Date(goal.createdAt).toISOString().split("T")[0] : "1970-01-01";
+        const happyEntryCount = allEntries.filter(
+          (e) => e.mood === "happy" && e.date >= goalCreatedAt
+        ).length;
+
+        // computeGrowthStateFromEntries: 1 happy entry = 1 water unit,
+        // 10 water units = 1 cup, cups drive seed stage.
+        const growth = computeGrowthStateFromEntries(happyEntryCount);
+        const { waterEvents, cupsFilled, seedStage, fillPercent } = growth;
+
         const stageInfo = SEED_STAGE_INFO[seedStage] || SEED_STAGE_INFO[0];
 
         const revealedStatements: Record<number, string> = {};
@@ -1677,11 +1684,6 @@ export async function registerRoutes(
           }
         }
 
-        const SEED_ICONS: Record<number, string> = {
-          0: "\u{1F330}", 1: "\u{1F330}", 2: "\u{1FAB4}", 3: "\u{1FAB4}",
-          4: "\u{1F331}", 5: "\u{1F331}", 6: "\u{1FAB4}",
-        };
-
         const now = new Date();
 
         if (goal.goalType === "targeted") {
@@ -1689,13 +1691,15 @@ export async function registerRoutes(
             ? Math.max(0, Math.ceil((new Date(goal.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
             : null;
 
-          // percentComplete: use explicit metric-based value when tracked (> 0),
-          // otherwise derive from fillPercent (reward engine's action-based progress).
-          // This ensures the completion bar is never permanently 0 for users
-          // who earn AP/water through chat but have no manual metric entries.
+          // percentComplete: explicit metric-based value when tracked (> 0),
+          // otherwise overall water progress (waterEvents / 50) which doesn't
+          // reset to 0 when a cup fills — gives a monotonically increasing %
+          // that matches the "X / 50" waterEvents display in the Growth Dashboard.
+          const TOTAL_WATER_EVENTS = 50;
+          const overallPct = Math.round(Math.min(100, (waterEvents / TOTAL_WATER_EVENTS) * 100));
           const percentComplete = goal.percentComplete > 0
             ? goal.percentComplete
-            : fillPercent;
+            : overallPct;
 
           result.targeted = {
             id: goal.id,

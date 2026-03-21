@@ -61,3 +61,42 @@ export const CUP_IDENTITY_STATEMENTS: Record<number, string> = {
   75: "I'M FINISHING THIS",
   100: "I FOLLOW THROUGH",
 };
+
+/**
+ * computeGrowthStateFromEntries — derives growth state from happy entry count.
+ *
+ * Each verified action (happy entry) = 1 water unit for display purposes.
+ * This keeps the Growth Dashboard in sync with the same entry-based source
+ * the Home screen uses, instead of relying on the AP-threshold accumulation
+ * in the goals table (which only increments every 10 AP = ~4 VAs).
+ *
+ * The AP-based reward engine continues to write to goals.actionPoints /
+ * goals.waterEvents for celebration logic and deduplication — those fields
+ * are NOT changed. This function is for DISPLAY aggregation only.
+ */
+export function computeGrowthStateFromEntries(entryCount: number): {
+  waterEvents: number;
+  cupsFilled: number;
+  seedStage: number;
+  fillPercent: number;
+} {
+  const waterEvents = entryCount;
+  let cupsFilled = 0;
+  let seedStage = 0;
+
+  const fullCups = Math.floor(waterEvents / WATER_PER_CUP);
+  for (let cup = 1; cup <= fullCups; cup++) {
+    cupsFilled = cup;
+    for (const [stage, cupsNeeded] of Object.entries(STAGE_CUP_REQUIREMENTS)) {
+      const stageNum = Number(stage);
+      if (stageNum > seedStage && cupsFilled >= cupsNeeded) {
+        seedStage = stageNum;
+      }
+    }
+  }
+
+  const withinCup = waterEvents % WATER_PER_CUP;
+  const fillPercent = Math.min(100, Math.round(withinCup * (100 / WATER_PER_CUP)));
+
+  return { waterEvents, cupsFilled, seedStage, fillPercent };
+}
