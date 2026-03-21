@@ -1689,6 +1689,14 @@ export async function registerRoutes(
             ? Math.max(0, Math.ceil((new Date(goal.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
             : null;
 
+          // percentComplete: use explicit metric-based value when tracked (> 0),
+          // otherwise derive from fillPercent (reward engine's action-based progress).
+          // This ensures the completion bar is never permanently 0 for users
+          // who earn AP/water through chat but have no manual metric entries.
+          const percentComplete = goal.percentComplete > 0
+            ? goal.percentComplete
+            : fillPercent;
+
           result.targeted = {
             id: goal.id,
             title: goal.title,
@@ -1697,7 +1705,7 @@ export async function registerRoutes(
             daysLeft,
             baselineMetric: goal.baselineMetric,
             targetMetric: goal.targetMetric,
-            percentComplete: goal.percentComplete,
+            percentComplete,
             waterEvents,
             cupsFilled,
             seedStage,

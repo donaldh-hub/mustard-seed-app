@@ -1,0 +1,101 @@
+Fix Growth Dashboard progress sync and seed stage accuracy.
+
+We have a real data synchronization issue between the Home screen and the Growth Dashboard.
+
+Current behavior:
+
+- Logging progress correctly adds water
+- Home screen water level updates
+- Memory events log correctly
+- Active day count updates
+
+But the Growth Dashboard still shows:
+- Dormant Seed
+- 0 cups filled
+- 0% completion
+
+This means the Growth Dashboard is NOT reading from the same real-time progress source as the Home screen.
+
+This must be fixed at the architecture level.
+
+REQUIRED FIXES:
+
+1. Single Source of Truth for Growth State
+
+Find where the Home screen computes:
+- total water level
+- cups filled
+- active days
+- seed stage
+- goal completion percent
+
+Refactor the Growth Dashboard so it uses the SAME shared selector / query / aggregation logic.
+
+There must be NO duplicate progress calculations inside the Growth Dashboard.
+
+Create or reuse a shared function such as:
+
+getUserGrowthState(userId)
+
+This function must return:
+- totalWater
+- cupsFilled
+- activeDays
+- seedStage
+- goalProgressPercent
+
+All screens (Home, Growth Dashboard, Goal Card) must consume this shared function.
+
+2. Remove Local Seed Stage Logic
+
+If the Growth Dashboard currently calculates seed stage independently, remove that logic.
+
+Seed stage must ONLY come from the shared growth state engine.
+
+3. Real-Time Refresh After Logging Progress
+
+After any of the following actions:
+- text progress log
+- photo proof submission
+- progress confirmation from chat
+
+Invalidate and refetch all queries related to:
+- growth state
+- goal progress
+- water level
+- dashboard data
+
+Ensure consistent query keys are used so UI updates without requiring a page reload.
+
+4. Correct Goal Progress Percentage
+
+Goal completion must be calculated using:
+- logged goal-specific progress events
+OR
+- mapped water-to-goal contribution logic
+
+Growth Dashboard must immediately show:
+- updated completion percent
+- updated cups filled
+- updated seed stage
+
+5. Verification Test
+
+Simulate this flow:
+- Plant a targeted goal
+- Log two progress events
+
+Verify that:
+- Growth Dashboard cups increase
+- Seed stage changes appropriately
+- Goal completion percent increases
+- Home screen and Growth Dashboard show matching values
+
+Return a short summary including:
+- what was broken
+- what files were modified
+- verification results
+
+Do NOT add new features.
+Do NOT redesign UI.
+Fix data synchronization and progress accuracy only.
