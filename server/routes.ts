@@ -6,6 +6,7 @@ import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
+import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
@@ -996,6 +997,16 @@ export async function registerRoutes(
       let apDelta = agg.totalActionPoints;
       let ipDelta = agg.totalInsightPoints;
       let driftDelta = agg.totalDriftMarkers;
+      let rewardResult: RewardResult = {
+        success: false,
+        skipReason: "no_verified_action",
+        waterAwarded: false,
+        entryCreated: false,
+        apActuallyAwarded: 0,
+        postUpdateAP: null,
+        growthResult: null,
+        waterGoalId: null,
+      };
 
       // ZERO REWARD FOR TALK OR COMMITMENT — only VA/AR earn AP
       // Commitments are tracked and followed up, but never rewarded
@@ -1035,125 +1046,115 @@ export async function registerRoutes(
         } as any);
 
         const matchGoal = targetedGoal || untargetedGoal;
-        if (matchGoal && apDelta > 0) {
-          const currentAP = matchGoal.actionPoints || 0;
-          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, apDelta);
-          postUpdateAP = remainingAP;
 
-          if (waterUnits > 0) {
-            growthResult = computeGrowthUpdate(
-              matchGoal.waterEvents,
-              matchGoal.cupsFilled,
-              matchGoal.seedStage,
-              waterUnits
-            );
-            waterAwarded = true;
-            waterGoalId = matchGoal.id;
-
-            await storage.updateGoal(matchGoal.id, {
-              actionPoints: remainingAP,
-              waterEvents: growthResult.waterEvents,
-              cupsFilled: growthResult.cupsFilled,
-              seedStage: growthResult.seedStage,
-            });
-          } else {
-            await storage.updateGoal(matchGoal.id, {
-              actionPoints: remainingAP,
-            });
-          }
-        }
-
-        await storage.createEntry({
+        // --- CENTRAL REWARD ENGINE: single source of truth for AP/water/entry ---
+        rewardResult = await processRewardTransaction({
           userId,
-          date: todayStr(),
-          summary: rawText,
-          mood: "happy",
+          rawText,
+          apDelta,
+          matchGoal: matchGoal || null,
+          actionType: agg.primaryCategory as RewardActionType,
+          todayStr: todayStr(),
         });
 
+        if (rewardResult.postUpdateAP !== null) postUpdateAP = rewardResult.postUpdateAP;
+        if (rewardResult.waterAwarded && rewardResult.growthResult) {
+          waterAwarded = true;
+          waterGoalId = rewardResult.waterGoalId;
+          growthResult = rewardResult.growthResult;
+        }
+
         // --- PROGRESS MODE: Anime Celebration Engine ---
-        const CELEBRATIONS = [
-          "YES! That's a clean win.",
-          "Nice! Momentum just leveled up.",
-          "Boom. That's progress.",
-          "You said you'd do it — and you did.",
-          "That's how seeds grow.",
-          "Small step. Big energy.",
-          "Let's go! That counts.",
-          "That move just strengthened your roots.",
-          "Action confirmed. Respect.",
-          "Momentum unlocked.",
-          "You just watered the seed.",
-          "That's a real step forward.",
-          "Nice follow-through.",
-          "You showed up today.",
-          "That's how the story moves forward.",
-          "That's a win. No doubt.",
-          "You just built momentum.",
-          "Another step in the right direction.",
-          "That action matters.",
-          "Seed status: stronger.",
-          "Consistency in action.",
-          "That's how progress stacks.",
-          "Good work — that was real effort.",
-          "You moved the mission forward.",
-          "Momentum continues.",
-        ];
+        // GATED: celebration fires ONLY after a successful reward transaction.
+        if (rewardResult.success) {
+          const CELEBRATIONS = [
+            "YES! That's a clean win.",
+            "Nice! Momentum just leveled up.",
+            "Boom. That's progress.",
+            "You said you'd do it — and you did.",
+            "That's how seeds grow.",
+            "Small step. Big energy.",
+            "Let's go! That counts.",
+            "That move just strengthened your roots.",
+            "Action confirmed. Respect.",
+            "Momentum unlocked.",
+            "You just watered the seed.",
+            "That's a real step forward.",
+            "Nice follow-through.",
+            "You showed up today.",
+            "That's how the story moves forward.",
+            "That's a win. No doubt.",
+            "You just built momentum.",
+            "Another step in the right direction.",
+            "That action matters.",
+            "Seed status: stronger.",
+            "Consistency in action.",
+            "That's how progress stacks.",
+            "Good work — that was real effort.",
+            "You moved the mission forward.",
+            "Momentum continues.",
+          ];
 
-        const celebrationLine = CELEBRATIONS[Math.floor(Math.random() * CELEBRATIONS.length)];
+          const celebrationLine = CELEBRATIONS[Math.floor(Math.random() * CELEBRATIONS.length)];
 
-        const commitCallback = resolvedCommitments.length > 0
-          ? `You said you'd ${resolvedCommitments[0]} — and you followed through.`
-          : (() => {
-              let actionText = rawText.toLowerCase();
-              const swaps: [RegExp, string][] = [
-                [/\bi was\b/g, "you were"],
-                [/\bi've\b/g, "you've"],
-                [/\bi'm\b/g, "you're"],
-                [/\bi am\b/g, "you are"],
-                [/\bmy\b/g, "your"],
-                [/\bme\b/g, "you"],
-              ];
-              for (const [pat, rep] of swaps) {
-                actionText = actionText.replace(pat, rep);
-              }
-              actionText = actionText.replace(/\bi\b/g, "you");
-              actionText = actionText.replace(/\byou you\b/gi, "you");
-              if (actionText.length > 70) actionText = actionText.substring(0, 67) + "...";
-              return actionText.charAt(0).toUpperCase() + actionText.slice(1) + ".";
-            })();
+          const commitCallback = resolvedCommitments.length > 0
+            ? `You said you'd ${resolvedCommitments[0]} — and you followed through.`
+            : (() => {
+                let actionText = rawText.toLowerCase();
+                const swaps: [RegExp, string][] = [
+                  [/\bi was\b/g, "you were"],
+                  [/\bi've\b/g, "you've"],
+                  [/\bi'm\b/g, "you're"],
+                  [/\bi am\b/g, "you are"],
+                  [/\bmy\b/g, "your"],
+                  [/\bme\b/g, "you"],
+                ];
+                for (const [pat, rep] of swaps) {
+                  actionText = actionText.replace(pat, rep);
+                }
+                actionText = actionText.replace(/\bi\b/g, "you");
+                actionText = actionText.replace(/\byou you\b/gi, "you");
+                if (actionText.length > 70) actionText = actionText.substring(0, 67) + "...";
+                return actionText.charAt(0).toUpperCase() + actionText.slice(1) + ".";
+              })();
 
-        const emotionPatterns = /nervous|scared|afraid|anxious|stressed|worried|tough|hard|difficult|struggle|didn.?t feel like|wasn.?t easy|uncomfortable/i;
-        const emotionMatch = rawText.match(emotionPatterns);
-        const emotionLine = emotionMatch
-          ? `Doing it even when it felt ${emotionMatch[0].toLowerCase()} takes real courage.`
-          : "";
+          const emotionPatterns = /nervous|scared|afraid|anxious|stressed|worried|tough|hard|difficult|struggle|didn.?t feel like|wasn.?t easy|uncomfortable/i;
+          const emotionMatch = rawText.match(emotionPatterns);
+          const emotionLine = emotionMatch
+            ? `Doing it even when it felt ${emotionMatch[0].toLowerCase()} takes real courage.`
+            : "";
 
-        const matchGoalExists = !!(targetedGoal || untargetedGoal);
-        const waterLine = (apDelta > 0 && matchGoalExists) ? "Water added to your cup." : "";
+          // waterLine is truthful: only shows if the reward transaction actually saved AP
+          const waterLine = (rewardResult.apActuallyAwarded > 0 && !!(targetedGoal || untargetedGoal))
+            ? "Water added to your cup."
+            : "";
 
-        const nextStepOptions = [
-          "What feels like the next small step while the momentum is here?",
-          "What's the next move while you're rolling?",
-          "Where do you go from here?",
-          "What's the next step?",
-          "Next move when you're ready.",
-        ];
-        const nextStepLine = nextStepOptions[Math.floor(Math.random() * nextStepOptions.length)];
+          const nextStepOptions = [
+            "What feels like the next small step while the momentum is here?",
+            "What's the next move while you're rolling?",
+            "Where do you go from here?",
+            "What's the next step?",
+            "Next move when you're ready.",
+          ];
+          const nextStepLine = nextStepOptions[Math.floor(Math.random() * nextStepOptions.length)];
 
-        const celebrationParts = [
-          celebrationLine,
-          commitCallback,
-          emotionLine,
-          waterLine,
-          nextStepLine,
-        ].filter(Boolean);
+          const celebrationParts = [
+            celebrationLine,
+            commitCallback,
+            emotionLine,
+            waterLine,
+            nextStepLine,
+          ].filter(Boolean);
 
-        const celebrationText = celebrationParts.join(" ");
+          const celebrationText = celebrationParts.join(" ");
 
-        await storage.updateMessage(jaeMsg.id, { text: celebrationText });
-        jaeMsg.text = celebrationText;
+          await storage.updateMessage(jaeMsg.id, { text: celebrationText });
+          jaeMsg.text = celebrationText;
 
-        console.log(`[PROGRESS] progress_detected=true | celebration_sent=true | water_awarded=${waterAwarded} | ap_awarded=${apDelta} | credits_awarded=${apDelta > 0} | credit_amount=${apDelta} | goal=${(targetedGoal || untargetedGoal)?.title || "none"} | commitments_resolved=${resolvedCommitments.length} | memory_saved=true | emotion=${emotionMatch ? emotionMatch[0] : "none"} | ui_updated=true`);
+          console.log(`[PROGRESS] celebration_sent=true | tx_success=true | water_awarded=${waterAwarded} | ap_awarded=${rewardResult.apActuallyAwarded} | goal=${(targetedGoal || untargetedGoal)?.title || "none"} | commitments_resolved=${resolvedCommitments.length} | emotion=${emotionMatch ? emotionMatch[0] : "none"}`);
+        } else {
+          console.log(`[PROGRESS] celebration_blocked | reason=${rewardResult.skipReason} | category=${agg.primaryCategory} | text="${rawText.substring(0, 60)}"`);
+        }
       } else {
         if (ipDelta > 0) {
           const matchGoal = targetedGoal || untargetedGoal;
@@ -1202,7 +1203,8 @@ export async function registerRoutes(
           const ap = postUpdateAP ?? ((mg?.actionPoints ?? 0) + apDelta);
           const fillPct = Math.min(100, Math.round(we * 10 + ap));
           return {
-            awarded: apDelta > 0 && !!mg,
+            // awarded is TRUE only when the reward transaction actually succeeded in DB
+            awarded: rewardResult.success && rewardResult.apActuallyAwarded > 0 && !!mg,
             goalId: waterGoalId || mg?.id || null,
             waterEvents: we,
             cupsFilled: cf,
@@ -1213,6 +1215,7 @@ export async function registerRoutes(
             preResetFillPercent: growthResult?.preResetFillPercent ?? fillPct,
             actionPointsAccumulated: ap,
             actionPointsNeeded: 10,
+            rewardTransaction: rewardResult.skipReason ?? "success",
           };
         })() : null,
       });

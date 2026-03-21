@@ -1,0 +1,123 @@
+We are now in STABILIZATION MODE.
+
+Do not add new features.
+Do not redesign UI.
+Do not change tone/personality styling unless required for this reward fix.
+
+We need to repair the CREDIT / WATER / REWARD ENGINE so that verified progress actions reliably grant the correct rewards and update the app state correctly.
+
+CURRENT ISSUE:
+The app is often showing celebration language and progress feedback in chat, but it is NOT consistently awarding the actual credits / water / points for the completed action. This means the conversational layer is firing, but the verified reward transaction is not always being created, saved, or reflected in the UI.
+
+GOAL:
+Create a single, reliable reward pipeline where every verified progress event becomes one structured reward event, gets processed one time, is saved, and updates all relevant UI and progress state.
+
+REQUIRED FIXES:
+
+1. CREATE A SINGLE SOURCE OF TRUTH FOR REWARD EVENTS
+- Introduce or repair a central reward-processing function/service.
+- All progress-based rewards must pass through ONE shared reward engine.
+- Do not allow chat celebration logic to bypass or duplicate reward logic.
+- The reward engine must be the only place where credits/water/points are granted.
+
+2. ENFORCE A CLEAR EVENT FLOW
+For every progress submission, use this sequence:
+- detect user action
+- classify action type
+- validate proof or completion state
+- calculate reward amount
+- create reward transaction
+- save reward transaction to database
+- update user totals
+- update related goal/progress state
+- then trigger celebration / confirmation response
+Celebration must happen AFTER successful reward processing, not before.
+
+3. SUPPORT THESE ACTION TYPES EXPLICITLY
+Make sure the reward system correctly handles at minimum:
+- creating a goal
+- outlining a goal/roadmap
+- workout outline or plan creation
+- drafting a chapter or book progress
+- uploading a proof photo
+- logging progress
+- completing a goal milestone
+- completing a full goal
+- other approved productive proof-based actions already in the current app logic
+
+4. DISTINGUISH BETWEEN CONVERSATION AND VERIFIED PROGRESS
+- General discussion about doing something should not automatically earn credits.
+- Verified progress actions should earn credits.
+- If the user submits evidence or a clearly recognized completion/progress action, it should route into verified reward processing.
+- Add explicit gating so “talking about it” and “actually doing it” are treated differently.
+
+5. MAKE REWARD PROCESSING IDEMPOTENT
+- Prevent duplicate rewards for the same submission/event.
+- If the same proof, upload, or action is reprocessed, do not double-pay it unless explicitly intended.
+- Add a stable event ID / submission ID / hash-based deduplication strategy.
+
+6. ADD FAILURE LOGGING
+If a reward is not granted, log the exact reason:
+- action unverified
+- category not mapped
+- reward amount missing
+- database write failure
+- duplicate event prevented
+- UI sync failure
+- invalid payload
+We need logs detailed enough to understand why a user saw celebration but did not receive credits.
+
+7. REPAIR UI / STATE SYNC
+After a successful reward transaction:
+- update credit total
+- update water total / cup fill if applicable
+- update relevant progress bars
+- update home screen state
+- update profile state if the reward affects visible progress there
+- ensure no stale state keeps old totals visible
+If needed, repair optimistic update logic so it only confirms once the reward transaction succeeds.
+
+8. AUDIT THE CURRENT CELEBRATION TRIGGERS
+Find every place in the code where celebration language, anime celebration language, encouragement, or progress acknowledgment is triggered.
+Make sure these are not firing independently when the reward transaction failed.
+Refactor so celebration reflects reward success, not just action detection.
+
+9. ADD A REWARD MAPPING TABLE
+Create or repair a clear mapping table/config for rewardable action types.
+Each mapped action should define:
+- action type
+- verification rule
+- reward value
+- whether it affects water/cup
+- whether it affects goal progress
+- whether it triggers celebration
+This must be easy to inspect and update later.
+
+10. ADD TEST CASES
+Create test coverage or a test harness for at minimum:
+- create goal -> reward granted once
+- outline roadmap -> reward granted once
+- upload proof photo -> reward granted once
+- log progress -> reward granted once
+- complete milestone -> reward granted once
+- complete full goal -> reward granted once
+- conversation only / no verified action -> no reward granted
+- duplicate submission -> no duplicate reward
+- database failure -> no false celebration
+- reward success -> UI totals update correctly
+
+11. DO NOT BREAK EXISTING APP FLOW
+Keep the current visual style, JAI voice, onboarding flow, and progress language intact.
+This task is specifically to make the reward engine trustworthy and accurate.
+
+12. DELIVERABLE REQUIRED
+After making changes, provide:
+A. a concise summary of what was repaired
+B. the exact files/components/services changed
+C. the reward event flow in plain English
+D. a short manual test checklist I can run immediately inside the app
+
+IMPORTANT:
+The app must no longer show celebration for a verified progress action unless the reward transaction actually succeeded.
+The reward engine must become reliable, deduplicated, logged, and reflected in the UI.
+Focus on production-ready fixes, not placeholders.
