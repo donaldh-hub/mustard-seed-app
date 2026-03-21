@@ -122,7 +122,11 @@ export async function registerRoutes(
       const isGoalTypeConfirm = /^(targeted|target|identity)$/i.test(trimmedLower);
       if (isGoalTypeConfirm) {
         const recentMessages = await storage.getMessages(userId);
-        const recentJae = recentMessages.filter(m => m.sender === "jae").sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()).slice(0, 5);
+        const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000); // 4-hour recency window
+        const recentJae = recentMessages
+          .filter(m => m.sender === "jae" && new Date(m.createdAt!).getTime() > cutoff.getTime())
+          .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+          .slice(0, 5);
         const clarificationMsg = recentJae.find(m => m.text.includes('a **targeted goal**'));
         if (clarificationMsg) {
           const pendingMatch = clarificationMsg.text.match(/Is "(.+?)" a \*\*targeted goal\*\*/);
@@ -183,6 +187,11 @@ export async function registerRoutes(
             return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
           }
         }
+        // No valid pending goal clarification found within recency window → explicit fallback
+        // Prevents GPT-4o from hallucinating a "goal saved" confirmation
+        jaeText = `${greeting}I don't have a recent goal waiting to be confirmed. To plant a goal, just say something like: "save: my goal is to [your goal]" and I'll get it started.`;
+        const fallbackMsg = await storage.createMessage({ userId, text: jaeText, sender: "jae" });
+        return res.json({ userMessage: userMsg, jaeMessage: fallbackMsg });
       }
 
       const asksStage = /what('?s| is) my stage/i.test(textLower) || /my stage/i.test(textLower) || /current stage/i.test(textLower);
