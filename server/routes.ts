@@ -1230,6 +1230,74 @@ export async function registerRoutes(
     return res.json(list);
   });
 
+  // POST /api/users/:userId/confirm-progress
+  // Called by the frontend nudge card when a user clicks "Log Progress" to
+  // explicitly confirm a progress statement that TITAN classified as IO/RW.
+  // Awards VA-level reward (3 AP) and returns the same water shape as the
+  // messages endpoint. Deduplication in rewardEngine blocks double-clicks.
+  app.post("/api/users/:userId/confirm-progress", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { rawText } = req.body;
+      if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
+        return res.status(400).json({ message: "rawText required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const goals = await storage.getActiveGoals(userId);
+      const targetedGoal = goals.find((g: any) => g.goalType === "targeted") || null;
+      const untargetedGoal = goals.find((g: any) => g.goalType === "identity") || null;
+      const matchGoal = targetedGoal || untargetedGoal;
+
+      const VA_AP = 3;
+      const rewardResult = await processRewardTransaction({
+        userId,
+        rawText: rawText.trim(),
+        apDelta: VA_AP,
+        matchGoal: matchGoal || null,
+        actionType: "VA",
+        todayStr,
+      });
+
+      if (!rewardResult.success) {
+        console.log(`[CONFIRM] blocked | reason=${rewardResult.skipReason} | text="${rawText.substring(0, 60)}"`);
+        return res.json({ awarded: false, rewardTransaction: rewardResult.skipReason, water: null });
+      }
+
+      const gr = rewardResult.growthResult;
+      const ap = rewardResult.postUpdateAP ?? VA_AP;
+      const we = gr?.waterEvents ?? (matchGoal?.waterEvents ?? 0);
+      const fillPct = Math.min(100, Math.round(we * 10 + ap));
+
+      console.log(`[CONFIRM] success | userId=${userId} | ap=${VA_AP} | waterAwarded=${rewardResult.waterAwarded} | text="${rawText.substring(0, 60)}"`);
+
+      return res.json({
+        awarded: true,
+        rewardTransaction: "success",
+        water: {
+          awarded: rewardResult.waterAwarded && !!matchGoal,
+          goalId: rewardResult.waterGoalId || matchGoal?.id || null,
+          waterEvents: we,
+          cupsFilled: gr?.cupsFilled ?? (matchGoal?.cupsFilled ?? 0),
+          seedStage: gr?.seedStage ?? (matchGoal?.seedStage ?? 0),
+          cupJustFilled: gr?.cupJustFilled ?? false,
+          stageAdvanced: gr?.stageAdvanced ?? false,
+          fillPercent: fillPct,
+          preResetFillPercent: gr?.preResetFillPercent ?? fillPct,
+          actionPointsAccumulated: ap,
+          actionPointsNeeded: 10,
+          rewardTransaction: "success",
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/users/:userId/assessment", async (req, res) => {
     const assessment = await storage.getLatestAssessment(req.params.userId);
     return res.json(assessment || null);

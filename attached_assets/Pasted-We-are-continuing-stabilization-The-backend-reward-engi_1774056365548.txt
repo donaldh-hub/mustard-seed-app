@@ -1,0 +1,70 @@
+We are continuing stabilization.
+
+The backend reward engine is now working correctly.
+However, verified reward events are not consistently being triggered from the UI.
+
+Users can talk about progress and create memory entries, but this does not always result in a structured reward submission.
+
+GOAL:
+Create a clear front-end submission bridge that converts meaningful user progress into verified reward events.
+
+REQUIRED CHANGES:
+
+1. ADD A PROGRESS CONFIRMATION STEP
+When JAI detects a strong progress statement such as:
+- “I wrote a chapter”
+- “I finished my workout”
+- “I completed my roadmap”
+- “I created my goal”
+- “I made progress on my project”
+
+The chat UI should show an inline action card or button:
+- Confirm Progress
+- Log Achievement
+- Submit Proof
+- Mark as Completed
+
+This button must send a structured reward submission payload to the reward engine.
+
+2. ENSURE MEMORY LOGGING IS SEPARATE FROM REWARD SUBMISSION
+Memory entries should still be saved.
+But memory alone must not trigger rewards.
+
+Only structured submissions should trigger rewards.
+
+3. CONNECT EXISTING ACTION BUTTONS
+Ensure these flows correctly call the reward pipeline:
+- Plan a Goal
+- Log Progress
+- Upload Image Proof
+- Complete Milestone
+- Complete Goal
+
+4. AFTER SUCCESSFUL REWARD:
+- Update water level
+- Update cup fill
+- Update home screen
+- Update profile totals
+- Show celebration animation
+- Show credit amount gained
+
+5. ADD USER FEEDBACK
+If a user states progress but does not confirm submission:
+Show a gentle nudge:
+“Want to log this progress and earn water?”
+
+6. TEST SCENARIOS REQUIRED
+- Statement only → no reward
+- Statement + confirm button → reward granted
+- Upload proof → reward granted
+- Duplicate confirm → no duplicate reward
+- Reward success → UI updates instantly
+
+Do not redesign visual style.
+Do not change reward values.
+Focus only on wiring user actions to reward submission.
+
+Deliver:
+- files changed
+- how the confirmation card works
+- manual test steps

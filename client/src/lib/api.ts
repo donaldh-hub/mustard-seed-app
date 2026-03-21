@@ -54,6 +54,12 @@ export const api = {
   logGoalProgress: (goalId: string, data: { summary: string; mood?: string; progressValue?: number }) =>
     fetchJson<any>(`/goals/${goalId}/log`, { method: "POST", body: JSON.stringify(data) }),
 
+  confirmProgress: (userId: string, rawText: string) =>
+    fetchJson<any>(`/users/${userId}/confirm-progress`, {
+      method: "POST",
+      body: JSON.stringify({ rawText }),
+    }),
+
   getGardenSummary: (userId: string) => fetchJson<any>(`/users/${userId}/garden-summary`),
 
   getWeeklyReviewStatus: (userId: string) => fetchJson<any>(`/users/${userId}/weekly-review/status`),

@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Fragment } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine } from "lucide-react";
+import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine, CheckCircle2, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -86,6 +86,88 @@ const PHASE_LABELS: Record<UploadPhase, string> = {
   CANCELED: "",
 };
 
+// ---------------------------------------------------------------------------
+// Detects past-tense action language in IO/RW messages to trigger nudge card.
+// Only fires for texts that TITAN may have under-classified as IO/RW despite
+// containing clear completed-action signals.
+// ---------------------------------------------------------------------------
+function looksLikeCompletedAction(text: string): boolean {
+  return /\b(wrote|finished|completed|submitted|published|ran|walked|worked out|worked on|studied|practiced|built|created|made|did|sent|called|started|launched|shipped|fixed|recorded|posted|exercised|meditated|reviewed|organized|cleaned|cooked|prepared|trained|applied|scheduled|attended|joined|went to|showed up|hit the gym|got done|done with|got through|woke up|signed up|paid|reached out|showed up)\b/i.test(text);
+}
+
+// Inline Reward Card — shown after a VA/AR message earns AP + optional water
+function RewardCard({
+  ap, waterAwarded, onDismiss,
+}: { ap: number; waterAwarded: boolean; onDismiss: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.25 }}
+      className="ml-12 mt-1 mb-2"
+      data-testid="card-reward"
+    >
+      <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2 shadow-sm">
+        <Zap className="w-3.5 h-3.5 text-green-600 shrink-0" />
+        <span className="text-xs font-semibold text-green-800">
+          +{ap} AP earned{waterAwarded ? " · 💧 Water added" : ""}
+        </span>
+        <button
+          onClick={onDismiss}
+          className="ml-1 flex items-center gap-1 text-[11px] text-green-700 hover:text-green-900 font-medium transition-colors"
+          data-testid="button-reward-dismiss"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Got it
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+// Inline Nudge Card — shown after IO/RW messages that look like completed actions
+function NudgeCard({
+  onConfirm, onSkip, isLoading,
+}: { onConfirm: () => void; onSkip: () => void; isLoading: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.25 }}
+      className="ml-12 mt-1 mb-2"
+      data-testid="card-nudge"
+    >
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 shadow-sm">
+        <p className="text-[11px] text-amber-800 mb-2 font-medium flex items-center gap-1.5">
+          <Droplets className="w-3 h-3 text-blue-500 shrink-0" />
+          Want to log this progress and earn water?
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            data-testid="button-nudge-confirm"
+          >
+            {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+            Log Progress
+          </button>
+          <button
+            onClick={onSkip}
+            disabled={isLoading}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            data-testid="button-nudge-skip"
+          >
+            Skip
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Chat() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
@@ -95,6 +177,11 @@ export default function Chat() {
   const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string } | null>(null);
   const [waterAnimating, setWaterAnimating] = useState(false);
   const [localFillPercent, setLocalFillPercent] = useState<number | null>(null);
+  const [inlineCards, setInlineCards] = useState<Record<string,
+    | { type: "reward"; ap: number; waterAwarded: boolean }
+    | { type: "nudge"; text: string }
+    | { type: "dismissed" }
+  >>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -173,11 +260,15 @@ export default function Chat() {
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => api.sendMessage(userId!, text),
-    onSuccess: (data) => {
+    onSuccess: (data, sentText) => {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
       qc.invalidateQueries({ queryKey: ["user", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
+
+      const category = data?.titan?.category;
+      const jaeId = data?.jaeMessage?.id;
+
       if (data?.water?.awarded) {
         const w = data.water;
         if (w.cupJustFilled) {
@@ -194,6 +285,27 @@ export default function Chat() {
           setLocalFillPercent(w.fillPercent);
           setWaterAnimating(true);
           setTimeout(() => setWaterAnimating(false), 1500);
+        }
+      }
+
+      // Set inline confirmation / nudge card for this Jae message
+      if (jaeId) {
+        if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
+          // Reward card: confirms AP + water earned
+          setInlineCards(prev => ({
+            ...prev,
+            [jaeId]: {
+              type: "reward",
+              ap: data.water!.actionPointsAccumulated,
+              waterAwarded: data.water!.awarded,
+            },
+          }));
+        } else if ((category === "IO" || category === "RW") && looksLikeCompletedAction(sentText)) {
+          // Nudge card: offer to log this as verified progress
+          setInlineCards(prev => ({
+            ...prev,
+            [jaeId]: { type: "nudge", text: sentText },
+          }));
         }
       }
     },
@@ -260,6 +372,48 @@ export default function Chat() {
       }, 800);
     },
     onError: () => {},
+  });
+
+  // Confirm-progress mutation — handles nudge card "Log Progress" button.
+  // Calls the confirm-progress endpoint which runs processRewardTransaction as VA.
+  // Protected by the same 90s dedup in rewardEngine (double-clicks blocked).
+  const confirmMutation = useMutation({
+    mutationFn: ({ text, jaeMessageId }: { text: string; jaeMessageId: string }) =>
+      api.confirmProgress(userId!, text).then(r => ({ ...r, jaeMessageId })),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["messages", userId] });
+      qc.invalidateQueries({ queryKey: ["garden", userId] });
+      qc.invalidateQueries({ queryKey: ["entries", userId] });
+      if (data?.water?.awarded) {
+        const w = data.water;
+        if (w.cupJustFilled) {
+          setLocalFillPercent(w.preResetFillPercent);
+          setWaterAnimating(true);
+          setTimeout(() => {
+            setLocalFillPercent(0);
+            setTimeout(() => {
+              setLocalFillPercent(w.fillPercent);
+              setTimeout(() => setWaterAnimating(false), 800);
+            }, 400);
+          }, 1200);
+        } else {
+          setLocalFillPercent(w.fillPercent);
+          setWaterAnimating(true);
+          setTimeout(() => setWaterAnimating(false), 1500);
+        }
+      }
+      // Replace nudge with reward card (or dismiss if deduped)
+      setInlineCards(prev => ({
+        ...prev,
+        [data.jaeMessageId]: data.awarded
+          ? {
+              type: "reward",
+              ap: data.water?.actionPointsAccumulated || 3,
+              waterAwarded: data.water?.awarded || false,
+            }
+          : { type: "dismissed" },
+      }));
+    },
   });
 
   useEffect(() => {
@@ -446,64 +600,96 @@ export default function Chat() {
           </motion.div>
         )}
 
-        <AnimatePresence initial={false}>
-          {messages.map((msg: any) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex items-end gap-2 mb-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              {msg.sender === 'jae' && (
-                <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-                  <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
-                </div>
-              )}
-
-              <div
-                className={`max-w-[80%] rounded-2xl shadow-sm text-sm leading-relaxed ${
-                  msg.sender === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-br-sm'
-                    : 'bg-white text-foreground rounded-bl-sm border border-border/50'
-                }`}
+        {messages.map((msg: any) => {
+          const card = inlineCards[msg.id];
+          const confirmingThisCard = confirmMutation.isPending &&
+            (confirmMutation.variables as any)?.jaeMessageId === msg.id;
+          return (
+            <Fragment key={msg.id}>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex items-end gap-2 mb-1 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
               >
-                {msg.messageType === 'photo' && msg.photoUrl && (
-                  <div className="relative">
-                    <img
-                      src={msg.photoUrl}
-                      alt="Photo"
-                      className="w-full rounded-t-2xl object-cover max-h-48"
-                      data-testid={`img-photo-${msg.id}`}
-                    />
-                    {msg.status === 'pending_analysis' && (
-                      <div className="absolute inset-0 bg-black/30 rounded-t-2xl flex items-center justify-center">
-                        <div className="flex items-center gap-2 text-white text-xs bg-black/50 px-3 py-1.5 rounded-full">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Reviewing...
-                        </div>
-                      </div>
-                    )}
-                    {msg.status === 'analyzed' && msg.analysisJson && (msg.analysisJson as any).water_award > 0 && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-blue-500/90 text-white text-xs px-2 py-1 rounded-full" data-testid={`badge-water-${msg.id}`}>
-                        <Droplets className="w-3 h-3" />
-                        +{(msg.analysisJson as any).water_award}
-                      </div>
-                    )}
+                {msg.sender === "jae" && (
+                  <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
+                    <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
                   </div>
                 )}
-                <div className="px-4 py-3 whitespace-pre-wrap">
-                  {msg.text}
-                </div>
-              </div>
 
-              {msg.sender === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1">
-                  <div className="w-4 h-4 bg-primary rounded-full opacity-50" />
+                <div
+                  className={`max-w-[80%] rounded-2xl shadow-sm text-sm leading-relaxed ${
+                    msg.sender === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-sm"
+                      : "bg-white text-foreground rounded-bl-sm border border-border/50"
+                  }`}
+                >
+                  {msg.messageType === "photo" && msg.photoUrl && (
+                    <div className="relative">
+                      <img
+                        src={msg.photoUrl}
+                        alt="Photo"
+                        className="w-full rounded-t-2xl object-cover max-h-48"
+                        data-testid={`img-photo-${msg.id}`}
+                      />
+                      {msg.status === "pending_analysis" && (
+                        <div className="absolute inset-0 bg-black/30 rounded-t-2xl flex items-center justify-center">
+                          <div className="flex items-center gap-2 text-white text-xs bg-black/50 px-3 py-1.5 rounded-full">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Reviewing...
+                          </div>
+                        </div>
+                      )}
+                      {msg.status === "analyzed" && msg.analysisJson && (msg.analysisJson as any).water_award > 0 && (
+                        <div className="absolute top-2 right-2 flex items-center gap-1 bg-blue-500/90 text-white text-xs px-2 py-1 rounded-full" data-testid={`badge-water-${msg.id}`}>
+                          <Droplets className="w-3 h-3" />
+                          +{(msg.analysisJson as any).water_award}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="px-4 py-3 whitespace-pre-wrap">
+                    {msg.text}
+                  </div>
                 </div>
+
+                {msg.sender === "user" && (
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-white shadow-sm shrink-0 mb-1">
+                    <div className="w-4 h-4 bg-primary rounded-full opacity-50" />
+                  </div>
+                )}
+              </motion.div>
+
+              {/* Inline reward / nudge cards after each Jae message */}
+              {msg.sender === "jae" && card && card.type !== "dismissed" && (
+                <AnimatePresence>
+                  {card.type === "reward" && (
+                    <RewardCard
+                      key={`reward-${msg.id}`}
+                      ap={card.ap}
+                      waterAwarded={card.waterAwarded}
+                      onDismiss={() =>
+                        setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
+                      }
+                    />
+                  )}
+                  {card.type === "nudge" && (
+                    <NudgeCard
+                      key={`nudge-${msg.id}`}
+                      isLoading={confirmingThisCard}
+                      onConfirm={() =>
+                        confirmMutation.mutate({ text: card.text, jaeMessageId: msg.id })
+                      }
+                      onSkip={() =>
+                        setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
+                      }
+                    />
+                  )}
+                </AnimatePresence>
               )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
+            </Fragment>
+          );
+        })}
 
         {isTextSending && (
           <motion.div
