@@ -265,6 +265,7 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["user", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
+      qc.invalidateQueries({ queryKey: ["consistency", userId] });
 
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;
@@ -346,6 +347,7 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["entries", userId] });
       qc.invalidateQueries({ queryKey: ["photo-memories", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
+      qc.invalidateQueries({ queryKey: ["consistency", userId] });
       if (data?.water?.awarded) {
         const w = data.water;
         if (w.cupJustFilled) {
@@ -384,6 +386,7 @@ export default function Chat() {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
       qc.invalidateQueries({ queryKey: ["garden", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
+      qc.invalidateQueries({ queryKey: ["consistency", userId] });
       if (data?.water?.awarded) {
         const w = data.water;
         if (w.cupJustFilled) {
