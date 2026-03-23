@@ -1,0 +1,188 @@
+Repair the Goal Completion Ceremony pipeline so completion, rewards, growth updates, and ceremony UI all run as one atomic success path.
+
+CONTEXT
+The controlled end-to-end Goal Completion Ceremony test partially passed.
+
+Verified from test result:
+- Goal completion persisted correctly
+- Active goal cleared correctly
+- Recent memory logged the completion correctly
+- Weekly review / summary updated correctly
+- Cross-screen sync appears healthy
+
+Failed / partially failed:
+- Reward allocation did NOT occur on goal completion
+- Water did not increase as expected
+- Seed / growth state did not visibly advance
+- No reliable visible celebration layer was confirmed
+- This indicates completion persistence is working, but reward allocation and ceremony rendering are not chained to the same success path
+
+ROOT ISSUE TO FIX
+Right now the app appears to do something like:
+completeGoal()
+  -> persist completed goal
+  -> clear active goal
+  -> refresh UI / show text response
+
+But it MUST do:
+completeGoal()
+  -> validate goal completion payload
+  -> calculate completion rewards
+  -> persist reward write
+  -> persist growth / water update
+  -> persist memory entry
+  -> trigger celebration UI state
+  -> invalidate / refresh all dependent queries
+  -> only then resolve success
+
+GOAL
+Make goal completion a single orchestrated completion transaction or transaction-like pipeline so that:
+1. Completion persistence succeeds
+2. Reward allocation succeeds
+3. Water / growth update succeeds
+4. Memory log succeeds
+5. Ceremony UI reliably appears
+6. All dependent screens refresh from the same final committed state
+
+REPAIR REQUIREMENTS
+
+1) FIND THE CURRENT COMPLETION ENTRY POINT
+Identify the exact front-end handler, mutation, server action, or API route used when a user completes a goal.
+Trace the full path from:
+- button / UI action
+- front-end mutation
+- backend endpoint / service
+- database writes
+- post-success invalidations
+- ceremony UI trigger
+
+2) CENTRALIZE COMPLETION LOGIC
+Create or refactor to a single orchestrator function such as:
+completeGoalCeremony(goalId, userId, completionPayload)
+
+This orchestrator must:
+- fetch latest goal state
+- verify goal is completable and not already completed
+- calculate final rewards
+- write completed goal state
+- write reward / credits / water update
+- write growth state update if applicable
+- create memory / ceremony log entry
+- return a structured response that the UI can use to show the ceremony
+
+3) MAKE REWARD WRITES PART OF THE SAME SUCCESS PIPELINE
+Reward logic must not live in a disconnected listener, best-effort callback, or UI-only branch.
+It must execute inside the same controlled completion flow.
+
+If database transactions are available for this stack, use them.
+If true DB transactions are not available across all writes, implement a strict ordered pipeline with rollback or fail-fast behavior and explicit logging.
+
+4) RETURN A STRUCTURED CEREMONY RESULT
+The server / orchestrator should return something like:
+{
+  success: true,
+  goalCompleted: true,
+  rewardsApplied: true,
+  waterAdded: <number>,
+  creditsAdded: <number>,
+  previousWaterLevel: <number>,
+  newWaterLevel: <number>,
+  previousGrowthStage: <string>,
+  newGrowthStage: <string>,
+  memoryEntryCreated: true,
+  ceremonyVariant: <string>,
+  completedGoalId: <id>
+}
+
+The UI should use THIS response as the source of truth.
+
+5) FIX CEREMONY UI RELIABILITY
+Ensure celebration UI is triggered after a successful orchestrator response and is not lost due to:
+- immediate route changes
+- parent unmounts
+- stale local state
+- async race conditions
+- modal rendering in an unstable subtree
+
+Requirements:
+- ceremony UI must render from stable state
+- ceremony UI must remain visible for its intended duration
+- animation must not block interaction permanently
+- if the user is still on Home, the overlay / celebration should visibly appear there
+- no “text only” silent pass unless explicitly designed as fallback
+
+6) INVALIDATE / REFRESH ALL DEPENDENT DATA AFTER SUCCESS
+After successful completion, invalidate and refresh all queries / caches tied to:
+- active goal
+- goals list / completed goals
+- water level
+- growth stage / seed stage
+- memory / recent memory
+- profile summary if applicable
+- dashboard / home summary if applicable
+
+Do not refresh before the reward and growth writes are complete.
+
+7) ADD DEFENSIVE LOGGING
+Add concise logging around:
+- completion started
+- reward calculation result
+- reward write success/failure
+- growth write success/failure
+- memory write success/failure
+- ceremony response payload
+- final invalidation start/end
+
+Make logs easy to inspect during the next controlled test.
+
+8) PREVENT DOUBLE COMPLETION
+Guard against duplicate taps / duplicate mutation calls.
+Requirements:
+- front-end button disabled while mutation is pending
+- backend rejects already-completed goals idempotently
+- duplicate completion must not double-award rewards
+
+9) PRESERVE CURRENTLY WORKING BEHAVIOR
+Do NOT break:
+- existing goal persistence
+- active goal clearing
+- recent memory creation
+- weekly summary behavior
+- current navigation structure
+
+This is a surgical repair, not a redesign.
+
+10) ADD A CONTROLLED TEST HOOK
+Add a temporary test-friendly debug response or console output after completion that clearly shows:
+- completed goal id
+- rewards applied yes/no
+- water added
+- credits added
+- growth changed yes/no
+- ceremony triggered yes/no
+
+This is only to support validation and can be easy to remove later.
+
+ACCEPTANCE CRITERIA
+The fix is only complete if all of the following are true in one controlled test:
+1. Completing a goal clears the active goal
+2. Recent memory logs the completion
+3. Water increases immediately and correctly
+4. Credits increase immediately and correctly
+5. Growth / seed stage updates if threshold is met
+6. Ceremony UI visibly appears
+7. No manual refresh is needed
+8. No duplicate rewards occur on repeated taps
+9. Home / Growth / Profile stay in sync
+10. Console or debug logs clearly confirm the full pipeline
+
+DELIVERABLE FORMAT
+Do not give a high-level explanation only.
+Do the repair in code.
+
+Then report back with:
+1. Files changed
+2. Exact logic changed
+3. Any assumptions made
+4. Any migration / test notes
+5. A copy-paste test prompt for a new controlled Goal Completion Ceremony validation run

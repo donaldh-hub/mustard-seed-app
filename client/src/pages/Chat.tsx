@@ -269,10 +269,17 @@ type GoalCompletionData = {
   vaCount: number;
   streakAtCompletion: number;
   seedStage: number;
+  completionGrowth?: {
+    prevSeedStage: number;
+    newSeedStage: number;
+    waterAdded: number;
+    cupJustFilled: boolean;
+    stageAdvanced: boolean;
+  } | null;
 };
 
 function CompletionCard({
-  goalTitle, completedUnits, targetUnits, daysUsed, streakAtCompletion, onDismiss, onNavigate,
+  goalTitle, completedUnits, targetUnits, daysUsed, streakAtCompletion, completionGrowth, onDismiss, onNavigate,
 }: GoalCompletionData & { onDismiss: () => void; onNavigate: (path: string) => void }) {
   const particles = useMemo(() =>
     Array.from({ length: 14 }, (_, i) => ({
@@ -334,6 +341,16 @@ function CompletionCard({
           {streakAtCompletion > 0 && (
             <div className="flex items-center gap-1 bg-white/70 border border-orange-100 rounded-full px-2.5 py-1">
               <span className="text-[11px] font-medium text-orange-800">🔥 {streakAtCompletion}-day streak</span>
+            </div>
+          )}
+          {completionGrowth?.stageAdvanced && (
+            <div className="flex items-center gap-1 bg-white/70 border border-blue-100 rounded-full px-2.5 py-1">
+              <span className="text-[11px] font-medium text-blue-800">🌱 Seed advanced</span>
+            </div>
+          )}
+          {completionGrowth?.cupJustFilled && !completionGrowth?.stageAdvanced && (
+            <div className="flex items-center gap-1 bg-white/70 border border-teal-100 rounded-full px-2.5 py-1">
+              <span className="text-[11px] font-medium text-teal-800">💧 Cup filled</span>
             </div>
           )}
         </div>
@@ -530,6 +547,7 @@ export default function Chat() {
               vaCount: gc.vaCount,
               streakAtCompletion: gc.streakAtCompletion,
               seedStage: gc.seedStage,
+              completionGrowth: gc.completionGrowth ?? null,
             },
           }));
         } else if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
@@ -991,6 +1009,7 @@ export default function Chat() {
                       vaCount={card.vaCount}
                       streakAtCompletion={card.streakAtCompletion}
                       seedStage={card.seedStage}
+                      completionGrowth={card.completionGrowth}
                       onDismiss={() =>
                         setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
                       }

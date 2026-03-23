@@ -1353,19 +1353,64 @@ export async function registerRoutes(
         vaCount: number;
         streakAtCompletion: number;
         seedStage: number;
+        completionGrowth: {
+          prevWaterEvents: number;
+          prevCupsFilled: number;
+          prevSeedStage: number;
+          newWaterEvents: number;
+          newCupsFilled: number;
+          newSeedStage: number;
+          waterAdded: number;
+          cupJustFilled: boolean;
+          stageAdvanced: boolean;
+        };
       } | null = null;
+
+      let completionGrowthResult: RewardResult["growthResult"] = null;
 
       if (progressFeedback?.percentComplete === 100 && targetedGoal && targetedGoal.status === "active") {
         try {
+          console.log(`[COMPLETION] Starting ceremony pipeline for goal "${targetedGoal.title}" (${targetedGoal.id})`);
+
+          // State after normal VA reward engine ran
+          const prevWE = growthResult?.waterEvents ?? (targetedGoal.waterEvents ?? 0);
+          const prevCups = growthResult?.cupsFilled ?? (targetedGoal.cupsFilled ?? 0);
+          const prevStage = growthResult?.seedStage ?? (targetedGoal.seedStage ?? 0);
+
+          // Completion bonus: fill the current partial cup (minimum 10 water units = 1 full cup)
+          const partialInCup = prevWE % 10;
+          const bonusWater = partialInCup === 0 ? 10 : 10 - partialInCup;
+          console.log(`[COMPLETION] Reward calc | prevWE=${prevWE} prevCups=${prevCups} prevStage=${prevStage} bonusWater=${bonusWater}`);
+
+          const cGrowth = computeGrowthUpdate(prevWE, prevCups, prevStage, bonusWater);
+          console.log(`[COMPLETION] Growth result | newWE=${cGrowth.waterEvents} newCups=${cGrowth.cupsFilled} newStage=${cGrowth.seedStage} cupFilled=${cGrowth.cupJustFilled} stageAdv=${cGrowth.stageAdvanced}`);
+
+          // Single atomic write: completion status + growth bonus
           await storage.updateGoal(targetedGoal.id, {
             status: "completed",
             isActive: 0,
             percentComplete: 100,
             treeGrowthScore: 100,
+            actionPoints: 0,
+            waterEvents: cGrowth.waterEvents,
+            cupsFilled: cGrowth.cupsFilled,
+            seedStage: cGrowth.seedStage,
           });
+          console.log(`[COMPLETION] DB write success | status=completed isActive=0 waterEvents=${cGrowth.waterEvents} cups=${cGrowth.cupsFilled} stage=${cGrowth.seedStage}`);
+
+          completionGrowthResult = {
+            waterEvents: cGrowth.waterEvents,
+            cupsFilled: cGrowth.cupsFilled,
+            seedStage: cGrowth.seedStage,
+            cupJustFilled: cGrowth.cupJustFilled,
+            stageAdvanced: cGrowth.stageAdvanced,
+            preResetFillPercent: cGrowth.preResetFillPercent,
+          };
+
           const daysUsed = targetedGoal.createdAt
             ? Math.max(1, Math.ceil((Date.now() - new Date(targetedGoal.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
             : 1;
+
           goalCompleted = {
             goalId: targetedGoal.id,
             goalTitle: targetedGoal.title,
@@ -1374,11 +1419,24 @@ export async function registerRoutes(
             daysUsed,
             vaCount: progressFeedback.completedUnits,
             streakAtCompletion: finalStreak,
-            seedStage: growthResult?.seedStage ?? (targetedGoal.seedStage ?? 0),
+            seedStage: cGrowth.seedStage,
+            completionGrowth: {
+              prevWaterEvents: prevWE,
+              prevCupsFilled: prevCups,
+              prevSeedStage: prevStage,
+              newWaterEvents: cGrowth.waterEvents,
+              newCupsFilled: cGrowth.cupsFilled,
+              newSeedStage: cGrowth.seedStage,
+              waterAdded: bonusWater,
+              cupJustFilled: cGrowth.cupJustFilled,
+              stageAdvanced: cGrowth.stageAdvanced,
+            },
           };
-          console.log(`[COMPLETION] Goal "${targetedGoal.title}" auto-completed for user ${userId} — ${progressFeedback.completedUnits}/${progressFeedback.targetUnits} units in ${daysUsed} days, streak: ${finalStreak}`);
+
+          console.log(`[COMPLETION] PIPELINE COMPLETE | goal="${targetedGoal.title}" | user=${userId} | ${progressFeedback.completedUnits}/${progressFeedback.targetUnits} units | ${daysUsed} days | streak=${finalStreak}`);
+          console.log(`[COMPLETION] DEBUG | completedGoalId=${targetedGoal.id} | rewardsApplied=true | waterAdded=${bonusWater} | creditsAdded=0 | growthChanged=${cGrowth.stageAdvanced} | ceremonyTriggered=true`);
         } catch (completionErr) {
-          console.error("[COMPLETION] Error auto-completing goal:", completionErr);
+          console.error("[COMPLETION] Pipeline error:", completionErr);
         }
       }
 
@@ -1389,21 +1447,23 @@ export async function registerRoutes(
         escalation: (escalation.escalationMessage && !justVerified) ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
         water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") ? (() => {
           const mg = targetedGoal || untargetedGoal;
-          const we = growthResult?.waterEvents ?? (mg?.waterEvents ?? 0);
-          const cf = growthResult?.cupsFilled ?? (mg?.cupsFilled ?? 0);
-          const ap = postUpdateAP ?? ((mg?.actionPoints ?? 0) + apDelta);
+          // Prefer completionGrowthResult (includes bonus water) over normal reward result
+          const effectiveGrowth = completionGrowthResult ?? growthResult;
+          const we = effectiveGrowth?.waterEvents ?? (mg?.waterEvents ?? 0);
+          const cf = effectiveGrowth?.cupsFilled ?? (mg?.cupsFilled ?? 0);
+          const ap = completionGrowthResult ? 0 : (postUpdateAP ?? ((mg?.actionPoints ?? 0) + apDelta));
           const fillPct = Math.min(100, Math.round(we * 10 + ap));
           return {
-            // awarded is TRUE only when the reward transaction actually succeeded in DB
-            awarded: rewardResult.success && rewardResult.apActuallyAwarded > 0 && !!mg,
+            // awarded is TRUE when reward transaction succeeded OR when completion bonus fired
+            awarded: (rewardResult.success && rewardResult.apActuallyAwarded > 0 && !!mg) || !!completionGrowthResult,
             goalId: waterGoalId || mg?.id || null,
             waterEvents: we,
             cupsFilled: cf,
-            seedStage: growthResult?.seedStage ?? (mg?.seedStage ?? 0),
-            cupJustFilled: growthResult?.cupJustFilled ?? false,
-            stageAdvanced: growthResult?.stageAdvanced ?? false,
+            seedStage: effectiveGrowth?.seedStage ?? (mg?.seedStage ?? 0),
+            cupJustFilled: effectiveGrowth?.cupJustFilled ?? false,
+            stageAdvanced: effectiveGrowth?.stageAdvanced ?? false,
             fillPercent: fillPct,
-            preResetFillPercent: growthResult?.preResetFillPercent ?? fillPct,
+            preResetFillPercent: effectiveGrowth?.preResetFillPercent ?? fillPct,
             actionPointsAccumulated: ap,
             actionPointsNeeded: 10,
             rewardTransaction: rewardResult.skipReason ?? "success",
