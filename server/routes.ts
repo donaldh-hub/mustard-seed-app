@@ -1069,6 +1069,7 @@ export async function registerRoutes(
         } as any);
       }
 
+      let finalStreak = streak;
       let heartbeatKey: HeartbeatKey | null = null;
       if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
         const creditKeys = Object.keys(agg.heartbeatCredits) as HeartbeatKey[];
@@ -1090,6 +1091,7 @@ export async function registerRoutes(
         }
 
         console.log(`[STREAK] streakBefore: ${streak}, gapHoursComputed: ${gapHours !== null ? gapHours.toFixed(2) : "null (first VA)"}, streakAfter: ${newStreak}`);
+        finalStreak = newStreak;
 
         await storage.updateUser(userId, {
           heartbeatCredits: updatedCredits as any,
@@ -1341,6 +1343,45 @@ export async function registerRoutes(
         }
       }
 
+      // --- GOAL COMPLETION CEREMONY ---
+      let goalCompleted: {
+        goalId: string;
+        goalTitle: string;
+        completedUnits: number;
+        targetUnits: number;
+        daysUsed: number;
+        vaCount: number;
+        streakAtCompletion: number;
+        seedStage: number;
+      } | null = null;
+
+      if (progressFeedback?.percentComplete === 100 && targetedGoal && targetedGoal.status === "active") {
+        try {
+          await storage.updateGoal(targetedGoal.id, {
+            status: "completed",
+            isActive: 0,
+            percentComplete: 100,
+            treeGrowthScore: 100,
+          });
+          const daysUsed = targetedGoal.createdAt
+            ? Math.max(1, Math.ceil((Date.now() - new Date(targetedGoal.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
+            : 1;
+          goalCompleted = {
+            goalId: targetedGoal.id,
+            goalTitle: targetedGoal.title,
+            completedUnits: progressFeedback.completedUnits,
+            targetUnits: progressFeedback.targetUnits,
+            daysUsed,
+            vaCount: progressFeedback.completedUnits,
+            streakAtCompletion: finalStreak,
+            seedStage: growthResult?.seedStage ?? (targetedGoal.seedStage ?? 0),
+          };
+          console.log(`[COMPLETION] Goal "${targetedGoal.title}" auto-completed for user ${userId} — ${progressFeedback.completedUnits}/${progressFeedback.targetUnits} units in ${daysUsed} days, streak: ${finalStreak}`);
+        } catch (completionErr) {
+          console.error("[COMPLETION] Error auto-completing goal:", completionErr);
+        }
+      }
+
       return res.json({
         userMessage: userMsg,
         jaeMessage: jaeMsg,
@@ -1370,6 +1411,7 @@ export async function registerRoutes(
           };
         })() : null,
         entryQualification,
+        goalCompleted,
       });
     } catch (err) {
       console.error(err);

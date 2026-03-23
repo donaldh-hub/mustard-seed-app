@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback, Fragment } from "react";
+import React, { useState, useRef, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine, CheckCircle2, Zap } from "lucide-react";
+import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine, CheckCircle2, Zap, Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -260,6 +260,112 @@ function ReflectionCard({
   );
 }
 
+type GoalCompletionData = {
+  goalId: string;
+  goalTitle: string;
+  completedUnits: number;
+  targetUnits: number;
+  daysUsed: number;
+  vaCount: number;
+  streakAtCompletion: number;
+  seedStage: number;
+};
+
+function CompletionCard({
+  goalTitle, completedUnits, targetUnits, daysUsed, streakAtCompletion, onDismiss, onNavigate,
+}: GoalCompletionData & { onDismiss: () => void; onNavigate: (path: string) => void }) {
+  const particles = useMemo(() =>
+    Array.from({ length: 14 }, (_, i) => ({
+      id: i,
+      x: (Math.random() - 0.5) * 140,
+      y: -(Math.random() * 70 + 20),
+      color: ["#22c55e", "#f59e0b", "#3b82f6", "#a855f7", "#f97316"][Math.floor(Math.random() * 5)],
+      size: Math.random() * 6 + 4,
+      delay: Math.random() * 0.25,
+    })), []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.3 }}
+      className="ml-12 mt-1 mb-3 relative"
+      data-testid="card-completion"
+    >
+      <div className="absolute top-6 left-20 pointer-events-none" aria-hidden>
+        {particles.map(p => (
+          <motion.div
+            key={p.id}
+            style={{ backgroundColor: p.color, width: p.size, height: p.size }}
+            className="absolute rounded-full"
+            initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+            animate={{ x: p.x, y: p.y, opacity: 0, scale: 0.2 }}
+            transition={{ duration: 0.85, delay: 0.1 + p.delay, ease: "easeOut" }}
+          />
+        ))}
+      </div>
+
+      <div className="bg-gradient-to-br from-amber-50 to-emerald-50 border border-amber-200 rounded-2xl px-4 py-3.5 shadow-md">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-7 h-7 bg-amber-100 border border-amber-200 rounded-full flex items-center justify-center shrink-0">
+            <Trophy className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-amber-800 leading-tight">Goal Complete</p>
+            <p className="text-[10px] text-amber-600 leading-tight truncate max-w-[190px]">{goalTitle}</p>
+          </div>
+        </div>
+
+        <p className="text-xs text-emerald-900 leading-snug mb-2.5 italic">
+          {"\"You did what you said you would do. That's the hardest part — and you kept the promise.\""}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="flex items-center gap-1 bg-white/70 border border-emerald-100 rounded-full px-2.5 py-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+            <span className="text-[11px] font-medium text-emerald-800">{completedUnits}/{targetUnits} actions</span>
+          </div>
+          {daysUsed > 0 && (
+            <div className="flex items-center gap-1 bg-white/70 border border-amber-100 rounded-full px-2.5 py-1">
+              <span className="text-[11px] font-medium text-amber-800">🗓 {daysUsed} days</span>
+            </div>
+          )}
+          {streakAtCompletion > 0 && (
+            <div className="flex items-center gap-1 bg-white/70 border border-orange-100 rounded-full px-2.5 py-1">
+              <span className="text-[11px] font-medium text-orange-800">🔥 {streakAtCompletion}-day streak</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => onNavigate("/home")}
+            className="text-[11px] bg-emerald-600 text-white px-3 py-1.5 rounded-full font-medium hover:bg-emerald-700 transition-colors"
+            data-testid="button-completion-dashboard"
+          >
+            Growth Dashboard
+          </button>
+          <button
+            onClick={() => onNavigate("/progress")}
+            className="text-[11px] bg-white border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-full font-medium hover:bg-emerald-50 transition-colors"
+            data-testid="button-completion-progress"
+          >
+            Plant Next Seed
+          </button>
+          <button
+            onClick={onDismiss}
+            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1 py-1.5"
+            data-testid="button-completion-dismiss"
+          >
+            Reflect here
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Chat() {
   const userId = useStore((s) => s.userId);
   const setProgressSyncing = useStore((s) => s.setProgressSyncing);
@@ -275,6 +381,7 @@ export default function Chat() {
     | { type: "reward"; ap: number; waterAwarded: boolean; progressFeedback?: ProgressFeedback | null }
     | { type: "nudge"; text: string }
     | { type: "reflection"; qualification: ReflectionQualification }
+    | ({ type: "completion" } & GoalCompletionData)
     | { type: "dismissed" }
   >>({});
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -408,7 +515,24 @@ export default function Chat() {
       // Set inline confirmation / nudge / reflection card for this Jae message
       if (jaeId) {
         const qualification = data?.entryQualification as ReflectionQualification | "verifiedAction" | null | undefined;
-        if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
+        if ((category === "VA" || category === "AR") && data?.goalCompleted) {
+          // Goal completion ceremony — takes priority over reward card
+          const gc = data.goalCompleted as GoalCompletionData;
+          setInlineCards(prev => ({
+            ...prev,
+            [jaeId]: {
+              type: "completion",
+              goalId: gc.goalId,
+              goalTitle: gc.goalTitle,
+              completedUnits: gc.completedUnits,
+              targetUnits: gc.targetUnits,
+              daysUsed: gc.daysUsed,
+              vaCount: gc.vaCount,
+              streakAtCompletion: gc.streakAtCompletion,
+              seedStage: gc.seedStage,
+            },
+          }));
+        } else if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
           // Reward card: confirms AP + water earned
           setInlineCards(prev => ({
             ...prev,
@@ -854,6 +978,23 @@ export default function Chat() {
                       onDismiss={() =>
                         setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
                       }
+                    />
+                  )}
+                  {card.type === "completion" && (
+                    <CompletionCard
+                      key={`completion-${msg.id}`}
+                      goalId={card.goalId}
+                      goalTitle={card.goalTitle}
+                      completedUnits={card.completedUnits}
+                      targetUnits={card.targetUnits}
+                      daysUsed={card.daysUsed}
+                      vaCount={card.vaCount}
+                      streakAtCompletion={card.streakAtCompletion}
+                      seedStage={card.seedStage}
+                      onDismiss={() =>
+                        setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
+                      }
+                      onNavigate={(path) => setLocation(path)}
                     />
                   )}
                 </AnimatePresence>
