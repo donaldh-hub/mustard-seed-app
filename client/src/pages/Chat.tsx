@@ -329,6 +329,19 @@ export default function Chat() {
     enabled: !!userId,
   });
 
+  const { data: chatUser } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
+    enabled: !!userId,
+    staleTime: 60_000,
+  });
+
+  const hoursSinceLastVA = chatUser?.lastVerifiedActionAt
+    ? (Date.now() - new Date(chatUser.lastVerifiedActionAt).getTime()) / 3600000
+    : 0;
+  const [inactivityPromptDismissed, setInactivityPromptDismissed] = useState(false);
+  const show48hPrompt = !!garden?.targeted && hoursSinceLastVA >= 48 && !inactivityPromptDismissed;
+
   const hasNoGoal = !garden?.targeted && !garden?.untargeted;
   const activeGoal = garden?.targeted || garden?.untargeted;
   const gardenFillPercent = activeGoal?.fillPercent ?? 0;
@@ -632,6 +645,28 @@ export default function Chat() {
       >
         {isLoading && (
           <div className="text-center text-muted-foreground text-sm py-8">Loading messages...</div>
+        )}
+
+        {!isLoading && show48hPrompt && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-end gap-2 justify-start"
+            data-testid="card-inactivity-48h"
+          >
+            <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
+              <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+            </div>
+            <div className="relative max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-amber-200">
+              <p>Still building this goal? What is the next smallest action?</p>
+              <button
+                onClick={() => setInactivityPromptDismissed(true)}
+                className="absolute top-1.5 right-2 text-[10px] text-muted-foreground hover:text-foreground"
+                data-testid="button-dismiss-inactivity-prompt"
+              >✕</button>
+            </div>
+          </motion.div>
         )}
 
         {!isLoading && messages.length === 0 && hasNoGoal && (

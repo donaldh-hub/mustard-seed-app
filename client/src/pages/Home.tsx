@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame, ClipboardCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame, ClipboardCheck, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -67,6 +67,11 @@ export default function Home() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
   const [heartbeatsOpen, setHeartbeatsOpen] = useState(false);
+  const [inactivityBannerDismissed, setInactivityBannerDismissed] = useState(() => {
+    const key = `inactivity_banner_dismissed_${userId}`;
+    const stored = sessionStorage.getItem(key);
+    return stored ? Number(stored) > Date.now() - 3 * 60 * 60 * 1000 : false;
+  });
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -136,6 +141,13 @@ export default function Home() {
     ? entries.sort((a: any, b: any) => (b.createdAt > a.createdAt ? 1 : -1))[0]
     : null;
 
+  // Inactivity reminder: only for targeted goals, only after first VA ever
+  const hoursSinceLastVA = user?.lastVerifiedActionAt
+    ? (Date.now() - new Date(user.lastVerifiedActionAt).getTime()) / 3600000
+    : 0;
+  const hasTargetedGoal = !!garden?.targeted;
+  const show24hBanner = hasTargetedGoal && hoursSinceLastVA >= 24 && !inactivityBannerDismissed;
+
   return (
     <div className="h-full flex flex-col bg-background">
       <div className="flex-1 overflow-y-auto pb-24">
@@ -170,6 +182,30 @@ export default function Home() {
                   <p className="text-xs text-amber-700/70 mt-0.5">Tap to view your progress report</p>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {show24hBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3"
+              data-testid="banner-inactivity-24h"
+            >
+              <Droplets className="w-4 h-4 text-orange-400 shrink-0" />
+              <p className="flex-1 text-sm text-orange-900 font-medium leading-snug">
+                Momentum waiting — one small step moves your goal forward.
+              </p>
+              <button
+                onClick={() => {
+                  setInactivityBannerDismissed(true);
+                  sessionStorage.setItem(`inactivity_banner_dismissed_${userId}`, String(Date.now()));
+                }}
+                className="text-orange-400 hover:text-orange-600 shrink-0"
+                data-testid="button-dismiss-inactivity-banner"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </motion.div>
           )}
 

@@ -69,6 +69,11 @@ export default function ProgressPage() {
     enabled: !!userId,
   });
 
+  const hoursSinceLastVA = user?.lastVerifiedActionAt
+    ? (Date.now() - new Date(user.lastVerifiedActionAt).getTime()) / 3600000
+    : 0;
+  const targetedInactiveAmber = !!garden?.targeted && hoursSinceLastVA >= 72;
+
   const currentWaterEvents = garden?.targeted?.waterEvents ?? garden?.untargeted?.waterEvents ?? null;
   useEffect(() => {
     if (currentWaterEvents === null) return;
@@ -165,6 +170,7 @@ export default function ProgressPage() {
             label="TARGETED GOAL"
             type="targeted"
             data={targeted}
+            inactiveAmber={targetedInactiveAmber}
             onAdd={() => {
               const maxGoals = user?.featureLimits?.maxGoals ?? 1;
               const activeCount = [targeted, untargeted].filter(Boolean).length;
@@ -421,6 +427,7 @@ function GoalCard({
   label,
   type,
   data,
+  inactiveAmber = false,
   onAdd,
   onLog,
   onArchive,
@@ -429,6 +436,7 @@ function GoalCard({
   label: string;
   type: "targeted" | "untargeted";
   data: any;
+  inactiveAmber?: boolean;
   onAdd: () => void;
   onLog: (id: string) => void;
   onArchive: (id: string) => void;
@@ -461,10 +469,22 @@ function GoalCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white/80 backdrop-blur-sm rounded-2xl border border-border/50 p-4 shadow-sm"
+      className={`backdrop-blur-sm rounded-2xl p-4 shadow-sm ${
+        inactiveAmber
+          ? "bg-amber-50/80 border border-amber-300"
+          : "bg-white/80 border border-border/50"
+      }`}
       data-testid={`card-tree-${type}`}
     >
-      <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">{label}</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</p>
+        {inactiveAmber && (
+          <span className="text-[9px] font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5" />
+            Needs attention
+          </span>
+        )}
+      </div>
       <p className="text-sm font-medium text-foreground mb-4" data-testid={`text-goal-title-${type}`}>
         {data.title}
       </p>
