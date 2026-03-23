@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X, Crown } from "lucide-react";
+import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X, Crown, Zap } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -209,6 +209,15 @@ export default function ProgressPage() {
               <div className="flex items-center gap-2 mb-3">
                 <Target className="w-4 h-4 text-orange-500" />
                 <h3 className="text-sm font-semibold">Targeted Progress</h3>
+                {targeted.momentumBoostActive && (
+                  <span
+                    className="ml-auto flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                    data-testid="badge-momentum-boost-dashboard"
+                  >
+                    <Zap className="w-2.5 h-2.5 text-amber-500" />
+                    Momentum Boost
+                  </span>
+                )}
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">

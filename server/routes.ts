@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
-import { computeGrowthUpdate, computeGrowthStateFromEntries, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS } from "./waterEngine";
+import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
@@ -1227,6 +1227,7 @@ export async function registerRoutes(
         targetUnits: number;
         percentComplete: number;
         feedbackText: string;
+        momentumBoostActive: boolean;
       } | null = null;
 
       if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
@@ -1234,12 +1235,24 @@ export async function registerRoutes(
         if (mg && mg.targetMetric && mg.targetMetric > 0) {
           try {
             const feedbackEntries = await storage.getEntries(userId);
+            const pfUser = await storage.getUser(userId);
             const goalCreated = mg.createdAt
               ? new Date(mg.createdAt).toISOString().split("T")[0]
               : "1970-01-01";
             const completedUnits = feedbackEntries.filter(
               (e) => e.mood === "happy" && e.date >= goalCreated
             ).length;
+
+            // Momentum Boost: active for user's first targeted goal until first cup fills
+            const boostEligible = mg.goalType === "targeted" && pfUser && !pfUser.firstGoalMomentumUsed;
+            const momentumBoostActive = !!boostEligible && completedUnits < BOOST_FIRST_CUP_THRESHOLD;
+
+            // Expire boost when first cup threshold is reached
+            if (boostEligible && completedUnits >= BOOST_FIRST_CUP_THRESHOLD && pfUser && !pfUser.firstGoalMomentumUsed) {
+              storage.updateUser(userId, { firstGoalMomentumUsed: true } as any).catch(() => {});
+              console.log(`[MOMENTUM_BOOST] First cup filled — boost expired for user ${userId}`);
+            }
+
             const targetUnits = mg.targetMetric;
             const clampedCompleted = Math.min(completedUnits, targetUnits);
             const percentComplete = Math.round((clampedCompleted / targetUnits) * 100);
@@ -1254,7 +1267,7 @@ export async function registerRoutes(
             const feedbackText = clampedCompleted >= targetUnits
               ? `Progress recorded. You've completed all ${targetUnits} ${unitLabel} — goal reached!`
               : `Progress recorded. You have completed ${clampedCompleted} of ${targetUnits} required ${unitLabel}. You are now ${percentComplete}% toward your goal.`;
-            progressFeedback = { completedUnits: clampedCompleted, targetUnits, percentComplete, feedbackText };
+            progressFeedback = { completedUnits: clampedCompleted, targetUnits, percentComplete, feedbackText, momentumBoostActive };
           } catch (_pfErr) { /* non-critical */ }
         }
       }
@@ -1725,6 +1738,9 @@ export async function registerRoutes(
       // the goal was created so a new goal always starts from 0.
       const allEntries = await storage.getEntries(userId);
 
+      // Fetch user for Momentum Boost eligibility
+      const userRecord = await storage.getUser(userId);
+
       const result: any = { targeted: null, untargeted: null };
 
       const SEED_ICONS: Record<number, string> = {
@@ -1739,9 +1755,19 @@ export async function registerRoutes(
           (e) => e.mood === "happy" && e.date >= goalCreatedAt
         ).length;
 
-        // computeGrowthStateFromEntries: 1 happy entry = 1 water unit,
-        // 10 water units = 1 cup, cups drive seed stage.
-        const growth = computeGrowthStateFromEntries(happyEntryCount);
+        // Momentum Boost: active on the user's first targeted goal until first cup fills.
+        const boostEligible = goal.goalType === "targeted" && userRecord && !userRecord.firstGoalMomentumUsed;
+        const momentumBoostActive = !!boostEligible && happyEntryCount < BOOST_FIRST_CUP_THRESHOLD;
+
+        // Expire boost in DB when first cup threshold is crossed (fire-and-forget)
+        if (boostEligible && happyEntryCount >= BOOST_FIRST_CUP_THRESHOLD && userRecord && !userRecord.firstGoalMomentumUsed) {
+          storage.updateUser(userId, { firstGoalMomentumUsed: true } as any).catch(() => {});
+        }
+
+        // Growth state: use boosted or normal computation.
+        const growth = (boostEligible)
+          ? computeGrowthStateWithBoost(happyEntryCount)
+          : computeGrowthStateFromEntries(happyEntryCount);
         const { waterEvents, cupsFilled, seedStage, fillPercent } = growth;
 
         const stageInfo = SEED_STAGE_INFO[seedStage] || SEED_STAGE_INFO[0];
@@ -1787,6 +1813,7 @@ export async function registerRoutes(
             seedStageDescription: stageInfo.description,
             seedIcon: SEED_ICONS[seedStage] || "\u{1F330}",
             revealedStatements,
+            momentumBoostActive,
           };
         } else {
           result.untargeted = {

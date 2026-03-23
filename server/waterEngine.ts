@@ -62,6 +62,58 @@ export const CUP_IDENTITY_STATEMENTS: Record<number, string> = {
   100: "I FOLLOW THROUGH",
 };
 
+// ─── Momentum Boost constants (first targeted goal only) ────────────────────
+// 40% reduction: 10 → 6 entries to fill first cup
+export const BOOST_FIRST_CUP_THRESHOLD = 6;
+// 30% reduction: 10 → 7 entries to trigger Germination stage
+export const BOOST_GERMINATION_THRESHOLD = 7;
+
+/**
+ * computeGrowthStateWithBoost — same as computeGrowthStateFromEntries but
+ * applies the First Goal Momentum Boost for the user's first targeted goal.
+ *
+ * Boost thresholds:
+ *   - First cup fills at 6 entries (instead of 10)  — 40% reduction
+ *   - Germination stage triggers at 7 entries         — 30% reduction
+ * After the first cup fills (entry ≥ 6), normal economy resumes for all
+ * subsequent cups and stages.  Identity goals are never boosted.
+ */
+export function computeGrowthStateWithBoost(entryCount: number): {
+  waterEvents: number;
+  cupsFilled: number;
+  seedStage: number;
+  fillPercent: number;
+} {
+  if (entryCount < BOOST_FIRST_CUP_THRESHOLD) {
+    // Boost active: fill bar accelerated toward first cup
+    return {
+      waterEvents: entryCount,
+      cupsFilled: 0,
+      seedStage: 0,
+      fillPercent: Math.min(100, Math.round((entryCount / BOOST_FIRST_CUP_THRESHOLD) * 100)),
+    };
+  }
+
+  // First cup filled — normal economy resumes for subsequent cups.
+  const extraEntries = entryCount - BOOST_FIRST_CUP_THRESHOLD;
+  const cupsFromExtra = Math.floor(extraEntries / WATER_PER_CUP);
+  const cupsFilled = 1 + cupsFromExtra;
+  const withinCup = extraEntries % WATER_PER_CUP;
+  const fillPercent = Math.min(100, Math.round(withinCup * (100 / WATER_PER_CUP)));
+
+  // Germination triggers at BOOST_GERMINATION_THRESHOLD; higher stages use
+  // normal STAGE_CUP_REQUIREMENTS against the actual cupsFilled count.
+  let seedStage = entryCount >= BOOST_GERMINATION_THRESHOLD ? 1 : 0;
+  for (const [stage, cupsNeeded] of Object.entries(STAGE_CUP_REQUIREMENTS)) {
+    const stageNum = Number(stage);
+    if (stageNum > 1 && cupsFilled >= cupsNeeded) {
+      seedStage = Math.max(seedStage, stageNum);
+    }
+  }
+
+  return { waterEvents: entryCount, cupsFilled, seedStage, fillPercent };
+}
+
 /**
  * computeGrowthStateFromEntries — derives growth state from happy entry count.
  *

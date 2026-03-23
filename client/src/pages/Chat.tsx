@@ -102,6 +102,7 @@ type ProgressFeedback = {
   targetUnits: number;
   percentComplete: number;
   feedbackText: string;
+  momentumBoostActive?: boolean;
 };
 
 function RewardCard({
@@ -135,11 +136,24 @@ function RewardCard({
           initial={{ opacity: 0, y: -2 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.2 }}
-          className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shadow-sm max-w-xs"
+          className="flex flex-col gap-1"
           data-testid="card-progress-feedback"
         >
-          <Sprout className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-          <p className="text-xs text-emerald-900 leading-snug">{progressFeedback.feedbackText}</p>
+          <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shadow-sm max-w-xs">
+            <Sprout className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-emerald-900 leading-snug">{progressFeedback.feedbackText}</p>
+          </div>
+          {progressFeedback.momentumBoostActive && (
+            <div
+              className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5 shadow-sm max-w-xs"
+              data-testid="badge-momentum-boost"
+            >
+              <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+              <span className="text-[11px] font-medium text-amber-800">
+                Momentum boost active — early progress grows faster.
+              </span>
+            </div>
+          )}
         </motion.div>
       )}
     </motion.div>

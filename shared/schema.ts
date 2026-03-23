@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, real, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -47,6 +47,7 @@ export const users = pgTable("users", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   planInterval: text("plan_interval"),
   lastPaymentStatus: text("last_payment_status"),
+  firstGoalMomentumUsed: boolean("first_goal_momentum_used").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
