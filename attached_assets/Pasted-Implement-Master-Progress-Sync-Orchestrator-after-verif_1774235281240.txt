@@ -1,0 +1,96 @@
+Implement Master Progress Sync Orchestrator after verified actions.
+
+Goal:
+Guarantee that ALL user progress surfaces update from a single coordinated refresh cycle after any verifiedAction.
+
+This is state-consistency hardening only.
+Do NOT change reward math, streak math, or goal logic.
+
+---------------------------------------------------
+
+1. Create a centralized client function:
+
+syncUserProgressState()
+
+This function must:
+
+• invalidateQueries(["user"])
+• invalidateQueries(["activeGoals"])
+• invalidateQueries(["growthDashboard"])
+• invalidateQueries(["entries"])
+• invalidateQueries(["consistency"])
+• invalidateQueries(["reminders"])
+
+Then:
+
+• await Promise.all(refetches)
+• set globalSyncState = "complete"
+
+---------------------------------------------------
+
+2. Add a global transient UI state:
+
+progressSyncing = true
+
+Behavior:
+
+• set to true immediately after verifiedAction success
+• show subtle loading treatment on:
+    - Active Goal card
+    - Water Level card
+    - Seed Stage card
+    - Streak card
+• DO NOT block chat interaction
+• auto-clear when syncUserProgressState resolves
+
+---------------------------------------------------
+
+3. Ensure ONLY this orchestrator triggers refresh.
+
+Remove or disable:
+
+• individual refetchQueries scattered in components
+• local percent recomputation logic
+• manual streak refresh calls
+
+All progress refresh must flow through:
+
+verifiedAction → syncUserProgressState()
+
+---------------------------------------------------
+
+4. Add debug logging:
+
+[SYNC] verifiedAction success
+[SYNC] invalidating progress queries
+[SYNC] refetch started
+[SYNC] refetch resolved
+[SYNC] progress state synchronized
+
+---------------------------------------------------
+
+5. Protect against race conditions:
+
+If another verifiedAction fires while syncing:
+
+• queue next sync
+• do not run concurrent sync cycles
+
+---------------------------------------------------
+
+6. Do NOT change:
+
+• reward processing
+• water event creation
+• streak calculation
+• reminder timers
+• goal completion triggers
+
+This task is ONLY orchestration + UI consistency hardening.
+
+---------------------------------------------------
+
+After implementation:
+Restart server
+Log one verifiedAction
+Confirm all cards update simultaneously.

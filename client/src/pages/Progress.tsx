@@ -17,6 +17,7 @@ type FormMode = null | "targeted" | "untargeted";
 
 export default function ProgressPage() {
   const userId = useStore((s) => s.userId);
+  const progressSyncing = useStore((s) => s.progressSyncing);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [formMode, setFormMode] = useState<FormMode>(null);
@@ -171,6 +172,7 @@ export default function ProgressPage() {
             type="targeted"
             data={targeted}
             inactiveAmber={targetedInactiveAmber}
+            syncing={progressSyncing}
             onAdd={() => {
               const maxGoals = user?.featureLimits?.maxGoals ?? 1;
               const activeCount = [targeted, untargeted].filter(Boolean).length;
@@ -428,6 +430,7 @@ function GoalCard({
   type,
   data,
   inactiveAmber = false,
+  syncing = false,
   onAdd,
   onLog,
   onArchive,
@@ -437,6 +440,7 @@ function GoalCard({
   type: "targeted" | "untargeted";
   data: any;
   inactiveAmber?: boolean;
+  syncing?: boolean;
   onAdd: () => void;
   onLog: (id: string) => void;
   onArchive: (id: string) => void;
@@ -469,13 +473,18 @@ function GoalCard({
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`backdrop-blur-sm rounded-2xl p-4 shadow-sm ${
+      className={`relative overflow-hidden backdrop-blur-sm rounded-2xl p-4 shadow-sm ${
         inactiveAmber
           ? "bg-amber-50/80 border border-amber-300"
           : "bg-white/80 border border-border/50"
       }`}
       data-testid={`card-tree-${type}`}
     >
+      {syncing && (
+        <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-10">
+          <div className="animate-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</p>
         {inactiveAmber && (

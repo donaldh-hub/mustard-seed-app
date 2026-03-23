@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useUpload, type UploadPhase } from "@/hooks/use-upload";
 import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
+import { syncUserProgressState } from "@/lib/syncProgressState";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 function MiniWaterCup({ fillPercent, animating }: { fillPercent: number; animating: boolean }) {
@@ -261,6 +262,7 @@ function ReflectionCard({
 
 export default function Chat() {
   const userId = useStore((s) => s.userId);
+  const setProgressSyncing = useStore((s) => s.setProgressSyncing);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
@@ -367,15 +369,22 @@ export default function Chat() {
   const sendMutation = useMutation({
     mutationFn: (text: string) => api.sendMessage(userId!, text),
     onSuccess: (data, sentText) => {
-      qc.invalidateQueries({ queryKey: ["messages", userId] });
-      qc.refetchQueries({ queryKey: ["user", userId] });
-      qc.invalidateQueries({ queryKey: ["entries", userId] });
-      qc.refetchQueries({ queryKey: ["garden", userId] });
-      qc.refetchQueries({ queryKey: ["consistency", userId] });
-      qc.invalidateQueries({ queryKey: ["weekly-review-status", userId] });
-
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;
+
+      const isVerifiedAction = category === "VA" || category === "AR";
+
+      if (isVerifiedAction) {
+        console.log("[SYNC] verifiedAction success");
+        setProgressSyncing(true);
+        syncUserProgressState(qc, userId!, () => {
+          setProgressSyncing(false);
+        });
+      } else {
+        qc.invalidateQueries({ queryKey: ["messages", userId] });
+        qc.invalidateQueries({ queryKey: ["entries", userId] });
+        qc.invalidateQueries({ queryKey: ["weekly-review-status", userId] });
+      }
 
       if (data?.water?.awarded) {
         const w = data.water;

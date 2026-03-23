@@ -65,6 +65,7 @@ function focusMessage(weakest: string): string {
 
 export default function Home() {
   const userId = useStore((s) => s.userId);
+  const progressSyncing = useStore((s) => s.progressSyncing);
   const [, setLocation] = useLocation();
   const [heartbeatsOpen, setHeartbeatsOpen] = useState(false);
   const prevStreakRef = useRef<number>(0);
@@ -79,7 +80,7 @@ export default function Home() {
     if (!userId) setLocation("/");
   }, [userId]);
 
-  const { data: user, isFetching: userFetching } = useQuery({
+  const { data: user } = useQuery({
     queryKey: ["user", userId],
     queryFn: () => api.getUser(userId!),
     enabled: !!userId,
@@ -450,9 +451,14 @@ export default function Home() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25 }}
-            className="bg-white rounded-2xl border border-border/50 px-3.5 py-3 shadow-sm"
+            className="relative overflow-hidden bg-white rounded-2xl border border-border/50 px-3.5 py-3 shadow-sm"
             data-testid="card-water-level"
           >
+            {progressSyncing && (
+              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-10">
+                <div className="animate-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              </div>
+            )}
             <div className="flex items-center gap-1.5 mb-1">
               <Droplets className="w-3.5 h-3.5 text-blue-500" />
               <h2 className="text-xs font-semibold text-foreground">Water Level</h2>
@@ -482,9 +488,14 @@ export default function Home() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
+            className="relative overflow-hidden bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
             data-testid="card-seed-stage"
           >
+            {progressSyncing && (
+              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-10">
+                <div className="animate-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-1">
               <Sprout className="w-4 h-4 text-green-600" />
               <h2 className="text-sm font-semibold text-foreground">Seed Stage</h2>
@@ -518,7 +529,7 @@ export default function Home() {
             }`}
             data-testid="card-streak"
           >
-            {userFetching && (
+            {progressSyncing && (
               <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-10">
                 <div className="animate-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
               </div>
