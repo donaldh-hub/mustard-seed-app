@@ -1,0 +1,127 @@
+RUN LIVE CEREMONY UX VALIDATION — FINAL EXECUTION
+
+We are now validating the real user experience of the Goal Completion Ceremony.
+
+This is NOT a build.
+This is NOT a redesign.
+This is NOT a logic change.
+
+This is a LIVE behavioral validation.
+
+--------------------------------
+PHASE 1 — CONFIRM STAGED GOAL
+--------------------------------
+
+1. Hard refresh the app.
+2. Go to HOME.
+3. Confirm:
+
+- A targeted goal is ACTIVE
+- Progress is within ONE verified action of completion
+- Water level is visible
+- Seed stage is visible
+- Growth Dashboard still shows the goal
+
+Do NOT proceed if goal is already completed.
+
+--------------------------------
+PHASE 2 — TRIGGER CEREMONY
+--------------------------------
+
+Go to CHAT.
+
+Send ONE natural completion message:
+
+"I pushed through a fully focused productivity session today — all tasks finished, zero distractions."
+
+Wait.
+
+Do NOT click anything.
+
+--------------------------------
+PHASE 3 — VISUAL EXPERIENCE CHECK
+--------------------------------
+
+Observe immediately:
+
+1. Screen dims smoothly
+2. Ceremony animation appears CENTERED
+3. Headline readable within 1 second
+4. Reward explanation clear
+5. Animation duration feels meaningful
+6. User attention is captured
+
+Record:
+
+- Did ceremony feel like an achievement moment?
+- Was it visually dominant over chat?
+- Was anything confusing?
+
+Take screenshot DURING ceremony.
+
+--------------------------------
+PHASE 4 — DISMISS VALIDATION
+--------------------------------
+
+Press Continue.
+
+Confirm:
+
+- You return to SAME chat position
+- Goal is removed from Home
+- Progress resets correctly
+- Water level updated
+- Seed stage updated if applicable
+- No reload
+- No scroll jump
+- Chat input still active
+
+Take screenshot AFTER ceremony dismissal.
+
+--------------------------------
+PHASE 5 — GLOBAL STATE CHECK
+--------------------------------
+
+Navigate:
+
+HOME → GROWTH → PROFILE → CHAT
+
+Confirm:
+
+- Goal completion reflected everywhere
+- No stale progress ring
+- Cup / seed visuals consistent
+- No duplicate ceremony triggers
+
+--------------------------------
+PHASE 6 — CONSOLE SEQUENCE CHECK
+--------------------------------
+
+In browser Console confirm log order:
+
+[CEREMONY] payload_received
+[CEREMONY] mode_selected
+[CEREMONY] animation_start
+[CEREMONY] animation_complete
+[CEREMONY] dismissed
+
+No duplicate triggers.
+No warnings.
+
+Take screenshot of console logs.
+
+--------------------------------
+FINAL REPORT REQUIRED
+--------------------------------
+
+Agent must return:
+
+CEREMONY UX RESULT:
+PASS or NEEDS IMPROVEMENT
+
+Also provide:
+
+- Emotional clarity rating: LOW / MEDIUM / HIGH
+- Animation quality rating: BASIC / GOOD / PREMIUM
+- Navigation stability: STABLE / UNSTABLE
+- Reward clarity: CLEAR / CONFUSING
