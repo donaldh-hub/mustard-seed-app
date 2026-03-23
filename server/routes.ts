@@ -23,6 +23,68 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/**
+ * detectGoalType — lightweight keyword matching on the goal title.
+ * Returns a broad intent tag used by goalAwareActionCheck.
+ */
+function detectGoalType(goalTitle: string): string {
+  const t = goalTitle.toLowerCase();
+  if (/\b(?:journal(?:ing|ed|s)?|diary|writ(?:e|ing|ten)|reflect(?:ion|ing)?|log entries|entry|entries|note(?:s)?)\b/.test(t)) return "journaling";
+  if (/\b(?:workout|exercise|run(?:ning)?|walk(?:ing)?|gym|lift(?:ing)?|train(?:ing)?|cardio|yoga|swim(?:ming)?|bike(?:ing)?|hike|fitness)\b/.test(t)) return "fitness";
+  if (/\b(?:read(?:ing)?|book|chapter|novel|article|stud(?:y|ying))\b/.test(t)) return "reading";
+  if (/\b(?:meditat(?:e|ing|ion)|mindful|breath(?:ing)?)\b/.test(t)) return "mindfulness";
+  if (/\b(?:code|program(?:ming)?|develop(?:ment)?|project|task|deliver|ship)\b/.test(t)) return "productivity";
+  if (/\b(?:practice|lesson|course|class|skill|learn(?:ing)?)\b/.test(t)) return "learning";
+  return "general";
+}
+
+/**
+ * goalAwareActionCheck — secondary classification for goal-aligned RW messages.
+ *
+ * Returns true ONLY when the message:
+ *  1. Is NOT a pure future intention statement
+ *  2. Contains evidence of completed past effort
+ *  3. Contains goal-type-aligned keywords
+ *
+ * Used to override TITAN's "Reflection Without Action" label when the user is
+ * describing genuine past effort that semantically matches their active goal.
+ */
+function goalAwareActionCheck(goalType: string, message: string): boolean {
+  const m = message.toLowerCase().trim();
+
+  // Guard 1 — pure future intent: never qualifies as completed action
+  if (/^(?:i(?:'m| am) going to|i(?:'ll| will) |i plan to|i need to|i should |i want to |tomorrow i|later i)\b/.test(m)) return false;
+
+  // Guard 2 — "thinking about" / almost / wanted — NOT completed effort
+  if (/\b(?:thought about|thinking about|considered|contemplated|wondering about|almost|nearly|wanted to|meant to)\b/.test(m)) return false;
+
+  // Evidence of completed effort (past-tense / done markers)
+  const hasEffort = [
+    /\bi (?:journaled|wrote|reflected|logged|recorded|noted|documented|practiced|read|studied|meditated|exercised|ran|walked|worked|finished|completed|did)\b/i,
+    /\b(?:just|already) (?:finished|completed|done|written|logged|journaled|reflected|read|practiced)\b/i,
+    /\b(?:i've) (?:finished|completed|done|written|logged|journaled|reflected|read)\b/i,
+    /\bspent \d+\s*(?:minutes?|hours?|mins?)\b/i,
+    /\b(?:full|whole|entire|complete)\s+(?:page|session|entry|hour|chapter|book|workout|run)\b/i,
+    /\b(?:done|finished|completed|accomplished|all done|wrapped up|got it done)\b/i,
+    /\ball \d+\s+(?:words?|pages?|entries|sets|reps|miles?|chapters?)\b/i,
+  ].some(p => p.test(m));
+
+  if (!hasEffort) return false;
+
+  // Goal-type keyword alignment
+  const typeKw: Partial<Record<string, RegExp>> = {
+    journaling:    /\b(?:journal(?:ed|ing|s)?|diary|wrote|writing|page|entry|entries|reflect(?:ed|ion)?|log(?:ged)?|note(?:d|s)?|writ(?:ten|e|ing)|session)\b/i,
+    fitness:       /\b(?:workout|exercise|run|ran|walk(?:ed)?|gym|lift(?:ed)?|train(?:ed)?|reps|sets|miles?|steps?|yoga|swim(?:med)?)\b/i,
+    reading:       /\b(?:read|reading|book|chapter|pages?|article|novel)\b/i,
+    mindfulness:   /\b(?:meditat(?:ed|ion|ing)|breath(?:ed)?|mindful|calm(?:ed)?|relax(?:ed)?)\b/i,
+    productivity:  /\b(?:complet(?:ed)?|task|deliver(?:ed)?|built|shipped|finished|done|worked on|project)\b/i,
+    learning:      /\b(?:practiced?|lesson|class|course|studied|learned)\b/i,
+  };
+
+  const kw = typeKw[goalType];
+  return kw ? kw.test(m) : false;
+}
+
 function stripSmartQuotes(text: string): string {
   return text
     .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
@@ -974,6 +1036,27 @@ export async function registerRoutes(
         entryQualification = "reflectionEntry";
       }
 
+      // --- GOAL-AWARE CLASSIFICATION OVERRIDE ---
+      // If TITAN returned RW/IO but the message describes completed effort that
+      // semantically matches the active goal type, upgrade to VA so progress
+      // increments and the reward engine processes it correctly.
+      // Reward logic itself is NOT changed — this only affects the input label.
+      let goalAwareOverrideApplied = false;
+      if (entryQualification === "reflectionEntry") {
+        const overrideGoal = targetedGoal || untargetedGoal;
+        if (overrideGoal?.targetMetric && overrideGoal.targetMetric > 0) {
+          const goalType = detectGoalType(overrideGoal.title);
+          const isAligned = goalType !== "general" && goalAwareActionCheck(goalType, rawText);
+          console.log(`[PROGRESS] global_class=${agg.primaryCategory} | goal_type=${goalType} | goal_aligned=${isAligned} | text="${rawText.substring(0, 60)}"`);
+          if (isAligned) {
+            agg.primaryCategory = "VA";
+            entryQualification = "verifiedAction";
+            goalAwareOverrideApplied = true;
+            console.log(`[PROGRESS] goalAwareOverride=true | upgraded_to=VA | goal="${overrideGoal.title}"`);
+          }
+        }
+      }
+
       // --- Commitment Memory Engine ---
       const COMMITMENT_PATTERNS = [
         /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to)\s+(.{5,80})/i,
@@ -1034,6 +1117,8 @@ export async function registerRoutes(
       let growthResult: any = null;
       let postUpdateAP: number | null = null;
       let apDelta = agg.totalActionPoints;
+      // Goal-aware override: ensure baseline 3 AP so the reward engine creates the entry
+      if (goalAwareOverrideApplied && apDelta === 0) apDelta = 3;
       let ipDelta = agg.totalInsightPoints;
       let driftDelta = agg.totalDriftMarkers;
       let rewardResult: RewardResult = {

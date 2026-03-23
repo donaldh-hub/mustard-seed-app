@@ -1,0 +1,190 @@
+REPAIR THE PROGRESS RECOGNITION ENGINE SO VALID JOURNALING ACTIONS COUNT TOWARD JOURNALING GOALS
+
+This is a targeted system repair.
+
+The Goal Completion Ceremony pipeline is now functioning correctly.
+However, the controlled validation revealed that journaling progress messages are being classified as:
+
+"Reflection Without Action"
+
+and therefore NOT incrementing goal progress.
+
+This creates a blocker where journaling goals cannot reliably complete.
+
+The objective of this repair is to align the Progress Recognition Engine with goal intent.
+
+Do NOT redesign the entire system.
+Do NOT change reward logic.
+Do NOT change ceremony logic.
+Do NOT change UI structure.
+
+This is a classification + goal-matching repair.
+
+---------------------------------------------------
+ROOT ISSUE
+---------------------------------------------------
+
+Current behavior:
+
+User Goal:
+"I will complete 5 journal entries this week"
+
+User Progress Messages:
+"I journaled for 20 minutes"
+"I wrote a full page"
+"I reflected on my day in writing"
+
+System Classification:
+Reflection Without Action → memory logged → progress NOT incremented
+
+Correct Behavior:
+
+For JOURNALING goals:
+These MUST count as actionable progress.
+
+---------------------------------------------------
+REPAIR OBJECTIVES
+---------------------------------------------------
+
+1. GOAL-AWARE PROGRESS CLASSIFICATION
+
+Update the progress evaluation logic so that classification is not global only.
+
+It must consider:
+
+- goal type
+- goal keywords
+- user intent
+- semantic similarity between progress message and goal description
+
+If goal intent is journaling / writing / reflection / planning / logging:
+
+Then reflection language CAN qualify as action.
+
+---------------------------------------------------
+2. ADD GOAL-TYPE DETECTION
+
+Implement lightweight goal intent tagging when a goal is created.
+
+Example tags:
+- journaling
+- fitness
+- reading
+- learning
+- productivity
+- habit tracking
+- creative work
+
+Use keyword + semantic matching.
+
+Store this tag with the goal record.
+
+---------------------------------------------------
+3. UPDATE PROGRESS MATCHING RULE
+
+When progress message arrives:
+
+Evaluate:
+
+IF message contains evidence of effort AND
+semantic match to goal tag ≥ threshold
+
+THEN:
+→ count as progress increment
+
+Even if classified as reflection in general taxonomy.
+
+Examples that MUST count for journaling goals:
+
+- "I journaled for 15 minutes"
+- "I wrote a page in my journal"
+- "I reflected in writing about my day"
+- "I completed another writing session"
+- "I logged my thoughts in my journal"
+
+Examples that SHOULD NOT count:
+
+- "I thought about journaling"
+- "I plan to write later"
+- "I should journal more"
+
+---------------------------------------------------
+4. PREVENT OVER-COUNTING
+
+Maintain safeguards:
+
+- One increment per meaningful entry
+- Cooldown window (if system has one)
+- Prevent spam entries
+- Prevent identical message duplication
+
+---------------------------------------------------
+5. UPDATE TITAN CLASSIFIER INTEGRATION
+
+If TITAN returns:
+
+Reflection Without Action
+
+Run secondary evaluation:
+
+goalAwareActionCheck(goalTag, message)
+
+If TRUE → override classification for progress purposes
+But still store original taxonomy label if needed.
+
+---------------------------------------------------
+6. ADD DEBUG LOGGING
+
+During controlled tests log:
+
+[PROGRESS] message received
+[PROGRESS] global classification = Reflection Without Action
+[PROGRESS] goal tag = journaling
+[PROGRESS] semantic match score = X
+[PROGRESS] goalAwareOverride = TRUE
+[PROGRESS] progress incremented
+
+This will make validation easy.
+
+---------------------------------------------------
+7. DO NOT BREAK OTHER GOAL TYPES
+
+Ensure:
+
+- Fitness goals still require physical action language
+- Reading goals require completion evidence
+- Task goals require completion verbs
+
+This repair must be context-aware, not permissive globally.
+
+---------------------------------------------------
+8. VALIDATION REQUIREMENTS
+
+After repair:
+
+Run controlled journaling goal test:
+
+Goal: 5 journal entries
+
+Send 5 varied journaling messages.
+
+Expected result:
+
+- Each message increments progress
+- Completion ceremony triggers on 5th
+- Rewards apply correctly
+- No duplicate increments
+- Memory logs preserved
+
+---------------------------------------------------
+DELIVERABLE
+
+Implement the repair in code.
+
+Then report:
+
+1. Files changed
+2. New goal tagging logic
+3. New progress matching logic
+4. Safeguards added
+5. Copy-paste controlled validation test prompt
