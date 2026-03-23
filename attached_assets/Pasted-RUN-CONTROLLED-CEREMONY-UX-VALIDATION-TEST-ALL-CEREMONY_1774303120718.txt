@@ -1,0 +1,195 @@
+RUN CONTROLLED CEREMONY UX VALIDATION TEST (ALL CEREMONY MODES)
+
+This test validates the NEW ceremony overlay experience.
+
+We are NOT testing logic anymore.
+We are testing VISUAL + EMOTIONAL IMPACT + UI STABILITY.
+
+Do NOT change system code during this run.
+Do NOT redesign UI during this run.
+This is STRICT execution + observation.
+
+We must trigger and verify THREE ceremony modes:
+
+1. BASIC completion
+2. CUP FILLED completion
+3. STAGE ADVANCED completion
+
+---------------------------------------
+PRE-TEST SETUP (MANDATORY)
+---------------------------------------
+
+1. Open ONLY one browser tab.
+2. Open Console panel.
+3. Refresh the app ONCE.
+4. Note current:
+
+   - Water level
+   - Seed stage
+   - Cup count if visible
+
+5. Confirm NO active targeted goal.
+
+---------------------------------------
+TEST 1 — BASIC CEREMONY (NO CUP FILL)
+---------------------------------------
+
+Goal:
+Create a SMALL goal that will NOT fill a cup.
+
+Example:
+
+Title:
+"I will complete 1 focused reflection session"
+
+Target:
+1
+
+Then send:
+
+"I COMPLETED a short focused reflection session and logged my insight."
+
+EXPECTED:
+
+- Full-screen dim overlay appears
+- Plant visual centered
+- Headline shows: GOAL COMPLETE (or equivalent)
+- Reward line shows ONLY water added
+- NO cup fill animation
+- NO stage transformation
+- Continue button fades in
+- Overlay dismiss returns to same screen
+- Goal disappears from Home
+
+CAPTURE:
+
+Screenshot DURING overlay.
+
+---------------------------------------
+TEST 2 — CUP FILLED CEREMONY
+---------------------------------------
+
+Now create a goal designed to CROSS a cup threshold.
+
+Title:
+"I will complete 3 structured work sessions"
+
+Target:
+3
+
+Send three clear action messages:
+
+1.
+"I COMPLETED a full structured work session and finished key tasks."
+
+2.
+"I FINISHED another deep work session with full concentration."
+
+3.
+"I COMPLETED my third structured session and closed my goal."
+
+EXPECTED:
+
+- Full-screen overlay appears
+- Cup fills with glow surge
+- Headline shows: PROGRESS LOCKED IN (or equivalent)
+- Reward lines show:
+
+   +Water
+   Cup Filled
+
+- NO plant stage transformation (if threshold not reached)
+- Smooth animation sequence
+- No navigation jump
+- Overlay dismiss works
+
+CAPTURE:
+
+Screenshot DURING cup fill animation.
+
+---------------------------------------
+TEST 3 — STAGE ADVANCED CEREMONY
+---------------------------------------
+
+Create a goal large enough to ADVANCE growth stage.
+
+Title:
+"I will complete 5 high-focus productivity sessions"
+
+Target:
+5
+
+Send five clear completion messages.
+
+Final message:
+
+"I COMPLETED my fifth high-focus session and achieved my goal."
+
+EXPECTED:
+
+- Full-screen dim
+- Cup surge FIRST
+- Plant growth transformation SECOND
+- Headline shows: YOU KEPT THE PROMISE (or equivalent)
+- Reward lines show:
+
+   +Water
+   Cup Filled (if true)
+   Stage Advanced
+
+- Strongest visual impact of all modes
+- Overlay stable
+- Continue button works
+- User returns to updated state
+
+CAPTURE:
+
+Screenshot DURING growth transformation.
+
+---------------------------------------
+CONSOLE VALIDATION (ALL TESTS)
+---------------------------------------
+
+For each completion verify logs:
+
+[CEREMONY] payload received
+[CEREMONY] mode selected = BASIC / CUP / STAGE
+[CEREMONY] animation start
+[CEREMONY] dismiss
+
+No duplicate ceremony logs.
+No completion retry loops.
+
+---------------------------------------
+FAILURE CONDITIONS TO WATCH
+---------------------------------------
+
+Report if ANY occur:
+
+- Overlay does not cover full screen
+- Animation feels abrupt or missing
+- Reward lines incorrect
+- Cup fills visually but water number unchanged
+- Stage visually changes but backend does not
+- Overlay dismiss breaks scroll position
+- Double overlay appears
+- Route changes unexpectedly
+- Ceremony text appears without visual layer
+
+---------------------------------------
+FINAL REPORT REQUIRED
+---------------------------------------
+
+After running ALL THREE tests provide:
+
+1. Screenshot of BASIC ceremony
+2. Screenshot of CUP ceremony
+3. Screenshot of STAGE ceremony
+4. Screenshot of console logs
+5. One-sentence verdict:
+
+   "Ceremony UX PASS"
+   or
+   "Ceremony UX FAIL + observed issue"
+
+This confirms production readiness of the ceremony system.
