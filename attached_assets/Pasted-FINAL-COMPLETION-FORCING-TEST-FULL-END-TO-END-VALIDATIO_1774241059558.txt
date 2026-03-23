@@ -1,0 +1,175 @@
+FINAL COMPLETION FORCING TEST — FULL END-TO-END VALIDATION
+
+This is a STRICT execution test to force a guaranteed goal completion and confirm the ENTIRE pipeline works:
+
+progress recognition
+→ completion trigger
+→ reward allocation
+→ water update
+→ growth update
+→ ceremony UI
+→ global state synchronization
+
+Do NOT change any system logic during this run.
+Do NOT redesign anything.
+This is ONLY an execution + observation test.
+
+-------------------------------------
+PRE-TEST SETUP (MANDATORY)
+-------------------------------------
+
+1. Ensure only ONE browser tab is open.
+2. Open Console panel and keep it visible.
+3. Confirm current metrics and WRITE THEM DOWN:
+
+   - Current water level
+   - Current seed stage
+   - Active goal status (should be none OR cancel existing goal)
+   - Credits total if visible
+
+4. Refresh the app ONCE before starting.
+5. Wait until all data loads.
+
+-------------------------------------
+STEP 1 — CREATE A FORCING GOAL
+-------------------------------------
+
+Create a NEW targeted goal with unmistakable action language.
+
+Title:
+"I will COMPLETE 5 FULL JOURNAL WRITING SESSIONS"
+
+Target:
+5
+
+Save.
+
+Verify:
+- Goal appears active
+- Progress shows 0 / 5
+
+-------------------------------------
+STEP 2 — SUBMIT CLEAR ACTION MESSAGES (ONE AT A TIME)
+-------------------------------------
+
+Send EXACTLY these messages.
+Do not paraphrase.
+
+Message 1:
+"I COMPLETED a full 20 minute journaling session and wrote one full page."
+
+Message 2:
+"I FINISHED another full writing session in my journal and documented my goals."
+
+Message 3:
+"I COMPLETED a third journaling session and filled multiple paragraphs."
+
+Message 4:
+"I FINISHED my fourth writing session and reviewed what I wrote."
+
+After EACH message verify:
+
+- Progress increments correctly
+- Console shows progress increment logs
+- No ceremony yet
+- No reward spike yet
+
+-------------------------------------
+STEP 3 — FINAL COMPLETION MESSAGE
+-------------------------------------
+
+Send:
+
+"I COMPLETED my FIFTH full journaling session and achieved my goal."
+
+This MUST force:
+
+- Goal completion trigger
+- Ceremony pipeline execution
+
+-------------------------------------
+STEP 4 — CEREMONY OBSERVATION
+-------------------------------------
+
+Immediately observe:
+
+- Celebration overlay / card appears
+- Jae completion language appears
+- Animation runs visibly
+- UI remains stable (no navigation glitch)
+
+-------------------------------------
+STEP 5 — REWARD + GROWTH VALIDATION
+-------------------------------------
+
+After ceremony ends verify:
+
+1. Water level increased from baseline
+2. Credits increased if applicable
+3. Cup fill visibly changed
+4. Seed stage advanced IF threshold reached
+5. No manual refresh needed
+
+-------------------------------------
+STEP 6 — GLOBAL STATE VALIDATION
+-------------------------------------
+
+Navigate to:
+
+- Home
+- Growth
+- Profile
+- Memory
+
+Confirm:
+
+- No active goal shown
+- Completed goal reflected in history
+- Water level consistent everywhere
+- Growth stage consistent everywhere
+
+-------------------------------------
+STEP 7 — CONSOLE PIPELINE VALIDATION
+-------------------------------------
+
+Console MUST show full ordered chain:
+
+[COMPLETION] pipeline start
+[COMPLETION] reward calculated
+[COMPLETION] water write success
+[COMPLETION] growth write success
+[COMPLETION] memory write success
+[COMPLETION] ceremony payload returned
+[COMPLETION] pipeline complete
+
+No errors.
+No retries.
+No duplicate reward logs.
+
+-------------------------------------
+STEP 8 — FAILURE CONDITIONS TO WATCH
+-------------------------------------
+
+Report if ANY occur:
+
+- Ceremony text only (no animation)
+- Water updates only after refresh
+- Seed stage unchanged despite reward
+- Goal still appears active
+- Duplicate rewards
+- Console shows partial pipeline
+- UI jumps screens before ceremony finishes
+
+-------------------------------------
+FINAL REPORT REQUIRED
+-------------------------------------
+
+After test completes provide:
+
+1. Screenshot DURING ceremony
+2. Screenshot showing NEW water level
+3. Screenshot showing NEW seed stage
+4. Screenshot of console completion logs
+5. One sentence summary: PASS or FAIL
+
+This run will confirm production readiness.
