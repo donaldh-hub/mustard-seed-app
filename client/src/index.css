@@ -63,6 +63,15 @@
 }
 
 /* Custom animations for chat and tree */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.2s infinite;
+}
+
 @keyframes grow-up {
   0% { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
   100% { transform: scaleY(1); transform-origin: bottom; opacity: 1; }

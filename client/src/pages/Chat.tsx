@@ -368,10 +368,11 @@ export default function Chat() {
     mutationFn: (text: string) => api.sendMessage(userId!, text),
     onSuccess: (data, sentText) => {
       qc.invalidateQueries({ queryKey: ["messages", userId] });
-      qc.invalidateQueries({ queryKey: ["user", userId] });
+      qc.refetchQueries({ queryKey: ["user", userId] });
       qc.invalidateQueries({ queryKey: ["entries", userId] });
-      qc.invalidateQueries({ queryKey: ["garden", userId] });
-      qc.invalidateQueries({ queryKey: ["consistency", userId] });
+      qc.refetchQueries({ queryKey: ["garden", userId] });
+      qc.refetchQueries({ queryKey: ["consistency", userId] });
+      qc.invalidateQueries({ queryKey: ["weekly-review-status", userId] });
 
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;

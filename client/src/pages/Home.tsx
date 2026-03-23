@@ -79,7 +79,7 @@ export default function Home() {
     if (!userId) setLocation("/");
   }, [userId]);
 
-  const { data: user } = useQuery({
+  const { data: user, isFetching: userFetching } = useQuery({
     queryKey: ["user", userId],
     queryFn: () => api.getUser(userId!),
     enabled: !!userId,
@@ -509,7 +509,7 @@ export default function Home() {
               scale: streakPulsing ? [1, 1.04, 1] : 1,
             }}
             transition={{ delay: 0.35, scale: { duration: 0.45, ease: "easeInOut" } }}
-            className={`rounded-2xl px-3.5 py-3 shadow-sm border ${
+            className={`relative overflow-hidden rounded-2xl px-3.5 py-3 shadow-sm border ${
               streakBroken
                 ? "bg-white border-border/50"
                 : streakAtRisk
@@ -518,6 +518,11 @@ export default function Home() {
             }`}
             data-testid="card-streak"
           >
+            {userFetching && (
+              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none z-10">
+                <div className="animate-shimmer absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              </div>
+            )}
             <div className="flex items-center gap-1.5 mb-1">
               <Flame className={`w-3.5 h-3.5 ${streakAtRisk ? "text-amber-500" : streakBroken ? "text-muted-foreground/40" : "text-orange-500"}`} />
               <h2 className="text-xs font-semibold text-foreground">Consistency Streak</h2>

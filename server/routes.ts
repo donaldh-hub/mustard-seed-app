@@ -1089,6 +1089,8 @@ export async function registerRoutes(
           newStreak = 1;
         }
 
+        console.log(`[STREAK] streakBefore: ${streak}, gapHoursComputed: ${gapHours !== null ? gapHours.toFixed(2) : "null (first VA)"}, streakAfter: ${newStreak}`);
+
         await storage.updateUser(userId, {
           heartbeatCredits: updatedCredits as any,
           lastVerifiedActionAt: new Date(),
@@ -1097,6 +1099,8 @@ export async function registerRoutes(
           streak: newStreak,
           previousStreak: newPreviousStreak,
         } as any);
+
+        console.log(`[STREAK] syncCompleted: true, userId: ${userId}`);
 
         const matchGoal = targetedGoal || untargetedGoal;
 
