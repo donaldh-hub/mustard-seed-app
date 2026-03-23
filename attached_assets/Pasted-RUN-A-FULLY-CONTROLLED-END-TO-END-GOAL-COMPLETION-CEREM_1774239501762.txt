@@ -1,0 +1,179 @@
+RUN A FULLY CONTROLLED END-TO-END GOAL COMPLETION CEREMONY VALIDATION
+
+This is a strict validation run to confirm that the repaired completion pipeline now correctly chains:
+
+goal completion
+→ reward allocation
+→ water update
+→ growth update
+→ memory creation
+→ ceremony UI
+→ global state refresh
+
+Do NOT modify logic during this run.
+Do NOT redesign UI.
+Do NOT introduce new features.
+
+This is ONLY a controlled execution + observation test.
+
+------------------------------------
+TEST PREPARATION
+------------------------------------
+
+1. Ensure the app is in a clean state:
+   - No active goal exists
+   - Water level noted (write down the number)
+   - Current seed stage noted
+   - Console is open and visible
+   - Network stable
+   - Single tab only
+
+2. Confirm debug logging is enabled for completion pipeline.
+
+------------------------------------
+STEP 1 — CREATE CONTROLLED TARGETED GOAL
+------------------------------------
+
+Create a fresh targeted goal:
+
+Title:
+"I will complete 5 journal entries this week"
+
+Target:
+5
+
+Save the goal.
+
+Verify:
+- Goal appears as active on Home
+- Progress shows 0 / 5
+
+------------------------------------
+STEP 2 — LOG PROGRESS ACTIONS (FOUR TIMES)
+------------------------------------
+
+Log four separate progress messages.
+
+Each message must be sent individually.
+
+Use variations like:
+
+1.
+"I spent 20 minutes journaling and wrote a full page."
+
+2.
+"I reflected on my day and completed another journal entry."
+
+3.
+"I journaled about my goals and mindset for 15 minutes."
+
+4.
+"I completed another focused writing session in my journal."
+
+After each entry verify:
+- Progress increases correctly (1/5, 2/5, 3/5, 4/5)
+- No ceremony triggered early
+- No reward spike early
+- Console logs progress update only
+
+------------------------------------
+STEP 3 — FINAL COMPLETION ACTION
+------------------------------------
+
+Submit the 5th action:
+
+"I completed my fifth journal entry and wrote consistently for 30 minutes."
+
+This MUST trigger the completion pipeline.
+
+------------------------------------
+STEP 4 — OBSERVE CEREMONY BEHAVIOR
+------------------------------------
+
+Immediately observe:
+
+- Does a celebration card / overlay appear
+- Does Jae produce completion language
+- Does animation visibly run
+- Does UI freeze or remain responsive
+- Does navigation change automatically
+
+------------------------------------
+STEP 5 — VERIFY REWARD PROPAGATION
+------------------------------------
+
+After ceremony completes, verify:
+
+1. Water level increased
+2. Credits increased (if system uses credits)
+3. Cup fill visually changed
+4. Seed stage changed IF threshold reached
+5. No manual refresh required
+
+------------------------------------
+STEP 6 — VERIFY GLOBAL STATE SYNC
+------------------------------------
+
+Navigate to:
+
+- Home
+- Growth
+- Profile
+- Memory
+
+Confirm:
+
+- No active goal shown
+- Completed goal reflected in history/memory
+- Water level consistent everywhere
+- Growth stage consistent everywhere
+
+------------------------------------
+STEP 7 — VERIFY CONSOLE LOG PIPELINE
+------------------------------------
+
+Console MUST show ordered logs similar to:
+
+[COMPLETION] starting pipeline
+[COMPLETION] reward calculated
+[COMPLETION] water write success
+[COMPLETION] growth write success
+[COMPLETION] memory write success
+[COMPLETION] ceremony payload returned
+[COMPLETION] pipeline complete
+
+No errors.
+No retries.
+No duplicate reward logs.
+
+------------------------------------
+STEP 8 — FAILURE CONDITIONS TO WATCH
+------------------------------------
+
+Report if ANY occur:
+
+- Ceremony text only (no animation)
+- Water updates only after refresh
+- Seed stage stuck
+- Goal still visible as active
+- Duplicate rewards
+- Progress resets incorrectly
+- Console shows partial pipeline
+- UI navigates away before ceremony ends
+
+------------------------------------
+FINAL DELIVERABLE
+------------------------------------
+
+After test completes, provide:
+
+1. Screenshot during ceremony
+2. Screenshot showing updated water level
+3. Screenshot showing updated seed stage
+4. Screenshot of console completion log chain
+5. Short summary of observed behavior
+
+Do not fix issues yet.
+Only report results.
+
+This is a validation run.
