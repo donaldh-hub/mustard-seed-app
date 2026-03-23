@@ -1221,6 +1221,44 @@ export async function registerRoutes(
       const matchGoalForLog = targetedGoal || untargetedGoal;
       console.log(`[TITAN] category=${agg.primaryCategory} | apDelta=${apDelta} | driftDelta=${driftDelta} | heartbeat=${heartbeatKey || "none"} | goalAP=${matchGoalForLog?.actionPoints ?? 0} | waterUnits=${waterAwarded ? Math.floor(((matchGoalForLog?.actionPoints || 0) + apDelta) / 10) : 0} | escalation=${escalation.driftWarning ? "drift_warning" : escalation.cBurnTriggered ? "c_burn" : "none"} | cBurn=${isCBurnActive}`);
 
+      // --- PROGRESS FEEDBACK ---
+      let progressFeedback: {
+        completedUnits: number;
+        targetUnits: number;
+        percentComplete: number;
+        feedbackText: string;
+      } | null = null;
+
+      if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
+        const mg = targetedGoal || untargetedGoal;
+        if (mg && mg.targetMetric && mg.targetMetric > 0) {
+          try {
+            const feedbackEntries = await storage.getEntries(userId);
+            const goalCreated = mg.createdAt
+              ? new Date(mg.createdAt).toISOString().split("T")[0]
+              : "1970-01-01";
+            const completedUnits = feedbackEntries.filter(
+              (e) => e.mood === "happy" && e.date >= goalCreated
+            ).length;
+            const targetUnits = mg.targetMetric;
+            const clampedCompleted = Math.min(completedUnits, targetUnits);
+            const percentComplete = Math.round((clampedCompleted / targetUnits) * 100);
+            let unitLabel = "actions";
+            const titleLower = (mg.title || "").toLowerCase();
+            const numPattern = new RegExp(`\\b${targetUnits}\\s+([a-zA-Z]+)`);
+            const unitMatch = titleLower.match(numPattern);
+            const STOP_WORDS = new Set(["in","of","by","the","a","an","per","within","for","and","or","to"]);
+            if (unitMatch && unitMatch[1] && !STOP_WORDS.has(unitMatch[1])) {
+              unitLabel = unitMatch[1];
+            }
+            const feedbackText = clampedCompleted >= targetUnits
+              ? `Progress recorded. You've completed all ${targetUnits} ${unitLabel} — goal reached!`
+              : `Progress recorded. You have completed ${clampedCompleted} of ${targetUnits} required ${unitLabel}. You are now ${percentComplete}% toward your goal.`;
+            progressFeedback = { completedUnits: clampedCompleted, targetUnits, percentComplete, feedbackText };
+          } catch (_pfErr) { /* non-critical */ }
+        }
+      }
+
       return res.json({
         userMessage: userMsg,
         jaeMessage: jaeMsg,
@@ -1246,6 +1284,7 @@ export async function registerRoutes(
             actionPointsAccumulated: ap,
             actionPointsNeeded: 10,
             rewardTransaction: rewardResult.skipReason ?? "success",
+            progressFeedback,
           };
         })() : null,
       });

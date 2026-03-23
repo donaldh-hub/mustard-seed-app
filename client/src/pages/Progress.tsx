@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,6 +34,8 @@ export default function ProgressPage() {
   const [formTarget, setFormTarget] = useState("");
   const [formHabit, setFormHabit] = useState("");
   const [formFocus, setFormFocus] = useState("");
+  const [goalPulsing, setGoalPulsing] = useState(false);
+  const prevWaterEventsRef = useRef<number | null>(null);
 
   const isAnyModalOpen = !!formMode || !!logGoalId || !!completeGoalId;
   useEffect(() => {
@@ -66,6 +68,17 @@ export default function ProgressPage() {
     queryFn: () => api.getUser(userId!),
     enabled: !!userId,
   });
+
+  const currentWaterEvents = garden?.targeted?.waterEvents ?? garden?.untargeted?.waterEvents ?? null;
+  useEffect(() => {
+    if (currentWaterEvents === null) return;
+    if (prevWaterEventsRef.current !== null && currentWaterEvents > prevWaterEventsRef.current) {
+      setGoalPulsing(true);
+      const t = setTimeout(() => setGoalPulsing(false), 900);
+      return () => clearTimeout(t);
+    }
+    prevWaterEventsRef.current = currentWaterEvents;
+  }, [currentWaterEvents]);
 
   useEffect(() => {
     if (!assessmentLoading && !assessment && userId) {
@@ -186,7 +199,10 @@ export default function ProgressPage() {
           {targeted && (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={goalPulsing
+                ? { opacity: 1, y: 0, scale: [1, 1.025, 1], boxShadow: ["0 1px 4px rgba(0,0,0,0.06)", "0 4px 16px rgba(52,211,153,0.28)", "0 1px 4px rgba(0,0,0,0.06)"] }
+                : { opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
               className="bg-white rounded-2xl border border-border/50 p-4 shadow-sm"
               data-testid="card-targeted-detail"
             >

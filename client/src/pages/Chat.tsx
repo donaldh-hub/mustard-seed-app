@@ -97,16 +97,23 @@ function looksLikeCompletedAction(text: string): boolean {
 }
 
 // Inline Reward Card — shown after a VA/AR message earns AP + optional water
+type ProgressFeedback = {
+  completedUnits: number;
+  targetUnits: number;
+  percentComplete: number;
+  feedbackText: string;
+};
+
 function RewardCard({
-  ap, waterAwarded, onDismiss,
-}: { ap: number; waterAwarded: boolean; onDismiss: () => void }) {
+  ap, waterAwarded, progressFeedback, onDismiss,
+}: { ap: number; waterAwarded: boolean; progressFeedback?: ProgressFeedback | null; onDismiss: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -4, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.25 }}
-      className="ml-12 mt-1 mb-2"
+      className="ml-12 mt-1 mb-2 space-y-1"
       data-testid="card-reward"
     >
       <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2 shadow-sm">
@@ -123,6 +130,18 @@ function RewardCard({
           Got it
         </button>
       </div>
+      {progressFeedback && (
+        <motion.div
+          initial={{ opacity: 0, y: -2 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.2 }}
+          className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 shadow-sm max-w-xs"
+          data-testid="card-progress-feedback"
+        >
+          <Sprout className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-emerald-900 leading-snug">{progressFeedback.feedbackText}</p>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -180,7 +199,7 @@ export default function Chat() {
   const [waterAnimating, setWaterAnimating] = useState(false);
   const [localFillPercent, setLocalFillPercent] = useState<number | null>(null);
   const [inlineCards, setInlineCards] = useState<Record<string,
-    | { type: "reward"; ap: number; waterAwarded: boolean }
+    | { type: "reward"; ap: number; waterAwarded: boolean; progressFeedback?: ProgressFeedback | null }
     | { type: "nudge"; text: string }
     | { type: "dismissed" }
   >>({});
@@ -301,6 +320,7 @@ export default function Chat() {
               type: "reward",
               ap: data.water!.actionPointsAccumulated,
               waterAwarded: data.water!.awarded,
+              progressFeedback: data.water!.progressFeedback ?? null,
             },
           }));
           toast({
@@ -420,6 +440,7 @@ export default function Chat() {
               type: "reward",
               ap: data.water?.actionPointsAccumulated || 3,
               waterAwarded: data.water?.awarded || false,
+              progressFeedback: data.water?.progressFeedback ?? null,
             }
           : { type: "dismissed" },
       }));
@@ -678,6 +699,7 @@ export default function Chat() {
                       key={`reward-${msg.id}`}
                       ap={card.ap}
                       waterAwarded={card.waterAwarded}
+                      progressFeedback={card.progressFeedback}
                       onDismiss={() =>
                         setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
                       }
