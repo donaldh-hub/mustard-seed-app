@@ -1064,6 +1064,36 @@ export async function registerRoutes(
           growthResult = rewardResult.growthResult;
         }
 
+        // --- REWARD VERIFICATION LOGGING ---
+        if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
+          try {
+            const debugEntries = await storage.getEntries(userId);
+            const matchGoalForDebug = targetedGoal || untargetedGoal;
+            const goalCreatedDebug = matchGoalForDebug?.createdAt
+              ? new Date(matchGoalForDebug.createdAt).toISOString().split("T")[0]
+              : "1970-01-01";
+            const entryCount = debugEntries.filter(
+              (e) => e.mood === "happy" && e.date >= goalCreatedDebug
+            ).length;
+            const prevGrowth = computeGrowthStateFromEntries(Math.max(0, entryCount - 1));
+            const newGrowth = computeGrowthStateFromEntries(entryCount);
+            const stageChanged = prevGrowth.seedStage !== newGrowth.seedStage;
+            const stageInfo = SEED_STAGE_INFO[newGrowth.seedStage] || SEED_STAGE_INFO[0];
+            console.log(`[DEBUG] REWARD_VERIFICATION | actionType=${agg.primaryCategory} | apAwarded=${rewardResult.apActuallyAwarded}`);
+            console.log(`  VA/AR entries toward goal: ${entryCount} (was ${entryCount - 1})`);
+            console.log(`  fillPercent: ${prevGrowth.fillPercent}% → ${newGrowth.fillPercent}%`);
+            console.log(`  cupsFilled: ${prevGrowth.cupsFilled} → ${newGrowth.cupsFilled}`);
+            if (stageChanged) {
+              const prevInfo = SEED_STAGE_INFO[prevGrowth.seedStage] || SEED_STAGE_INFO[0];
+              console.log(`  SEED STAGE CHANGE: stage ${prevGrowth.seedStage} (${prevInfo.name}) → stage ${newGrowth.seedStage} (${stageInfo.name})`);
+            } else {
+              console.log(`  seedStage: ${newGrowth.seedStage} (${stageInfo.name}) [unchanged]`);
+            }
+          } catch (debugErr) {
+            console.error("[DEBUG] REWARD_VERIFICATION log failed:", (debugErr as Error).message);
+          }
+        }
+
         // --- PROGRESS MODE: Anime Celebration Engine ---
         // GATED: celebration fires ONLY after a successful reward transaction.
         if (rewardResult.success) {
@@ -1742,6 +1772,68 @@ export async function registerRoutes(
       }
 
       return res.json(result);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/growth-debug", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const activeGoals = await storage.getActiveGoals(userId);
+      const allEntries = await storage.getEntries(userId);
+
+      const STAGE_CUP_REQUIREMENTS: Record<number, number> = {
+        1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 8,
+      };
+
+      const goals: any[] = [];
+      for (const goal of activeGoals) {
+        const goalCreatedAt = goal.createdAt
+          ? new Date(goal.createdAt).toISOString().split("T")[0]
+          : "1970-01-01";
+        const happyEntries = allEntries.filter(
+          (e) => e.mood === "happy" && e.date >= goalCreatedAt
+        );
+        const entryCount = happyEntries.length;
+        const growth = computeGrowthStateFromEntries(entryCount);
+        const stageInfo = SEED_STAGE_INFO[growth.seedStage] || SEED_STAGE_INFO[0];
+
+        const nextStage = growth.seedStage + 1;
+        const nextStageCupsNeeded = STAGE_CUP_REQUIREMENTS[nextStage] ?? null;
+        const cupsUntilNextStage = nextStageCupsNeeded !== null
+          ? Math.max(0, nextStageCupsNeeded - growth.cupsFilled)
+          : null;
+
+        const lastEntry = happyEntries
+          .slice()
+          .sort((a, b) => (b.date > a.date ? 1 : -1))[0];
+        const lastRewardAt = lastEntry?.date ?? null;
+
+        goals.push({
+          goalId: goal.id,
+          goalTitle: goal.title,
+          goalType: goal.goalType,
+          totalHappyEntries: entryCount,
+          waterEvents: growth.waterEvents,
+          cupsFilled: growth.cupsFilled,
+          fillPercent: growth.fillPercent,
+          seedStage: growth.seedStage,
+          seedStageName: stageInfo.name,
+          nextStage: nextStage <= 6 ? nextStage : null,
+          nextStageName: nextStage <= 6 ? (SEED_STAGE_INFO[nextStage]?.name ?? null) : null,
+          cupsUntilNextStage,
+          lastRewardAt,
+        });
+      }
+
+      return res.json({
+        userId,
+        activeGoalCount: activeGoals.length,
+        goals,
+        totalHappyEntriesAllTime: allEntries.filter((e) => e.mood === "happy").length,
+      });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });

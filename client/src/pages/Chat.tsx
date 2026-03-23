@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, Fragment } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine, CheckCircle2, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -170,6 +171,7 @@ function NudgeCard({
 
 export default function Chat() {
   const userId = useStore((s) => s.userId);
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
   const [showAttach, setShowAttach] = useState(false);
@@ -301,6 +303,11 @@ export default function Chat() {
               waterAwarded: data.water!.awarded,
             },
           }));
+          toast({
+            title: "ENTRY REWARD PROCESSED",
+            description: `${category} · +${data.water!.actionPointsAccumulated} AP · Water added`,
+            duration: 3000,
+          });
         } else if ((category === "IO" || category === "RW") && looksLikeCompletedAction(sentText)) {
           // Nudge card: offer to log this as verified progress
           setInlineCards(prev => ({
