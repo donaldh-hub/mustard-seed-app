@@ -1,0 +1,123 @@
+RUN LIVE CEREMONY UX VALIDATION (FINAL HUMAN-DRIVEN TEST)
+
+This test confirms the ceremony EXPERIENCE is working in real user flow.
+
+No engineering changes.
+No prompt tuning.
+No data resets unless instructed.
+
+We are validating:
+
+• Emotional impact  
+• Visual clarity  
+• Flow stability  
+• State accuracy  
+• Reward believability  
+
+This is the LAST UX gate before we consider ceremony production-ready.
+
+------------------------------------
+PHASE 1 — PREP
+------------------------------------
+
+1. Hard refresh the app.
+2. Open Console panel.
+3. Navigate to CHAT screen.
+4. Confirm:
+
+   • One active targeted goal exists  
+   • Goal progress is close to completion  
+   • Water level and seed stage noted  
+
+Do NOT create a new goal unless none exists.
+
+------------------------------------
+PHASE 2 — REAL COMPLETION ACTION
+------------------------------------
+
+Send ONE natural completion message.
+
+Example:
+
+“I powered through a full productive session today — all tasks done, zero distractions.”
+
+IMPORTANT:
+
+• Message must sound human  
+• Must clearly indicate completion  
+• Must NOT be robotic or repetitive  
+
+------------------------------------
+PHASE 3 — CEREMONY EXPERIENCE CHECK
+------------------------------------
+
+Immediately observe:
+
+1. Does the screen dim smoothly?
+2. Does ceremony overlay feel IMPORTANT?
+3. Is plant/cup animation visible and centered?
+4. Is headline readable within 1 second?
+5. Do reward lines feel motivating (not technical)?
+6. Does animation pacing feel:
+
+   • Too fast  
+   • Too slow  
+   • Just right  
+
+7. Does it feel like an achievement moment?
+
+------------------------------------
+PHASE 4 — DISMISS FLOW CHECK
+------------------------------------
+
+After Continue tap:
+
+1. Are you returned to the SAME scroll position?
+2. Is the goal removed from Active Goals?
+3. Is water level updated visually?
+4. Is seed stage updated (if applicable)?
+5. Does chat continue naturally?
+
+------------------------------------
+PHASE 5 — CONSOLE VALIDATION
+------------------------------------
+
+Confirm sequence:
+
+[CEREMONY] payload received  
+[CEREMONY] mode selected  
+[CEREMONY] animation start  
+[CEREMONY] animation complete  
+[CEREMONY] dismissed  
+
+No duplicate triggers.
+No state mismatch warnings.
+
+------------------------------------
+PHASE 6 — HUMAN UX VERDICT
+------------------------------------
+
+Answer ONLY these:
+
+1. Did the ceremony feel rewarding? (YES / NO)
+2. Did anything feel confusing? (1 sentence)
+3. Did the animation feel premium or basic?
+4. Would a new user understand what just happened?
+5. Final verdict:
+
+CEREMONY READY  
+or  
+CEREMONY NEEDS UPGRADE
+
+------------------------------------
+DELIVERABLE
+------------------------------------
+
+Provide:
+
+• Screenshot DURING ceremony  
+• Screenshot AFTER dismissal  
+• Screenshot of console logs  
+• 5-line UX verdict  
+
+This confirms real-world ceremony readiness.
