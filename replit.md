@@ -40,6 +40,13 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Handles subscription management, including checkout, billing portal, and webhook processing for various subscription states.
 - **Replit Object Storage**: Used for storing user-uploaded photos.
 - **Google Fonts**: For loading DM Sans and Lora fonts.
+### Verified Action Streak System
+- **Tracked field**: `users.streak` (current streak count), `users.previousStreak` (stored on reset)
+- **Gap rules**: <24h gap → increment streak; 24-48h gap → preserve streak (at risk); >48h gap → reset to 1, save old value to `previousStreak`
+- **Reflection entries excluded**: Only `VA`/`AR` primary category (after credibility validation) updates the streak; RW/IO/AD do not
+- **Home streak card**: "Consistency Streak" card with three visual states — active (orange flame), at-risk (amber background + "At risk" badge + "Log today to protect your streak."), broken (muted flame + "Log a verified action to keep it alive."), new-begins (green text "New streak begins today." when `streak === 1 && previousStreak > 0`)
+- **Pulse animation**: `streakPulsing` state triggers a Framer Motion scale pulse (1→1.04→1, 0.45s) whenever `currentStreak` increments between renders. `prevStreakRef` is declared before early returns to satisfy React hooks rules.
+
 ### Progress Recognition + Anime Celebration Engine
 - **Trigger**: TITAN classifies message as VA (Verified Action) or AR (Adaptive Recovery)
 - **Response structure**: 1) Random anime celebration line (25-item pool), 2) Action acknowledgment (echoes user's action or references resolved commitment), 3) Emotion validation if detected (nervous, anxious, hard, etc.), 4) Water reward acknowledgment when water is awarded, 5) Random next-step reinforcement question

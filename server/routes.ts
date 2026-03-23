@@ -1076,12 +1076,26 @@ export async function registerRoutes(
         const updatedCredits = { ...userCredits };
         updatedCredits[heartbeatKey] = (updatedCredits[heartbeatKey] || 0) + 1;
 
+        const lastVAMs = user.lastVerifiedActionAt ? new Date(user.lastVerifiedActionAt).getTime() : null;
+        const gapHours = lastVAMs ? (Date.now() - lastVAMs) / 3600000 : null;
+        let newStreak: number;
+        let newPreviousStreak: number = (user as any).previousStreak ?? 0;
+        if (gapHours === null || gapHours < 24) {
+          newStreak = streak + 1;
+        } else if (gapHours < 48) {
+          newStreak = streak;
+        } else {
+          newPreviousStreak = streak;
+          newStreak = 1;
+        }
+
         await storage.updateUser(userId, {
           heartbeatCredits: updatedCredits as any,
           lastVerifiedActionAt: new Date(),
           consecutiveIOCount: 0,
           cBurnActive: 0,
-          streak: streak + 1,
+          streak: newStreak,
+          previousStreak: newPreviousStreak,
         } as any);
 
         const matchGoal = targetedGoal || untargetedGoal;

@@ -27,6 +27,7 @@ export const users = pgTable("users", {
   waterLevel: integer("water_level").notNull().default(30),
   treeStage: integer("tree_stage").notNull().default(1),
   streak: integer("streak").notNull().default(0),
+  previousStreak: integer("previous_streak").notNull().default(0),
   driftMarkers: integer("drift_markers").notNull().default(0),
   consecutiveIOCount: integer("consecutive_io_count").notNull().default(0),
   cBurnActive: integer("c_burn_active").notNull().default(0),

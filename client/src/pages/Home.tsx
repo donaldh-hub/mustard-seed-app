@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame, ClipboardCheck, X } from "lucide-react";
@@ -67,6 +67,8 @@ export default function Home() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
   const [heartbeatsOpen, setHeartbeatsOpen] = useState(false);
+  const prevStreakRef = useRef<number>(0);
+  const [streakPulsing, setStreakPulsing] = useState(false);
   const [inactivityBannerDismissed, setInactivityBannerDismissed] = useState(() => {
     const key = `inactivity_banner_dismissed_${userId}`;
     const stored = sessionStorage.getItem(key);
@@ -120,6 +122,17 @@ export default function Home() {
     }
   }, [assessment, assessmentLoading, userId]);
 
+  const currentStreak = user?.streak ?? 0;
+  useEffect(() => {
+    if (currentStreak > prevStreakRef.current) {
+      setStreakPulsing(true);
+      const t = setTimeout(() => setStreakPulsing(false), 900);
+      prevStreakRef.current = currentStreak;
+      return () => clearTimeout(t);
+    }
+    prevStreakRef.current = currentStreak;
+  }, [currentStreak]);
+
   if (!userId || assessmentLoading) return null;
   if (!assessment) return null;
 
@@ -147,6 +160,12 @@ export default function Home() {
     : 0;
   const hasTargetedGoal = !!garden?.targeted;
   const show24hBanner = hasTargetedGoal && hoursSinceLastVA >= 24 && !inactivityBannerDismissed;
+
+  // Streak state
+  const previousStreak = (user as any)?.previousStreak ?? 0;
+  const streakAtRisk = currentStreak >= 1 && hoursSinceLastVA >= 24 && hoursSinceLastVA < 48;
+  const streakBroken = hoursSinceLastVA >= 48 && currentStreak >= 1;
+  const streakNewBegins = currentStreak === 1 && previousStreak > 0 && hoursSinceLastVA < 24;
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -480,6 +499,50 @@ export default function Home() {
             <p className="text-xs text-muted-foreground/70 mt-2" data-testid="text-lifetime-days">
               {consistency?.lifetimeActiveDays ?? 0} lifetime active {(consistency?.lifetimeActiveDays ?? 0) === 1 ? "day" : "days"}
             </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              scale: streakPulsing ? [1, 1.04, 1] : 1,
+            }}
+            transition={{ delay: 0.35, scale: { duration: 0.45, ease: "easeInOut" } }}
+            className={`rounded-2xl px-3.5 py-3 shadow-sm border ${
+              streakBroken
+                ? "bg-white border-border/50"
+                : streakAtRisk
+                ? "bg-amber-50/80 border-amber-300"
+                : "bg-white border-border/50"
+            }`}
+            data-testid="card-streak"
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <Flame className={`w-3.5 h-3.5 ${streakAtRisk ? "text-amber-500" : streakBroken ? "text-muted-foreground/40" : "text-orange-500"}`} />
+              <h2 className="text-xs font-semibold text-foreground">Consistency Streak</h2>
+              {streakAtRisk && (
+                <span className="ml-auto text-[9px] font-semibold text-amber-600 uppercase tracking-wide" data-testid="badge-streak-at-risk">At risk</span>
+              )}
+            </div>
+            {streakNewBegins ? (
+              <p className="text-sm font-medium text-primary mt-1" data-testid="text-streak-new">New streak begins today.</p>
+            ) : streakBroken ? (
+              <>
+                <p className="text-2xl font-bold text-muted-foreground/40 leading-none" data-testid="text-streak-count">{currentStreak}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Log a verified action to keep it alive.</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-end gap-1.5">
+                  <span className="text-2xl font-bold text-orange-500 leading-none" data-testid="text-streak-count">{currentStreak}</span>
+                  <span className="text-xs text-muted-foreground mb-0.5">{currentStreak === 1 ? "day" : "days"}</span>
+                </div>
+                {streakAtRisk && (
+                  <p className="text-[11px] text-amber-600 mt-1">Log today to protect your streak.</p>
+                )}
+              </>
+            )}
           </motion.div>
         </div>
       </div>
