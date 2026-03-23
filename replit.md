@@ -40,6 +40,15 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Handles subscription management, including checkout, billing portal, and webhook processing for various subscription states.
 - **Replit Object Storage**: Used for storing user-uploaded photos.
 - **Google Fonts**: For loading DM Sans and Lora fonts.
+### Goal Completion Ceremony (Phase 1)
+- **Component**: `GoalCompletionCeremony` in `client/src/components/GoalCompletionCeremony.tsx`
+- **Trigger**: Mounted in `Chat.tsx` via `AnimatePresence` + `ceremonyPayload` state; fires when `sendMutation.onSuccess` receives a `goalCompleted` payload with `category === "VA" || "AR"`
+- **Dedup guard**: `ceremonyGoalIdRef` prevents duplicate overlays if the same completion callback fires twice
+- **Modes**: BASIC (water only), CUP (cupJustFilled=true), STAGE (stageAdvanced=true). Mode determines headline, glow color, plant transition, and reinforcement copy.
+- **Animation sequence**: overlay fade → seed visual scale-in → (stage burst if STAGE) → headline rise → reward lines stagger → reinforcement fade → Continue button fade. Total pre-dismiss time ~2.2s.
+- **Dismiss**: Continue button OR tap-on-overlay after canDismiss=true. Sets `ceremonyPayload` to null; `CompletionCard` inline scroll reference remains for history.
+- **Debug logs**: `[CEREMONY] payload received`, `[CEREMONY] mode selected`, `[CEREMONY] animation start`, `[CEREMONY] dismiss`
+
 ### Verified Action Streak System
 - **Tracked field**: `users.streak` (current streak count), `users.previousStreak` (stored on reset)
 - **Gap rules**: <24h gap → increment streak; 24-48h gap → preserve streak (at risk); >48h gap → reset to 1, save old value to `previousStreak`

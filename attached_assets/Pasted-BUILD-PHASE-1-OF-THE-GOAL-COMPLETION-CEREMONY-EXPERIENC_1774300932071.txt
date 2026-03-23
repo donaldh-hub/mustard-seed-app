@@ -1,0 +1,276 @@
+BUILD PHASE 1 OF THE GOAL COMPLETION CEREMONY EXPERIENCE
+
+This is a product experience upgrade.
+
+Do NOT change the completion logic.
+Do NOT change reward calculation.
+Do NOT change progress recognition.
+Do NOT redesign unrelated screens.
+
+The completion pipeline is already working.
+
+This task is ONLY to upgrade the visual ceremony experience that happens AFTER a successful goal completion.
+
+GOAL
+When a goal is completed, the app should feel like something IMPORTANT happened.
+
+We need a short, polished, emotionally satisfying completion ceremony with:
+
+1. Full-screen celebration layer
+2. Growth animation moment
+3. Reward surge moment
+4. Completion headline
+5. Clean exit back to the app
+
+This should feel meaningful, not childish, not cheesy, not cluttered.
+
+-----------------------------------
+CORE CEREMONY REQUIREMENTS
+-----------------------------------
+
+Trigger the ceremony ONLY after the completion pipeline returns success.
+
+The ceremony should be driven by the real completion payload, not fake UI state.
+
+Expected successful completion payload already includes or should expose enough data such as:
+- goalCompleted
+- rewardsApplied
+- waterAdded
+- previousGrowthStage
+- newGrowthStage
+- cupJustFilled
+- stageAdvanced
+- completedGoalTitle
+
+Use the real returned values.
+
+-----------------------------------
+PHASE 1 CEREMONY FLOW
+-----------------------------------
+
+Create a short full-screen ceremony sequence that runs in this order:
+
+STEP 1 — SCREEN DIM / FOCUS
+- Dim the current screen with a soft overlay
+- Prevent accidental interaction during the ceremony
+- Bring ceremony content to the center
+- Do NOT navigate away automatically
+
+STEP 2 — GROWTH VISUAL MOMENT
+- Show the current plant / seed / growth visual in the center
+- Animate based on the completion result
+
+If stageAdvanced = true:
+- animate transformation from previousGrowthStage to newGrowthStage
+
+If cupJustFilled = true but stage did not advance:
+- animate the cup filling and glow response
+
+If both happened:
+- do cup fill first, then stage transformation
+
+Animations should feel smooth, clean, and encouraging.
+No confetti explosion overload.
+No cartoon chaos.
+
+STEP 3 — COMPLETION HEADLINE
+Display a bold, centered completion headline.
+
+Use one of these styles:
+- "GOAL COMPLETE."
+- "PROGRESS LOCKED IN."
+- "YOU KEPT THE PROMISE."
+
+Choose the best fit based on the completion result, or use one consistent default for now.
+
+STEP 4 — REWARD SURGE
+Under the headline, show the reward result with animated count-up / reveal:
+
+Examples:
+- +10 Water
+- Cup Filled
+- Stage Advanced
+- Streak Strengthened
+
+Only show lines that are true based on real payload values.
+Do not show fake rewards.
+
+STEP 5 — SHORT REINFORCEMENT LINE
+Below rewards, show one short grounded line in Jae’s tone.
+
+Examples:
+- "Consistency just changed your story."
+- "This is what follow-through looks like."
+- "Small promises become real progress."
+
+Keep it short.
+One sentence only.
+
+STEP 6 — EXIT ACTION
+At the end of the ceremony:
+- show a simple button such as "Continue"
+- allow tap anywhere after animation completes, OR button tap to dismiss
+- return user to the same screen state, now updated with the completed goal removed and new state visible
+
+No forced route changes.
+
+-----------------------------------
+DESIGN / STYLE REQUIREMENTS
+-----------------------------------
+
+Tone:
+- grounded
+- encouraging
+- meaningful
+- clean
+- modern
+- slightly premium
+
+Avoid:
+- childish game vibes
+- excessive particles
+- cheesy fireworks
+- loud color spam
+- too many words
+
+Visual direction:
+- use existing app color palette
+- subtle glow around water / seed / plant
+- soft scale / fade / upward motion
+- rounded cards and clean spacing
+- animation duration should feel intentional, not slow
+
+Total ceremony length:
+- about 2.5 to 4 seconds before user can dismiss comfortably
+
+-----------------------------------
+ANIMATION REQUIREMENTS
+-----------------------------------
+
+Implement animation states for:
+1. overlay fade in
+2. central visual scale in
+3. cup fill surge
+4. stage transformation if applicable
+5. headline fade / rise in
+6. reward lines stagger in
+7. continue button fade in
+
+Animation should be resilient:
+- no broken state if payload missing optional fields
+- no crash if stageAdvanced is false
+- no freeze if user taps early
+- no duplicate ceremony if completion callback fires twice
+
+-----------------------------------
+STATE / ENGINEERING REQUIREMENTS
+-----------------------------------
+
+1. Hook ceremony to the successful completion response only
+2. Store ceremony data in stable state long enough to render fully
+3. Do NOT let parent re-render/unmount kill the ceremony
+4. Ensure duplicate completion requests do not spawn duplicate overlays
+5. Make ceremony dismiss cleanly and reset local ceremony state afterward
+6. Keep it isolated so future upgrades can build on it
+
+-----------------------------------
+COMPONENT STRUCTURE
+-----------------------------------
+
+Create or refactor into a reusable component such as:
+
+GoalCompletionCeremony
+or
+CompletionCeremonyOverlay
+
+It should accept a typed payload and handle:
+- visual mode
+- headline
+- rewards
+- animation sequencing
+- dismiss logic
+
+Keep the component modular and easy to expand later.
+
+-----------------------------------
+VISUAL MODES TO SUPPORT NOW
+-----------------------------------
+
+Support these 3 modes at minimum:
+
+MODE A — BASIC COMPLETION
+- goal completed
+- water added
+- no cup fill
+- no stage advance
+
+MODE B — CUP FILLED
+- goal completed
+- water added
+- cupJustFilled = true
+- no stage advance
+
+MODE C — STAGE ADVANCED
+- goal completed
+- water added
+- stageAdvanced = true
+- possibly cupJustFilled too
+
+The UI should visibly distinguish these.
+
+-----------------------------------
+DO NOT BREAK
+-----------------------------------
+
+Do not break:
+- working completion pipeline
+- reward allocation
+- growth update
+- memory creation
+- existing Home / Growth / Profile sync
+- current chat flow
+
+This is a ceremony overlay enhancement only.
+
+-----------------------------------
+DEBUG / VALIDATION SUPPORT
+-----------------------------------
+
+Add concise debug logs such as:
+- [CEREMONY] payload received
+- [CEREMONY] mode selected = BASIC / CUP / STAGE
+- [CEREMONY] animation start
+- [CEREMONY] dismiss
+
+These logs should help validate behavior during testing.
+
+-----------------------------------
+ACCEPTANCE CRITERIA
+-----------------------------------
+
+This build is complete only if:
+
+1. Completing a goal triggers a visible full-screen ceremony
+2. Ceremony uses real completion payload data
+3. Water reward appears correctly
+4. Cup fill appears when applicable
+5. Stage transformation appears when applicable
+6. User can clearly feel a completion moment happened
+7. No manual refresh is needed
+8. No route jump interrupts ceremony
+9. Ceremony dismisses cleanly
+10. No duplicate overlay appears
+
+-----------------------------------
+DELIVERABLE FORMAT
+-----------------------------------
+
+Do the implementation in code.
+
+Then report back with:
+1. Files changed
+2. New component(s) added
+3. Where the ceremony is mounted
+4. How mode selection works
+5. Any assumptions made
+6. A copy-paste prompt for a controlled ceremony UX validation test

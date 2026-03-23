@@ -12,6 +12,7 @@ import { useUpload, type UploadPhase } from "@/hooks/use-upload";
 import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
 import { syncUserProgressState } from "@/lib/syncProgressState";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import { GoalCompletionCeremony, type GoalCompletionCeremonyPayload } from "@/components/GoalCompletionCeremony";
 
 function MiniWaterCup({ fillPercent, animating }: { fillPercent: number; animating: boolean }) {
   const clamped = Math.max(0, Math.min(fillPercent, 100));
@@ -401,6 +402,8 @@ export default function Chat() {
     | ({ type: "completion" } & GoalCompletionData)
     | { type: "dismissed" }
   >>({});
+  const [ceremonyPayload, setCeremonyPayload] = useState<GoalCompletionCeremonyPayload | null>(null);
+  const ceremonyGoalIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -533,7 +536,7 @@ export default function Chat() {
       if (jaeId) {
         const qualification = data?.entryQualification as ReflectionQualification | "verifiedAction" | null | undefined;
         if ((category === "VA" || category === "AR") && data?.goalCompleted) {
-          // Goal completion ceremony — takes priority over reward card
+          // Goal completion — trigger full-screen ceremony + keep inline card for history
           const gc = data.goalCompleted as GoalCompletionData;
           setInlineCards(prev => ({
             ...prev,
@@ -550,6 +553,26 @@ export default function Chat() {
               completionGrowth: gc.completionGrowth ?? null,
             },
           }));
+          // Trigger full-screen ceremony overlay (dedup-guarded by goalId)
+          if (ceremonyGoalIdRef.current !== gc.goalId) {
+            ceremonyGoalIdRef.current = gc.goalId;
+            const cg = gc.completionGrowth;
+            setCeremonyPayload({
+              goalId: gc.goalId,
+              goalTitle: gc.goalTitle,
+              completedUnits: gc.completedUnits,
+              targetUnits: gc.targetUnits,
+              daysUsed: gc.daysUsed,
+              streakAtCompletion: gc.streakAtCompletion,
+              completionGrowth: cg ? {
+                prevSeedStage: cg.prevSeedStage,
+                newSeedStage: cg.newSeedStage,
+                waterAdded: cg.waterAdded,
+                cupJustFilled: cg.cupJustFilled,
+                stageAdvanced: cg.stageAdvanced,
+              } : null,
+            });
+          }
         } else if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
           // Reward card: confirms AP + water earned
           setInlineCards(prev => ({
@@ -1209,6 +1232,18 @@ export default function Chat() {
           data-testid="input-file-camera"
         />
       </div>
+
+      {/* Full-screen goal completion ceremony overlay */}
+      <AnimatePresence>
+        {ceremonyPayload && (
+          <GoalCompletionCeremony
+            payload={ceremonyPayload}
+            onDismiss={() => {
+              setCeremonyPayload(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
