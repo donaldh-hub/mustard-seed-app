@@ -24,6 +24,7 @@ Preferred communication style: Simple, everyday language.
 - **Growth Aggregation Engine**: `computeGrowthStateFromEntries(entryCount)` in `waterEngine.ts` is the shared display aggregation function. Each happy entry (VA/AR action) = 1 water unit. 10 water units = 1 cup. Cups drive seed stage via `STAGE_CUP_REQUIREMENTS`. Garden-summary uses this function instead of reading `goals.waterEvents` directly (which required 10 AP ≈ 4 VAs per unit — too slow for visible progress). `percentComplete` for goals without explicit metrics = `Math.min(100, waterEvents/50*100)` — monotonically increasing toward max growth.
 - **Photo Attachment + Vision Analysis**: `visionAnalysis.ts` integrates OpenAI gpt-4o vision API to analyze uploaded photos, verifying goal-aligned actions and awarding water based on confidence. Photos are stored and linked to calendar entries.
 - **Subscription System**: Manages user tiers (Lite, Premium) and their respective feature access, handling trials and various subscription states.
+- **Stability Lock (Market Readiness)**: Surgical fixes applied — see "Stability Lock" section below.
 
 ### Database
 - **Type**: PostgreSQL, accessed via `DATABASE_URL`.
@@ -40,6 +41,17 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Handles subscription management, including checkout, billing portal, and webhook processing for various subscription states.
 - **Replit Object Storage**: Used for storing user-uploaded photos.
 - **Google Fonts**: For loading DM Sans and Lora fonts.
+### Stability Lock — Market Readiness Pass
+Applied to `routes.ts`, `rewardEngine.ts`, `api.ts`, `Chat.tsx`, `GoalCompletionCeremony.tsx`:
+- **localDate propagation**: `sendMessage` API now accepts and forwards `localDate` from the browser. Memory entries are stamped with the device's local date, not UTC server time. Photo endpoint already used this pattern.
+- **Ceremony single-fire protection**: Dual dedup guard — `ceremonyGoalIdRef` (per-mount) + `sessionStorage.getItem("ceremony_shown_<goalId>")` (survives navigation and remount). Key is set before `setCeremonyPayload` to prevent any race.
+- **completionGrowth null safety**: All boolean fields in the ceremony payload constructor now use explicit `=== true` / `?? 0` guards. Missing payload renders zero reward lines gracefully.
+- **[CEREMONY_FLOW_ERROR]** tag: try/catch wraps the ceremony trigger block — errors logged with goalId and message.
+- **[GOAL_FLOW_ERROR]** tag: Completion pipeline catch block replaced `[COMPLETION] Pipeline error` with structured `[GOAL_FLOW_ERROR] completion_pipeline`.
+- **[REWARD_FLOW_ERROR]** tag: DB write failure in `rewardEngine.ts` replaced `[REWARD] DB_FAILURE`.
+- **[MEMORY_WRITE_ERROR]** tag: Entry creation failure in `rewardEngine.ts` replaced `[REWARD] ENTRY_FAILURE`.
+- **Ceremony console log sequence (exact)**: Logs moved from render body to `useEffect` to prevent render-phase side effects. Sequence now: `[CEREMONY] payload_received → mode_selected → animation_start → animation_complete (at 1600ms) → dismissed`.
+
 ### Goal Completion Ceremony (Phase 1)
 - **Component**: `GoalCompletionCeremony` in `client/src/components/GoalCompletionCeremony.tsx`
 - **Trigger**: Mounted in `Chat.tsx` via `AnimatePresence` + `ceremonyPayload` state; fires when `sendMutation.onSuccess` receives a `goalCompleted` payload with `category === "VA" || "AR"`

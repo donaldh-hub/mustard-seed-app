@@ -191,14 +191,27 @@ export function GoalCompletionCeremony({ payload, onDismiss }: Props) {
     }
     dismissingRef.current = false;
     setCanDismiss(false);
-    const t = setTimeout(() => setCanDismiss(true), 2200);
-    return () => clearTimeout(t);
+
+    const mode = detectMode(payload);
+    console.log(`[CEREMONY] payload_received | mode=${mode} | goal="${payload.goalTitle}"`);
+    console.log(`[CEREMONY] mode_selected = ${mode}`);
+    console.log(`[CEREMONY] animation_start`);
+
+    const tDismiss = setTimeout(() => setCanDismiss(true), 2200);
+    const tComplete = setTimeout(() => {
+      console.log(`[CEREMONY] animation_complete`);
+    }, 1600);
+
+    return () => {
+      clearTimeout(tDismiss);
+      clearTimeout(tComplete);
+    };
   }, [payload?.goalId]);
 
   const handleDismiss = useCallback(() => {
     if (dismissingRef.current) return;
     dismissingRef.current = true;
-    console.log("[CEREMONY] dismiss");
+    console.log("[CEREMONY] dismissed");
     onDismiss();
   }, [onDismiss]);
 
@@ -208,10 +221,6 @@ export function GoalCompletionCeremony({ payload, onDismiss }: Props) {
   const headline = getHeadline(mode);
   const reinforcement = getReinforcementLine(mode);
   const growth = payload.completionGrowth;
-
-  console.log(`[CEREMONY] payload received | mode=${mode} | goal="${payload.goalTitle}"`);
-  console.log(`[CEREMONY] mode selected = ${mode}`);
-  console.log(`[CEREMONY] animation start`);
 
   const prevStage = growth?.prevSeedStage ?? 0;
   const newStage = growth?.newSeedStage ?? prevStage;

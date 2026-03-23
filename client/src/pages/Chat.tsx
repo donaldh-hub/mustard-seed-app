@@ -494,7 +494,10 @@ export default function Chat() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: (text: string) => api.sendMessage(userId!, text),
+    mutationFn: (text: string) => {
+      const localDate = new Date().toISOString().split("T")[0];
+      return api.sendMessage(userId!, text, localDate);
+    },
     onSuccess: (data, sentText) => {
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;
@@ -553,25 +556,33 @@ export default function Chat() {
               completionGrowth: gc.completionGrowth ?? null,
             },
           }));
-          // Trigger full-screen ceremony overlay (dedup-guarded by goalId)
-          if (ceremonyGoalIdRef.current !== gc.goalId) {
-            ceremonyGoalIdRef.current = gc.goalId;
-            const cg = gc.completionGrowth;
-            setCeremonyPayload({
-              goalId: gc.goalId,
-              goalTitle: gc.goalTitle,
-              completedUnits: gc.completedUnits,
-              targetUnits: gc.targetUnits,
-              daysUsed: gc.daysUsed,
-              streakAtCompletion: gc.streakAtCompletion,
-              completionGrowth: cg ? {
-                prevSeedStage: cg.prevSeedStage,
-                newSeedStage: cg.newSeedStage,
-                waterAdded: cg.waterAdded,
-                cupJustFilled: cg.cupJustFilled,
-                stageAdvanced: cg.stageAdvanced,
-              } : null,
-            });
+          // Trigger full-screen ceremony overlay
+          // Dedup guard: ref (same session, same mount) + sessionStorage (survives navigation)
+          const sessionDedup = sessionStorage.getItem(`ceremony_shown_${gc.goalId}`);
+          if (ceremonyGoalIdRef.current !== gc.goalId && !sessionDedup) {
+            try {
+              ceremonyGoalIdRef.current = gc.goalId;
+              sessionStorage.setItem(`ceremony_shown_${gc.goalId}`, "1");
+              const cg = gc.completionGrowth;
+              // Guard: only set payload if completionGrowth is valid or explicitly null
+              setCeremonyPayload({
+                goalId: gc.goalId,
+                goalTitle: gc.goalTitle,
+                completedUnits: gc.completedUnits,
+                targetUnits: gc.targetUnits,
+                daysUsed: gc.daysUsed,
+                streakAtCompletion: gc.streakAtCompletion,
+                completionGrowth: cg ? {
+                  prevSeedStage: cg.prevSeedStage ?? 0,
+                  newSeedStage: cg.newSeedStage ?? 0,
+                  waterAdded: cg.waterAdded ?? 0,
+                  cupJustFilled: cg.cupJustFilled === true,
+                  stageAdvanced: cg.stageAdvanced === true,
+                } : null,
+              });
+            } catch (ceremonyErr) {
+              console.error(`[CEREMONY_FLOW_ERROR] trigger | goalId=${gc.goalId} | err="${(ceremonyErr as Error).message}"`);
+            }
           }
         } else if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
           // Reward card: confirms AP + water earned

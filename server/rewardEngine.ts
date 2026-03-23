@@ -294,7 +294,7 @@ export async function processRewardTransaction(
     }
   } catch (err) {
     console.error(
-      `[REWARD] DB_FAILURE | goalId=${matchGoal.id} | err="${(err as Error).message}" ` +
+      `[REWARD_FLOW_ERROR] db_write | goalId=${matchGoal.id} | err="${(err as Error).message}" ` +
       `| celebration_blocked=true`
     );
     return skip("db_write_failure");
@@ -307,7 +307,7 @@ export async function processRewardTransaction(
     entryCreated = true;
   } catch (err) {
     // Non-fatal — reward already written; log but don't block
-    console.error(`[REWARD] ENTRY_FAILURE | userId=${userId} | err="${(err as Error).message}"`);
+    console.error(`[MEMORY_WRITE_ERROR] entry_create | userId=${userId} | err="${(err as Error).message}"`);
   }
 
   // 6. Mark dedup so retry within 90s is blocked

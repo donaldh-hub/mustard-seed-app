@@ -154,6 +154,7 @@ export async function registerRoutes(
     try {
       const userId = req.params.userId;
       const rawText = stripSmartQuotes(String(req.body?.text ?? "").trim());
+      const clientLocalDate: string | undefined = req.body?.localDate;
       if (!rawText) return res.status(400).json({ message: "Text is required" });
 
       const userMsg = await storage.createMessage({ userId, text: rawText, sender: "user" });
@@ -1198,7 +1199,7 @@ export async function registerRoutes(
           apDelta,
           matchGoal: matchGoal || null,
           actionType: agg.primaryCategory as RewardActionType,
-          todayStr: todayStr(),
+          todayStr: clientLocalDate || todayStr(),
         });
 
         if (rewardResult.postUpdateAP !== null) postUpdateAP = rewardResult.postUpdateAP;
@@ -1521,7 +1522,7 @@ export async function registerRoutes(
           console.log(`[COMPLETION] PIPELINE COMPLETE | goal="${targetedGoal.title}" | user=${userId} | ${progressFeedback.completedUnits}/${progressFeedback.targetUnits} units | ${daysUsed} days | streak=${finalStreak}`);
           console.log(`[COMPLETION] DEBUG | completedGoalId=${targetedGoal.id} | rewardsApplied=true | waterAdded=${bonusWater} | creditsAdded=0 | growthChanged=${cGrowth.stageAdvanced} | ceremonyTriggered=true`);
         } catch (completionErr) {
-          console.error("[COMPLETION] Pipeline error:", completionErr);
+          console.error(`[GOAL_FLOW_ERROR] completion_pipeline | goalId=${targetedGoal?.id} | err="${(completionErr as Error).message}"`);
         }
       }
 

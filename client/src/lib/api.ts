@@ -20,10 +20,10 @@ export const api = {
   updateUser: (id: string, data: any) => fetchJson<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getMessages: (userId: string) => fetchJson<any[]>(`/users/${userId}/messages`),
-  sendMessage: (userId: string, text: string) =>
+  sendMessage: (userId: string, text: string, localDate?: string) =>
     fetchJson<{ userMessage: any; jaeMessage: any; water?: { awarded: boolean; fillPercent: number; cupsFilled: number; cupJustFilled: boolean; stageAdvanced: boolean; preResetFillPercent: number } }>(`/users/${userId}/messages`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, localDate }),
     }),
 
   sendPhoto: (userId: string, data: { photoUrl: string; caption?: string; localDate?: string; uploadAttemptId?: string }) =>

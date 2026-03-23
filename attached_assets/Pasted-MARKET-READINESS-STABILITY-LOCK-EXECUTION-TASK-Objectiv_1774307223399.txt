@@ -1,0 +1,135 @@
+MARKET READINESS STABILITY LOCK — EXECUTION TASK
+
+Objective:
+Stabilize the Mustard Accountability Partner app for soft launch readiness.
+Do NOT redesign features. Do NOT add new systems. Only fix stability, state sync,
+reward accuracy, ceremony reliability, and navigation consistency.
+
+--------------------------------------------------
+
+1. GOAL LIFECYCLE STABILITY
+
+Ensure this full flow works with zero refresh:
+
+- User creates targeted goal
+- Progress messages increment happyCount correctly
+- Completion triggers ceremony exactly once
+- Goal immediately clears from Home + Growth Dashboard
+- User can create a new goal without reload or state conflict
+
+Fix any race conditions or stale state related to:
+- goalActive
+- happyCount
+- targetMetric
+- ceremonyTriggered
+- completionGrowth payload timing
+
+Goal completion must be atomic:
+Database write → UI state update → ceremony render in same cycle.
+
+--------------------------------------------------
+
+2. REWARD INTEGRITY LOCK
+
+Guarantee reward system cannot desync.
+
+Rules:
+- Water added must always equal server response value
+- Cup fill must update in same render cycle
+- Seed stage advances only when threshold reached
+- No phantom UI reward states allowed
+
+Add guard condition:
+IF completionGrowth payload missing → do NOT render reward lines in ceremony.
+
+--------------------------------------------------
+
+3. CEREMONY SINGLE-FIRE PROTECTION
+
+Ceremony can trigger ONLY when:
+- goalCompleted === true
+- ceremonyShown === false
+
+Immediately after ceremony mounts:
+Set ceremonyShown = true in session state.
+
+Prevent duplicate ceremony on:
+- navigation
+- chat rerender
+- scroll restoration
+- websocket updates
+- state hydration
+
+--------------------------------------------------
+
+4. NAVIGATION STABILITY LOCK
+
+Ceremony overlay must:
+- NOT change route
+- NOT reset scroll position
+- NOT remount chat thread
+- NOT clear message input
+- NOT break keyboard focus
+
+Overlay implementation requirements:
+position: fixed
+full viewport coverage
+zIndex above all UI
+Dismiss must return user to exact scroll position.
+
+--------------------------------------------------
+
+5. MEMORY LOGGING ACCURACY
+
+On verified progress action:
+- Write ONE memory entry only
+- Timestamp must match device local day
+- Entry must appear in Memory Bank without refresh
+
+Add duplicate write protection.
+
+--------------------------------------------------
+
+6. LIGHTWEIGHT FAILURE LOGGING
+
+Add console tags for failure diagnosis ONLY:
+
+[GOAL_FLOW_ERROR]
+[REWARD_FLOW_ERROR]
+[CEREMONY_FLOW_ERROR]
+[MEMORY_WRITE_ERROR]
+
+Do NOT add verbose logs.
+
+--------------------------------------------------
+
+7. HARD CONSTRAINT — NO NEW FEATURES
+
+Do NOT implement:
+- new animations
+- onboarding redesign
+- personalization engine
+- dashboard redesign
+- community systems
+- growth logic changes
+
+This is a stability pass ONLY.
+
+--------------------------------------------------
+
+SUCCESS VALIDATION
+
+App is considered soft-launch ready when:
+
+- 3 full goal completion cycles run without refresh
+- Ceremony fires once each cycle
+- Rewards always accurate
+- Navigation never breaks
+- Memory entries always log
+- User can immediately create next goal
+
+After implementation:
+Return a short report:
+- Bugs fixed
+- Stability improvements
+- Remaining non-blocking issues
