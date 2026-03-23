@@ -935,6 +935,45 @@ export async function registerRoutes(
       const classifications = classifyMultipleActions(rawText);
       const agg = aggregateClassifications(classifications);
 
+      // --- PROGRESS CREDIBILITY VALIDATION ---
+      // Runs immediately after TITAN classification, before any reward logic.
+      type EntryQualification = "verifiedAction" | "reflectionEntry" | "tooShort" | "duplicate";
+      let entryQualification: EntryQualification | null = null;
+
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+        if (rawText.length < 20) {
+          // Too brief to verify — downgrade to reflection
+          agg.primaryCategory = "RW";
+          entryQualification = "tooShort";
+        } else {
+          // Duplicate guard: check for same content logged within last 10 minutes
+          const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+          const recentHappy = (await storage.getEntries(userId)).filter(
+            e => e.mood === "happy" && e.createdAt && new Date(e.createdAt).getTime() > tenMinAgo.getTime()
+          );
+          const normalizeDup = (t: string) =>
+            t.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+          const normalizedInput = normalizeDup(rawText);
+          const isDuplicate = recentHappy.some(e => {
+            const ns = normalizeDup(e.summary || "");
+            const iw = normalizedInput.split(" ").filter(w => w.length > 3);
+            const sw = ns.split(" ").filter(w => w.length > 3);
+            if (sw.length === 0) return false;
+            const overlap = iw.filter(w => sw.includes(w));
+            return overlap.length >= 3 || (sw.length >= 2 && overlap.length >= sw.length);
+          });
+          if (isDuplicate) {
+            agg.primaryCategory = "RW";
+            entryQualification = "duplicate";
+            console.log(`[CREDIBILITY] duplicate_blocked | text="${rawText.substring(0, 60)}"`);
+          } else {
+            entryQualification = "verifiedAction";
+          }
+        }
+      } else if (agg.primaryCategory === "RW" || agg.primaryCategory === "IO") {
+        entryQualification = "reflectionEntry";
+      }
+
       // --- Commitment Memory Engine ---
       const COMMITMENT_PATTERNS = [
         /\b(?:i(?:'m| am) going to|i(?:'ll| will)|i plan to|i intend to)\s+(.{5,80})/i,
@@ -1194,6 +1233,18 @@ export async function registerRoutes(
             });
           }
         }
+        // Reflection Memory: store neutral entry for substantive RW/IO content
+        if (entryQualification === "reflectionEntry" && rawText.length >= 20) {
+          const today = new Date().toISOString().split("T")[0];
+          await storage.createEntry({
+            userId,
+            goalId: null,
+            date: today,
+            summary: rawText.length > 140 ? rawText.substring(0, 140) : rawText,
+            mood: "neutral",
+          });
+          console.log(`[CREDIBILITY] reflection_memory_saved | length=${rawText.length}`);
+        }
       }
 
       const recentMsgs7d = await storage.getMessagesSince(userId, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
@@ -1300,6 +1351,7 @@ export async function registerRoutes(
             progressFeedback,
           };
         })() : null,
+        entryQualification,
       });
     } catch (err) {
       console.error(err);

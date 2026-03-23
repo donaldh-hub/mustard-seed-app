@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, Fragment } from "react";
+import React, { useState, useRef, useEffect, useCallback, Fragment } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,9 +119,16 @@ function RewardCard({
     >
       <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2 shadow-sm">
         <Zap className="w-3.5 h-3.5 text-green-600 shrink-0" />
-        <span className="text-xs font-semibold text-green-800">
-          +{ap} AP earned{waterAwarded ? " · 💧 Water added" : ""}
-        </span>
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold text-green-800">
+            +{ap} AP earned{waterAwarded ? " · 💧 Water added" : ""}
+          </span>
+          {progressFeedback && (
+            <span className="text-[10px] text-green-700 font-medium">
+              Action verified — goal progress increased.
+            </span>
+          )}
+        </div>
         <button
           onClick={onDismiss}
           className="ml-1 flex items-center gap-1 text-[11px] text-green-700 hover:text-green-900 font-medium transition-colors"
@@ -202,6 +209,56 @@ function NudgeCard({
   );
 }
 
+type ReflectionQualification = "reflectionEntry" | "tooShort" | "duplicate";
+
+function ReflectionCard({
+  qualification, onDismiss,
+}: { qualification: ReflectionQualification; onDismiss: () => void }) {
+  const configs: Record<ReflectionQualification, { icon: React.ReactNode; text: string; bg: string; textColor: string }> = {
+    reflectionEntry: {
+      icon: <PenLine className="w-3 h-3 shrink-0 text-blue-500" />,
+      text: "Reflection saved — momentum continues.",
+      bg: "bg-blue-50 border-blue-200",
+      textColor: "text-blue-800",
+    },
+    tooShort: {
+      icon: <Ban className="w-3 h-3 shrink-0 text-amber-500" />,
+      text: "Too brief to verify — describe your actual action in more detail (20+ characters).",
+      bg: "bg-amber-50 border-amber-200",
+      textColor: "text-amber-800",
+    },
+    duplicate: {
+      icon: <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500" />,
+      text: "Already logged recently — your progress is saved.",
+      bg: "bg-emerald-50 border-emerald-200",
+      textColor: "text-emerald-800",
+    },
+  };
+  const c = configs[qualification];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.25 }}
+      className="ml-12 mt-1 mb-2"
+      data-testid={`card-reflection-${qualification}`}
+    >
+      <div className={`${c.bg} border rounded-xl px-3 py-2 shadow-sm flex items-start justify-between gap-2`}>
+        <p className={`text-[11px] ${c.textColor} flex items-center gap-1.5`}>
+          {c.icon}
+          {c.text}
+        </p>
+        <button
+          onClick={onDismiss}
+          className={`text-[10px] ${c.textColor} opacity-50 hover:opacity-100 shrink-0 leading-none`}
+          data-testid="button-dismiss-reflection"
+        >✕</button>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Chat() {
   const userId = useStore((s) => s.userId);
   const { toast } = useToast();
@@ -215,6 +272,7 @@ export default function Chat() {
   const [inlineCards, setInlineCards] = useState<Record<string,
     | { type: "reward"; ap: number; waterAwarded: boolean; progressFeedback?: ProgressFeedback | null }
     | { type: "nudge"; text: string }
+    | { type: "reflection"; qualification: ReflectionQualification }
     | { type: "dismissed" }
   >>({});
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -324,8 +382,9 @@ export default function Chat() {
         }
       }
 
-      // Set inline confirmation / nudge card for this Jae message
+      // Set inline confirmation / nudge / reflection card for this Jae message
       if (jaeId) {
+        const qualification = data?.entryQualification as ReflectionQualification | "verifiedAction" | null | undefined;
         if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
           // Reward card: confirms AP + water earned
           setInlineCards(prev => ({
@@ -342,11 +401,23 @@ export default function Chat() {
             description: `${category} · +${data.water!.actionPointsAccumulated} AP · Water added`,
             duration: 3000,
           });
-        } else if ((category === "IO" || category === "RW") && looksLikeCompletedAction(sentText)) {
-          // Nudge card: offer to log this as verified progress
+        } else if (qualification === "tooShort" || qualification === "duplicate") {
+          // Credibility rejection — show inline feedback card
+          setInlineCards(prev => ({
+            ...prev,
+            [jaeId]: { type: "reflection", qualification },
+          }));
+        } else if (category === "IO" && looksLikeCompletedAction(sentText)) {
+          // Nudge card: offer to log IO entries that look like completed actions
           setInlineCards(prev => ({
             ...prev,
             [jaeId]: { type: "nudge", text: sentText },
+          }));
+        } else if (category === "RW" && qualification === "reflectionEntry") {
+          // Reflection card: acknowledge RW entries saved as memory
+          setInlineCards(prev => ({
+            ...prev,
+            [jaeId]: { type: "reflection", qualification: "reflectionEntry" },
           }));
         }
       }
@@ -727,6 +798,15 @@ export default function Chat() {
                         confirmMutation.mutate({ text: card.text, jaeMessageId: msg.id })
                       }
                       onSkip={() =>
+                        setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
+                      }
+                    />
+                  )}
+                  {card.type === "reflection" && (
+                    <ReflectionCard
+                      key={`reflection-${msg.id}`}
+                      qualification={card.qualification}
+                      onDismiss={() =>
                         setInlineCards(prev => ({ ...prev, [msg.id]: { type: "dismissed" } }))
                       }
                     />
