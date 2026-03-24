@@ -3,7 +3,7 @@ modules = ["nodejs-20", "web", "postgresql-16"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["node", "./dist/index.js"]
+run = ["npm", "run", "dev"]
 
 [workflows]
 runButton = "Project"
