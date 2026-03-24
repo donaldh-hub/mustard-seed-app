@@ -3,12 +3,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles, ExternalLink } from "lucide-react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect } from "react";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -23,7 +22,6 @@ const HEARTBEAT_LABELS: Record<string, string> = {
 export default function Profile() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
-  const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -47,26 +45,6 @@ export default function Profile() {
     enabled: !!userId,
   });
 
-  const { data: plans } = useQuery({
-    queryKey: ["subscription-plans"],
-    queryFn: () => api.getSubscriptionPlans(),
-    enabled: showUpgrade,
-  });
-
-  const checkoutMut = useMutation({
-    mutationFn: (priceId: string) => api.createCheckout(userId!, priceId),
-    onSuccess: (data) => {
-      if (data.url) window.location.href = data.url;
-    },
-  });
-
-  const portalMut = useMutation({
-    mutationFn: () => api.createPortalSession(userId!),
-    onSuccess: (data) => {
-      if (data.url) window.location.href = data.url;
-    },
-  });
-
   const handleSignOut = () => {
     localStorage.removeItem("mustard_seed_user_id");
     localStorage.removeItem("assessmentResult");
@@ -82,7 +60,6 @@ export default function Profile() {
   const badge = user.subscriptionBadge || "Lite";
   const isPremium = user.subscriptionTier === "premium";
   const trialDays = user.trialDaysRemaining;
-  const hasStripe = !!user.stripeSubscriptionId;
 
   return (
     <div className="h-full overflow-y-auto p-6 bg-background">
@@ -123,61 +100,6 @@ export default function Profile() {
       </header>
 
       <div className="space-y-6 pb-24">
-        {!isPremium && (
-          <motion.section
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-200/60 shadow-sm"
-            data-testid="section-upgrade"
-          >
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-100 rounded-xl">
-                <Sparkles className="w-5 h-5 text-amber-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-sm text-amber-900">Unlock Premium</h3>
-                <p className="text-xs text-amber-700/80 mt-1">
-                  Dual goals, weighted water, heartbeat trends, deep weekly reviews, and monthly recalibration.
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-xs"
-                  onClick={() => setShowUpgrade(true)}
-                  data-testid="button-upgrade"
-                >
-                  <Crown className="w-3.5 h-3.5 mr-1" />
-                  View Plans
-                </Button>
-              </div>
-            </div>
-          </motion.section>
-        )}
-
-        {isPremium && hasStripe && (
-          <section className="bg-white rounded-2xl p-4 shadow-sm border border-border/40">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Crown className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-medium">Premium Subscription</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-xs rounded-full"
-                onClick={() => portalMut.mutate()}
-                disabled={portalMut.isPending}
-                data-testid="button-manage-subscription"
-              >
-                <ExternalLink className="w-3 h-3 mr-1" />
-                Manage
-              </Button>
-            </div>
-            {user.planInterval && (
-              <p className="text-xs text-muted-foreground mt-1 capitalize">{user.planInterval}ly plan</p>
-            )}
-          </section>
-        )}
-
         {assessment && (
           <section className="bg-white rounded-2xl p-6 shadow-sm border border-border/40" data-testid="section-assessment">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
@@ -280,107 +202,6 @@ export default function Profile() {
           Sign Out
         </Button>
       </div>
-
-      <AnimatePresence>
-        {showUpgrade && (
-          <UpgradeOverlay
-            plans={plans?.plans || []}
-            loading={checkoutMut.isPending}
-            onSelect={(priceId) => checkoutMut.mutate(priceId)}
-            onClose={() => setShowUpgrade(false)}
-          />
-        )}
-      </AnimatePresence>
     </div>
-  );
-}
-
-function UpgradeOverlay({
-  plans,
-  loading,
-  onSelect,
-  onClose,
-}: {
-  plans: { priceId: string; interval: string; amount: number; currency: string }[];
-  loading: boolean;
-  onSelect: (priceId: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 300 }}
-        animate={{ y: 0 }}
-        exit={{ y: 300 }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md bg-white rounded-t-2xl p-6 space-y-4"
-      >
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-100 rounded-full mb-3">
-            <Crown className="w-6 h-6 text-amber-600" />
-          </div>
-          <h3 className="font-serif font-bold text-lg">Mustard Seed Premium</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Unlock the full Five Heartbeats engine
-          </p>
-        </div>
-
-        <div className="space-y-2 text-sm">
-          {[
-            "Dual goals (targeted + identity)",
-            "Weighted water based on action quality",
-            "Heartbeat trend analytics",
-            "Deep weekly reviews with analysis",
-            "Monthly heartbeat recalibration",
-          ].map((feature) => (
-            <div key={feature} className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-              <span>{feature}</span>
-            </div>
-          ))}
-        </div>
-
-        {plans.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center">Loading plans...</p>
-        ) : (
-          <div className="space-y-2">
-            {plans
-              .sort((a, b) => (a.interval === "month" ? -1 : 1))
-              .map((plan) => (
-                <Button
-                  key={plan.priceId}
-                  className="w-full h-14 justify-between rounded-xl"
-                  variant={plan.interval === "year" ? "default" : "outline"}
-                  disabled={loading}
-                  onClick={() => onSelect(plan.priceId)}
-                  data-testid={`button-plan-${plan.interval}`}
-                >
-                  <span className="capitalize font-medium">{plan.interval}ly</span>
-                  <span className="font-bold">
-                    ${plan.amount.toFixed(2)}/{plan.interval === "month" ? "mo" : "yr"}
-                    {plan.interval === "year" && (
-                      <span className="text-xs font-normal ml-1 opacity-70">Save 33%</span>
-                    )}
-                  </span>
-                </Button>
-              ))}
-          </div>
-        )}
-
-        <button
-          onClick={onClose}
-          className="w-full text-center text-sm text-muted-foreground py-2"
-          data-testid="button-close-upgrade"
-        >
-          Maybe later
-        </button>
-      </motion.div>
-    </motion.div>
   );
 }

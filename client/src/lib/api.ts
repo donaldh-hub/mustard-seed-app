@@ -69,9 +69,4 @@ export const api = {
   getWeeklyReviewHistory: (userId: string) => fetchJson<any[]>(`/users/${userId}/weekly-review/history`),
 
   getSubscription: (userId: string) => fetchJson<any>(`/users/${userId}/subscription`),
-  getSubscriptionPlans: () => fetchJson<any>(`/subscription/plans`),
-  createCheckout: (userId: string, priceId: string) =>
-    fetchJson<{ url: string }>(`/users/${userId}/checkout`, { method: "POST", body: JSON.stringify({ priceId }) }),
-  createPortalSession: (userId: string) =>
-    fetchJson<{ url: string }>(`/users/${userId}/portal`, { method: "POST" }),
 };

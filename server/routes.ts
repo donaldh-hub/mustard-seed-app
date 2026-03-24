@@ -11,7 +11,6 @@ import { analyzePhoto } from "./visionAnalysis";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt, validateReceiptUpdate } from "./subscriptionEngine";
-import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -2328,99 +2327,7 @@ export async function registerRoutes(
     }
   });
 
-  // ─── Subscription & Stripe Routes ───
-
-  app.get("/api/stripe/publishable-key", async (_req, res) => {
-    try {
-      const key = await getStripePublishableKey();
-      return res.json({ publishableKey: key });
-    } catch (err) {
-      console.error("Error getting Stripe publishable key:", err);
-      return res.status(500).json({ message: "Stripe not configured" });
-    }
-  });
-
-  app.get("/api/subscription/plans", async (_req, res) => {
-    try {
-      const stripe = await getUncachableStripeClient();
-      const products = await stripe.products.search({ query: "metadata['app']:'mustard_seed'" });
-      const premiumProduct = products.data[0];
-      if (!premiumProduct) return res.json({ plans: [] });
-
-      const prices = await stripe.prices.list({ product: premiumProduct.id, active: true });
-      const plans = prices.data.map((p) => ({
-        priceId: p.id,
-        interval: p.recurring?.interval || "month",
-        amount: p.unit_amount! / 100,
-        currency: p.currency,
-      }));
-
-      return res.json({ plans });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Error fetching plans" });
-    }
-  });
-
-  app.post("/api/users/:userId/checkout", async (req, res) => {
-    try {
-      const userId = req.params.userId;
-      const { priceId } = req.body;
-      if (!priceId) return res.status(400).json({ message: "priceId is required" });
-
-      const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      const stripe = await getUncachableStripeClient();
-
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          name: user.name || undefined,
-          metadata: { userId },
-        });
-        customerId = customer.id;
-        await storage.updateUser(userId, { stripeCustomerId: customerId } as any);
-      }
-
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'}`;
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ['card'],
-        line_items: [{ price: priceId, quantity: 1 }],
-        mode: 'subscription',
-        success_url: `${baseUrl}/profile?checkout=success`,
-        cancel_url: `${baseUrl}/profile?checkout=cancel`,
-        metadata: { userId },
-      });
-
-      return res.json({ url: session.url });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Checkout error" });
-    }
-  });
-
-  app.post("/api/users/:userId/portal", async (req, res) => {
-    try {
-      const userId = req.params.userId;
-      const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
-      if (!user.stripeCustomerId) return res.status(400).json({ message: "No subscription found" });
-
-      const stripe = await getUncachableStripeClient();
-      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'}`;
-      const session = await stripe.billingPortal.sessions.create({
-        customer: user.stripeCustomerId,
-        return_url: `${baseUrl}/profile`,
-      });
-
-      return res.json({ url: session.url });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Portal error" });
-    }
-  });
+  // ─── Subscription Status Route ───
 
   app.get("/api/users/:userId/subscription", async (req, res) => {
     try {
@@ -2437,75 +2344,10 @@ export async function registerRoutes(
         trialDaysRemaining: getTrialDaysRemaining(user),
         featureLimits: getFeatureLimits({ ...user, ...effective } as any),
         platform: user.subscriptionPlatform || null,
-        hasStripeSubscription: !!user.stripeSubscriptionId,
-        planInterval: user.planInterval,
       });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.post("/api/stripe/subscription-webhook", async (req, res) => {
-    try {
-      const { type, data } = req.body;
-
-      if (type === "customer.subscription.created" || type === "customer.subscription.updated") {
-        const subscription = data.object;
-        const customerId = subscription.customer;
-
-        const user = await storage.findUserByStripeCustomerId(customerId);
-        if (user) {
-          const periodEnd = new Date(subscription.current_period_end * 1000);
-          const interval = subscription.items?.data?.[0]?.price?.recurring?.interval || "month";
-
-          if (subscription.status === "active") {
-            await storage.updateUser(user.id, {
-              subscriptionState: "PREMIUM_ACTIVE",
-              subscriptionTier: "premium",
-              subscriptionPlatform: "STRIPE",
-              stripeSubscriptionId: subscription.id,
-              subscriptionExpiresAt: periodEnd,
-              planInterval: interval,
-              lastPaymentStatus: "succeeded",
-              lastReceiptValidation: new Date(),
-            } as any);
-          } else if (subscription.status === "past_due") {
-            await storage.updateUser(user.id, {
-              subscriptionState: "PAYMENT_FAILED",
-              lastPaymentStatus: "failed",
-              lastReceiptValidation: new Date(),
-            } as any);
-          } else if (subscription.status === "canceled") {
-            await storage.updateUser(user.id, {
-              subscriptionState: "PREMIUM_EXPIRED",
-              subscriptionTier: "lite",
-              lastPaymentStatus: "canceled",
-              lastReceiptValidation: new Date(),
-            } as any);
-          }
-        }
-      }
-
-      if (type === "customer.subscription.deleted") {
-        const subscription = data.object;
-        const customerId = subscription.customer;
-        const user = await storage.findUserByStripeCustomerId(customerId);
-        if (user) {
-          await storage.updateUser(user.id, {
-            subscriptionState: "PREMIUM_EXPIRED",
-            subscriptionTier: "lite",
-            stripeSubscriptionId: null,
-            lastPaymentStatus: "canceled",
-            lastReceiptValidation: new Date(),
-          } as any);
-        }
-      }
-
-      return res.json({ received: true });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Webhook error" });
     }
   });
 
@@ -2780,7 +2622,7 @@ export async function registerRoutes(
 
       return res.json({
         validated: false,
-        message: "Receipt validation not yet implemented for native stores. Use Stripe checkout for web subscriptions.",
+        message: "Receipt validation not yet implemented for native stores.",
         subscriptionState: effective.subscriptionState,
         subscriptionTier: effective.subscriptionTier,
         platform,

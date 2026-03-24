@@ -1,10 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Sparkles, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { useStore } from "@/lib/store";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 
 const FEATURE_MESSAGES: Record<string, { title: string; description: string }> = {
   dual_goals: {
@@ -29,6 +24,14 @@ const FEATURE_MESSAGES: Record<string, { title: string; description: string }> =
   },
 };
 
+const PREMIUM_FEATURES = [
+  "Dual goals (targeted + identity)",
+  "Weighted water based on action quality",
+  "Heartbeat trend analytics",
+  "Deep weekly reviews with analysis",
+  "Monthly heartbeat recalibration",
+];
+
 export function UpgradePrompt({
   feature,
   show,
@@ -38,21 +41,7 @@ export function UpgradePrompt({
   show: boolean;
   onClose: () => void;
 }) {
-  const userId = useStore((s) => s.userId);
   const featureInfo = FEATURE_MESSAGES[feature] || { title: "Premium Feature", description: "This feature is available with Premium." };
-
-  const { data: plans } = useQuery({
-    queryKey: ["subscription-plans"],
-    queryFn: () => api.getSubscriptionPlans(),
-    enabled: show,
-  });
-
-  const checkoutMut = useMutation({
-    mutationFn: (priceId: string) => api.createCheckout(userId!, priceId),
-    onSuccess: (data) => {
-      if (data.url) window.location.href = data.url;
-    },
-  });
 
   return (
     <AnimatePresence>
@@ -85,28 +74,17 @@ export function UpgradePrompt({
 
             <p className="text-sm text-muted-foreground">{featureInfo.description}</p>
 
-            {plans?.plans?.length > 0 && (
-              <div className="space-y-2">
-                {plans.plans
-                  .sort((a: any, b: any) => (a.interval === "month" ? -1 : 1))
-                  .map((plan: any) => (
-                    <Button
-                      key={plan.priceId}
-                      className="w-full h-12 justify-between rounded-xl"
-                      variant={plan.interval === "year" ? "default" : "outline"}
-                      disabled={checkoutMut.isPending}
-                      onClick={() => checkoutMut.mutate(plan.priceId)}
-                      data-testid={`button-upgrade-${plan.interval}`}
-                    >
-                      <span className="capitalize">{plan.interval}ly</span>
-                      <span className="font-bold">${plan.amount.toFixed(2)}/{plan.interval === "month" ? "mo" : "yr"}</span>
-                    </Button>
-                  ))}
-              </div>
-            )}
+            <div className="space-y-1.5">
+              {PREMIUM_FEATURES.map((f) => (
+                <div key={f} className="flex items-center gap-2 text-sm">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>{f}</span>
+                </div>
+              ))}
+            </div>
 
             <button onClick={onClose} className="w-full text-center text-sm text-muted-foreground py-1">
-              Not now
+              Got it
             </button>
           </motion.div>
         </motion.div>

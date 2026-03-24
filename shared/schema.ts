@@ -44,10 +44,6 @@ export const users = pgTable("users", {
   trialExpiresAt: timestamp("trial_expires_at"),
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
   lastReceiptValidation: timestamp("last_receipt_validation"),
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
-  planInterval: text("plan_interval"),
-  lastPaymentStatus: text("last_payment_status"),
   firstGoalMomentumUsed: boolean("first_goal_momentum_used").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
