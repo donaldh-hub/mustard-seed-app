@@ -41,6 +41,20 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Handles subscription management, including checkout, billing portal, and webhook processing for various subscription states.
 - **Replit Object Storage**: Used for storing user-uploaded photos.
 - **Google Fonts**: For loading DM Sans and Lora fonts.
+### Timezone-Aware Entry System
+- **Root cause fixed**: Previously, entries used `new Date().toISOString().split("T")[0]` (UTC) — users east of UTC got entries stamped on the wrong next day near midnight.
+- **Client-side**: `client/src/lib/dateUtils.ts` provides `getLocalDateStr()` (local YYYY-MM-DD using `getFullYear/getMonth/getDate`) and `getUserTimezone()` (IANA string from `Intl.DateTimeFormat`).
+- **API propagation**: `api.sendMessage` accepts `localDate` and `userTimezone` params; Chat.tsx calls both utilities before sending.
+- **Server acceptance**: Chat handler extracts `clientLocalDate` and `clientTimezone` from `req.body`; all `todayStr()` entry creates in the handler are replaced with `clientLocalDate || todayStr()`.
+- **Reward engine**: `RewardInput` now includes optional `userTimezone`; stored on the `entries` row.
+- **Schema**: `entries` table has nullable `user_timezone text` column (backward-compatible with existing rows).
+- **Fallback**: All non-chat routes (goal log, weekly review) also accept `localDate`/`userTimezone` from request body, falling back to `new Date().toLocaleDateString("en-CA")` (also local-time).
+
+### Calendar Display Improvements
+- **Chronological sort**: Entries within a day are sorted by `createdAt` ascending, so morning entries appear before evening entries.
+- **Count badge**: Calendar day cells show a small badge with the number of entries when a day has more than 1 entry.
+- **Entry count header**: The day detail panel already shows "X memories" count in the top-right.
+
 ### Stability Lock — Market Readiness Pass
 Applied to `routes.ts`, `rewardEngine.ts`, `api.ts`, `Chat.tsx`, `GoalCompletionCeremony.tsx`:
 - **localDate propagation**: `sendMessage` API now accepts and forwards `localDate` from the browser. Memory entries are stamped with the device's local date, not UTC server time. Photo endpoint already used this pattern.

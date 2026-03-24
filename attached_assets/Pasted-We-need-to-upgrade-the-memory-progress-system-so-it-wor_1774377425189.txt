@@ -1,0 +1,82 @@
+We need to upgrade the memory/progress system so it works as a true record-keeping timeline, not just a loose memory list.
+
+Problem:
+Memories are drifting into the next day, and the current structure does not clearly support multiple same-day progress entries as a believable history. Users need to be able to look back and see exactly what they did on each day, including multiple actions in one day, skipped days, and patterns across time.
+
+Goal:
+Turn memory into a trustworthy daily record system that accurately reflects same-day progress, preserves chronology, and makes the app feel deeply tuned to the user.
+
+Implement the following:
+
+1. TIMESTAMP + DATE MODEL
+Each memory/progress entry must store:
+- createdAt (full ISO timestamp)
+- userTimezone
+- userLocalDate (YYYY-MM-DD in user’s local timezone)
+- local display time or derived time for UI ordering
+
+2. SAME-DAY MULTI-ENTRY SUPPORT
+Support multiple progress/memory entries on the same local day.
+Do not collapse them into one item unless a separate summary card is intentionally generated.
+Each action should remain its own visible entry.
+
+3. DAILY RECORD VIEW
+Ensure the memory system can show all entries for a given day so a user can look back and say:
+- Monday: 2 entries
+- Tuesday: 1 entry
+- Wednesday: 0 entries
+The day should function as a container for progress history.
+
+4. CHRONOLOGICAL ORDER
+Within each day, entries must display in correct time order based on the same timestamp source used when the entry was created.
+
+5. SINGLE TIME SOURCE
+Chat timestamps, memory creation, progress extraction, and date grouping must all use the same underlying time logic so they stay synchronized.
+
+6. LOCAL DATE BUCKETING
+All date grouping must be based on userLocalDate using the user’s local timezone, not raw UTC or server date.
+This applies to:
+- Recent Memory
+- Memory Bank
+- Calendar/date grouping
+- Any daily record/progress history views
+
+7. GOAL RELATIONSHIP
+If multiple entries on the same day relate to the same goal, preserve that relationship so users can see multiple same-day steps toward one goal.
+
+8. RECORD-KEEPING UX
+Improve the memory/history experience so users can clearly review:
+- what they did
+- when they did it
+- how many actions happened that day
+- where there were no entries on certain days
+Keep the UI clean, but make the history credible and easy to understand.
+
+9. SHOWCASE QUALITY
+The memory/progress timeline should feel polished enough that when a user shows the app to someone else, the app clearly demonstrates personalized tracking and believable memory continuity.
+
+10. BACKWARD COMPATIBILITY
+For older records missing userLocalDate, derive it safely from createdAt and timezone if possible.
+Do not break existing memory history.
+
+11. TESTING
+Test:
+- two progress entries on the same day
+- one entry on the following day
+- skipped-day visibility between active days
+- entries close to midnight
+- entries tied to the same goal
+Confirm accuracy in:
+  - Recent Memory
+  - Memory Bank
+  - Calendar/date grouping
+  - Any day-detail or progress-history UI
+
+12. DELIVERABLE
+After implementation, report:
+- root cause
+- files changed
+- how local date is calculated
+- how same-day multi-entry support works
+- how daily history/record-keeping now works
+- confirmation that memory no longer rolls into the next day

@@ -13,6 +13,7 @@ import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
 import { syncUserProgressState } from "@/lib/syncProgressState";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import { GoalCompletionCeremony, type GoalCompletionCeremonyPayload } from "@/components/GoalCompletionCeremony";
+import { getLocalDateStr, getUserTimezone } from "@/lib/dateUtils";
 
 function MiniWaterCup({ fillPercent, animating }: { fillPercent: number; animating: boolean }) {
   const clamped = Math.max(0, Math.min(fillPercent, 100));
@@ -495,8 +496,9 @@ export default function Chat() {
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => {
-      const localDate = new Date().toISOString().split("T")[0];
-      return api.sendMessage(userId!, text, localDate);
+      const localDate = getLocalDateStr();
+      const userTimezone = getUserTimezone();
+      return api.sendMessage(userId!, text, localDate, userTimezone);
     },
     onSuccess: (data, sentText) => {
       const category = data?.titan?.category;
@@ -632,7 +634,7 @@ export default function Chat() {
 
       setAnalyzing();
 
-      const localDate = new Date().toISOString().split("T")[0];
+      const localDate = getLocalDateStr();
 
       try {
         const result = await api.sendPhoto(userId!, {

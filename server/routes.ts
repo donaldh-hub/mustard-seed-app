@@ -158,6 +158,7 @@ export async function registerRoutes(
       const userId = req.params.userId;
       const rawText = stripSmartQuotes(String(req.body?.text ?? "").trim());
       const clientLocalDate: string | undefined = req.body?.localDate;
+      const clientTimezone: string | undefined = req.body?.userTimezone;
       if (!rawText) return res.status(400).json({ message: "Text is required" });
 
       const userMsg = await storage.createMessage({ userId, text: rawText, sender: "user" });
@@ -245,7 +246,7 @@ export async function registerRoutes(
               await storage.updateUser(userId, { goals: clarGoals });
             }
 
-            await storage.createEntry({ userId, date: todayStr(), summary: `Goal planted: ${pendingGoalText}`, mood: "neutral" });
+            await storage.createEntry({ userId, date: clientLocalDate || todayStr(), summary: `Goal planted: ${pendingGoalText}`, mood: "neutral", ...(clientTimezone ? { userTimezone: clientTimezone } : {}) });
 
             const typeLabel = chosenType === "targeted" ? "Targeted Goal" : "Identity Goal";
             jaeText = `${greeting}${typeLabel} planted: "${pendingGoalText}".\n\nYour goal has been planted. Check the Growth tab to see your seed. Every action you take from here adds water and helps it grow.`;
@@ -754,9 +755,10 @@ export async function registerRoutes(
 
         await storage.createEntry({
           userId,
-          date: todayStr(),
+          date: clientLocalDate || todayStr(),
           summary: `Goal planted: ${goalText}`,
           mood: "neutral",
+          ...(clientTimezone ? { userTimezone: clientTimezone } : {}),
         });
 
         const typeLabel = goalType === "targeted" ? "Targeted Goal" : "Identity Goal";
@@ -788,9 +790,10 @@ export async function registerRoutes(
         const savedContent = payload || obstacleMatch?.[1] || rawText;
         await storage.createEntry({
           userId,
-          date: todayStr(),
+          date: clientLocalDate || todayStr(),
           summary: savedContent,
           mood: "neutral",
+          ...(clientTimezone ? { userTimezone: clientTimezone } : {}),
         });
 
         const saveConfirms = [
@@ -1203,6 +1206,7 @@ export async function registerRoutes(
           matchGoal: matchGoal || null,
           actionType: agg.primaryCategory as RewardActionType,
           todayStr: clientLocalDate || todayStr(),
+          userTimezone: clientTimezone,
         });
 
         if (rewardResult.postUpdateAP !== null) postUpdateAP = rewardResult.postUpdateAP;
@@ -1835,11 +1839,13 @@ export async function registerRoutes(
       apiGoals[apiGoalIndex] = data.title;
       await storage.updateUser(userId, { goals: apiGoals });
 
+      const goalLocalDate = (req.body?.localDate as string | undefined) || new Date().toLocaleDateString("en-CA");
       await storage.createEntry({
         userId,
-        date: new Date().toISOString().split("T")[0],
+        date: goalLocalDate,
         summary: `Goal planted: ${data.title}`,
         mood: "neutral",
+        ...(req.body?.userTimezone ? { userTimezone: req.body.userTimezone } : {}),
       });
 
       return res.json(goal);
@@ -1902,10 +1908,11 @@ export async function registerRoutes(
       const mood = req.body.mood || "neutral";
       const progressValue = req.body.progressValue ?? null;
 
+      const logLocalDate = (req.body?.localDate as string | undefined) || new Date().toLocaleDateString("en-CA");
       const entry = await storage.createEntry({
         userId: goal.userId,
         goalId: goal.id,
-        date: todayStr(),
+        date: logLocalDate,
         summary,
         mood,
       });
@@ -2281,9 +2288,10 @@ export async function registerRoutes(
         ? `Weekly Review — ${goalProgress.goalStatement} | Net: ${goalProgress.netChange ?? "N/A"} | Heartbeats: ${heartbeatLine}`
         : `Weekly Review — No targeted goal | Heartbeats: ${heartbeatLine}`;
 
+      const reviewLocalDate = (req.body?.localDate as string | undefined) || new Date().toLocaleDateString("en-CA");
       await storage.createEntry({
         userId,
-        date: todayStr(),
+        date: reviewLocalDate,
         summary: calendarSummary,
         mood: "neutral",
         goalId: null,

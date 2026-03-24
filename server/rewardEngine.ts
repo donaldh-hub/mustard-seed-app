@@ -158,6 +158,7 @@ export interface RewardInput {
   matchGoal: Goal | null;
   actionType: RewardActionType;
   todayStr: string;
+  userTimezone?: string;
 }
 
 export type RewardSkipReason =
@@ -206,7 +207,7 @@ export interface RewardResult {
 export async function processRewardTransaction(
   input: RewardInput
 ): Promise<RewardResult> {
-  const { userId, rawText, apDelta, matchGoal, actionType, todayStr } = input;
+  const { userId, rawText, apDelta, matchGoal, actionType, todayStr, userTimezone } = input;
 
   const skip = (reason: RewardSkipReason): RewardResult => {
     console.log(`[REWARD] SKIP | reason=${reason} | actionType=${actionType} | ap=${apDelta} | text="${rawText.substring(0, 60)}"`);
@@ -303,7 +304,7 @@ export async function processRewardTransaction(
   // 5. Create progress entry
   let entryCreated = false;
   try {
-    await storage.createEntry({ userId, date: todayStr, summary: rawText, mood: "happy" });
+    await storage.createEntry({ userId, date: todayStr, summary: rawText, mood: "happy", ...(userTimezone ? { userTimezone } : {}) });
     entryCreated = true;
   } catch (err) {
     // Non-fatal — reward already written; log but don't block

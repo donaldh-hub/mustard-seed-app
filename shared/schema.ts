@@ -164,6 +164,7 @@ export const entries = pgTable("entries", {
   date: text("date").notNull(),
   summary: text("summary").notNull(),
   mood: text("mood").notNull(),
+  userTimezone: text("user_timezone"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

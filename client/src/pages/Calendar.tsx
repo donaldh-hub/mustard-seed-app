@@ -122,6 +122,9 @@ export default function CalendarPage() {
       if (!map[e.date]) map[e.date] = [];
       map[e.date].push(e);
     });
+    Object.values(map).forEach((arr) =>
+      arr.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    );
     return map;
   }, [entriesList]);
 
@@ -222,6 +225,8 @@ export default function CalendarPage() {
               const isSelected = selectedDay === day;
               const hasReview = !!reviewsByDate[dk];
 
+              const entryCount = (entriesByDate[dk]?.filter((e: any) => !isPhotoEntry(e.summary)).length ?? 0) + (photosByDate[dk]?.length ?? 0);
+
               return (
                 <button
                   key={day}
@@ -239,15 +244,16 @@ export default function CalendarPage() {
                   data-testid={`button-day-${day}`}
                 >
                   {day}
-                  <div className="absolute bottom-0.5 flex gap-0.5">
-                    {hasPhoto && !isSelected && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    )}
-                    {hasEntry && !hasPhoto && !isSelected && (
-                      <div className={`w-1.5 h-1.5 rounded-full ${hasReview ? "bg-amber-500" : "bg-green-500"}`} />
-                    )}
-                    {hasEntry && hasPhoto && !isSelected && (
-                      <div className={`w-1.5 h-1.5 rounded-full ${hasReview ? "bg-amber-500" : "bg-green-500"}`} />
+                  <div className="absolute bottom-0.5 flex gap-0.5 items-center">
+                    {(hasEntry || hasPhoto) && !isSelected && (
+                      <>
+                        <div className={`w-1.5 h-1.5 rounded-full ${hasPhoto ? "bg-blue-500" : hasReview ? "bg-amber-500" : "bg-green-500"}`} />
+                        {entryCount > 1 && (
+                          <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-stone-600 text-white flex items-center justify-center" style={{ fontSize: "7px", fontWeight: 700 }}>
+                            {entryCount}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </button>
