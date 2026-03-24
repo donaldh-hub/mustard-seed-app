@@ -6,7 +6,8 @@ import {
   type Goal, type InsertGoal, goals,
   type WeeklyReview, type InsertWeeklyReview, weeklyReviews,
   type PhotoMemory, type InsertPhotoMemory, photoMemories,
-  type Commitment, type InsertCommitment, commitments
+  type Commitment, type InsertCommitment, commitments,
+  passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, asc, and, gte } from "drizzle-orm";
@@ -14,8 +15,16 @@ import pg from "pg";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByGoogleId(googleId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+
+  createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
+  getPasswordResetToken(token: string): Promise<{ userId: string; expiresAt: Date; usedAt: Date | null } | undefined>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+
+  logAuthEvent(userId: string | null, event: string, provider?: string, metadata?: Record<string, any>): Promise<void>;
 
   getMessages(userId: string): Promise<Message[]>;
   createMessage(msg: InsertMessage): Promise<Message>;
@@ -54,12 +63,22 @@ export interface IStorage {
   getRecentCommitments(userId: string, limit?: number): Promise<Commitment[]>;
 }
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
     return user;
   }
 
@@ -71,6 +90,24 @@ export class DatabaseStorage implements IStorage {
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
     const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
     return user;
+  }
+
+  async createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
+    await db.insert(passwordResetTokens).values({ userId, token, expiresAt });
+  }
+
+  async getPasswordResetToken(token: string): Promise<{ userId: string; expiresAt: Date; usedAt: Date | null } | undefined> {
+    const [row] = await db.select().from(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+    if (!row) return undefined;
+    return { userId: row.userId, expiresAt: row.expiresAt, usedAt: row.usedAt };
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.token, token));
+  }
+
+  async logAuthEvent(userId: string | null, event: string, provider?: string, metadata?: Record<string, any>): Promise<void> {
+    await db.insert(authEvents).values({ userId, event, provider, metadata }).catch(() => {});
   }
 
 

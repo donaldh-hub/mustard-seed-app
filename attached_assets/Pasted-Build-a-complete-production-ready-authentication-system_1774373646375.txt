@@ -1,0 +1,140 @@
+Build a complete, production-ready authentication system for this app so we can identify and track REAL users.
+
+GOAL:
+We need secure sign-in before a user can access the app, because anonymous access does not give us the user-level data we need for testing, analytics, retention, progress tracking, or later subscriptions.
+
+CORE REQUIREMENTS:
+
+1. AUTH METHODS
+- Add **Sign in with Google**
+- Add **Sign up / Sign in with Email**
+- Email flow must support:
+  - create account
+  - log in
+  - forgot password / reset password
+  - log out
+
+2. APP FLOW
+- Right now the app goes straight into Intro.
+- Change the flow so that:
+  - first screen = authentication / login screen
+  - user must either sign in or create an account first
+  - after successful login, THEN they enter the app experience
+- If a user is already logged in, keep them signed in and route them into the app automatically on reopen
+- If logged out, return them to auth screen
+
+3. USER DATA / TRACKING
+Create a real user record for every account.
+Store at minimum:
+- unique user id
+- full name if available
+- email address
+- auth provider (google or email)
+- account creation timestamp
+- last login timestamp
+- subscription status field (default free or trial-ready structure)
+- onboarding completed flag
+- assessment completed flag
+- profile completion flag
+
+This data must be structured so we can later track:
+- real user count
+- signups
+- active users
+- returning users
+- onboarding completion
+- assessment completion
+- retention behavior
+
+4. DATABASE / BACKEND
+Use the project’s current backend/auth stack if already present.
+If not present, implement the cleanest stable option already best supported in this app stack.
+Do NOT leave placeholder auth.
+Do NOT create fake local-only login.
+This must be real authentication with persistent user records.
+
+5. UI / UX
+Build a clean auth screen with:
+- app name / branding
+- Sign in with Google button
+- Email field
+- Password field
+- Create account option
+- Forgot password option
+- Log in button
+- clear error messages
+- loading states
+- mobile-friendly layout
+
+Keep it simple, polished, and stable.
+No clutter.
+
+6. SECURITY
+- Never store plain text passwords
+- Use secure auth best practices
+- Validate email input
+- Handle duplicate account attempts correctly
+- Handle invalid login attempts correctly
+- Handle auth/session persistence correctly
+- Protect authenticated routes so users cannot bypass login
+
+7. ONBOARDING CONNECTION
+After account creation:
+- create the user record immediately
+- preserve the ability to connect onboarding, assessment, goals, memory, and progress to that specific user account
+- make sure future app actions are tied to the authenticated user id
+
+8. ANALYTICS READINESS
+Add the structure needed so we can later measure:
+- how many users signed up
+- which provider they used
+- when they last logged in
+- whether they completed intro/onboarding/assessment
+- whether they returned after day 1 / day 7
+
+If analytics events already exist, connect auth events into them.
+If they do not exist yet, create a clean event logging structure for:
+- signup_success
+- login_success
+- logout
+- password_reset_requested
+- onboarding_started
+- onboarding_completed
+
+9. ERROR HANDLING
+Handle these cases cleanly:
+- Google login canceled
+- email already in use
+- wrong password
+- invalid email
+- weak password
+- network/auth failure
+- session expired
+
+10. TESTING
+After implementation, test and verify:
+- Google sign-in works
+- email signup works
+- email login works
+- reset password works
+- logout works
+- session persists after refresh/reopen
+- user record is created in database
+- returning user is recognized
+- protected routes do not allow unauthenticated access
+
+11. DELIVERABLE
+Complete the implementation fully.
+Then provide:
+- what was added
+- what auth/database services were used
+- where user data is stored
+- what test steps were completed
+- any environment variables or console settings still required from me, listed clearly and only if truly necessary
+
+IMPORTANT:
+- Do not give me a partial scaffold
+- Do not leave mock auth
+- Do not leave TODO comments as the solution
+- Do not break the current app flow beyond what is needed to insert login first
+- Keep everything wired for real users and real tracking

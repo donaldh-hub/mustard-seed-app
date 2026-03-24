@@ -5,8 +5,13 @@ const BASE = "/api";
 async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(BASE + url, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...opts,
   });
+  if (res.status === 401 && !url.includes("/auth/")) {
+    window.location.href = "/auth";
+    throw new Error("Session expired");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: "Request failed" }));
     throw new Error(err.message);
@@ -15,6 +20,22 @@ async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getConfig: () => fetchJson<{ googleClientId: string | null }>("/config"),
+
+  authMe: () => fetchJson<any>("/auth/me"),
+  authRegister: (data: { name: string; email: string; password: string }) =>
+    fetchJson<any>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+  authLogin: (data: { email: string; password: string }) =>
+    fetchJson<any>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
+  authGoogle: (credential: string) =>
+    fetchJson<any>("/auth/google", { method: "POST", body: JSON.stringify({ credential }) }),
+  authLogout: () =>
+    fetchJson<{ message: string }>("/auth/logout", { method: "POST" }),
+  authForgotPassword: (email: string) =>
+    fetchJson<any>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  authResetPassword: (token: string, password: string) =>
+    fetchJson<any>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+
   createUser: (data: any) => fetchJson<any>("/users", { method: "POST", body: JSON.stringify(data) }),
   getUser: (id: string) => fetchJson<any>(`/users/${id}`),
   updateUser: (id: string, data: any) => fetchJson<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

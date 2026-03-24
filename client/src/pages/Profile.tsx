@@ -45,10 +45,14 @@ export default function Profile() {
     enabled: !!userId,
   });
 
-  const handleSignOut = () => {
-    localStorage.removeItem("mustard_seed_user_id");
-    localStorage.removeItem("assessmentResult");
-    window.location.href = "/";
+  const signOut = useStore((s) => s.signOut);
+
+  const handleSignOut = async () => {
+    try {
+      await api.authLogout();
+    } catch {}
+    signOut();
+    window.location.href = "/auth";
   };
 
   if (!userId || !user) return null;

@@ -20,6 +20,14 @@ export type SubscriptionPlatform = typeof SUBSCRIPTION_PLATFORMS[number];
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().default(""),
+  email: text("email").unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  passwordHash: text("password_hash"),
+  authProvider: text("auth_provider").default("email"),
+  googleId: text("google_id").unique(),
+  profileImage: text("profile_image"),
+  lastLoginAt: timestamp("last_login_at"),
+  assessmentCompleted: boolean("assessment_completed").notNull().default(false),
   goals: text("goals").array().notNull().default(sql`'{}'::text[]`),
   struggles: text("struggles").array().notNull().default(sql`'{}'::text[]`),
   commitmentLevel: text("commitment_level").notNull().default("serious"),
@@ -54,6 +62,24 @@ export const insertUserSchema = createInsertSchema(users).omit({
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const authEvents = pgTable("auth_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"),
+  event: text("event").notNull(),
+  provider: text("provider"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 export const messages = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -1,6 +1,7 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
@@ -98,6 +99,9 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   registerObjectStorageRoutes(app);
+
+  app.use("/api/users", requireAuth);
+  app.use("/api/goals", requireAuth);
 
   app.post("/api/users", async (req, res) => {
     const result = insertUserSchema.safeParse(req.body);
