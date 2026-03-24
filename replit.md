@@ -91,3 +91,14 @@ Applied to `routes.ts`, `rewardEngine.ts`, `api.ts`, `Chat.tsx`, `GoalCompletion
 - **cBurn guard**: VA/AR messages clear cBurn; escalation no longer re-sets cBurn after a verified action in the same request
 - **Goal type confirmation**: Accepts "target", "targeted", or "identity" (case-insensitive) for goal type selection
 - **App reset**: Adding `?reset=1` to URL clears localStorage and restarts onboarding for a fresh user
+
+## Deployment Configuration
+
+- **Target**: Autoscale
+- **Build command**: `npm run build` → runs `script/build.ts` (Vite client build + esbuild server bundle)
+- **Run command**: `node ./dist/index.js` (ESM bundle, top-level await supported)
+- **Server bundle**: `dist/index.js` — esbuild ESM format with `createRequire` banner shim for CJS compat
+- **Frontend build**: `dist/public/` — Vite output, served by `express.static` in production
+- **Static path resolution**: `server/static.ts` uses `path.resolve(__dirname, "public")` with `process.cwd()+"/dist/public"` fallback
+- **Port**: 5000 (mapped to external port 80)
+- **Health check**: GET `/` returns 200 (index.html served by express.static)
