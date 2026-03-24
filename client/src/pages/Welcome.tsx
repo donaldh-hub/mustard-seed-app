@@ -12,12 +12,12 @@ export default function Welcome() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    if (onboardingCompleted && userId) {
-      setLocation("/home", { replace: true });
-      return;
-    }
     if (!userId) {
       setChecking(false);
+      return;
+    }
+    if (onboardingCompleted) {
+      setLocation("/home", { replace: true });
       return;
     }
     api.getAssessment(userId).then((assessment) => {
@@ -30,7 +30,7 @@ export default function Welcome() {
     }).catch(() => {
       setChecking(false);
     });
-  }, [userId, onboardingCompleted]);
+  }, [userId]);
 
   if (checking && userId) return null;
 

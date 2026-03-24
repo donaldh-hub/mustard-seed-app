@@ -46,14 +46,6 @@ export default function Assessment() {
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const qc = useQueryClient();
 
-  const onboardingCompleted = useStore((s) => s.onboardingCompleted);
-
-  useEffect(() => {
-    if (onboardingCompleted) {
-      setLocation("/home", { replace: true });
-    }
-  }, [onboardingCompleted]);
-
   const isReturningUser = !!userId;
   const allAnswered = (isReturningUser || name.trim().length > 0) && answers.every((a) => a !== null);
 
