@@ -52,4 +52,8 @@ integrations = [
   "stripe:2.0.0",
   "javascript_object_storage:2.0.0",
 ]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
 # deploy refresh
