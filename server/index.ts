@@ -6,6 +6,8 @@ import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './stripeClient';
 import { WebhookHandlers } from './webhookHandlers';
 
+console.log("deployment refresh");
+
 const app = express();
 const httpServer = createServer(app);
 
