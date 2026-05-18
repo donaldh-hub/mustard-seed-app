@@ -1,0 +1,681 @@
+You are working inside the Mustard Seed App V.2 project.
+
+Your task is to perform a full wiring completion audit of the app as it currently exists.
+
+DO NOT redesign the app.
+DO NOT add new features unless needed to complete already-existing wiring.
+DO NOT replace working systems.
+DO NOT create fake demo logic.
+DO NOT hardcode success states.
+DO NOT remove existing Mustard Seed language, visuals, app structure, or user flow.
+
+The goal is to verify whether the app’s existing screens, buttons, state logic, database connections, AI/Jai logic, memory systems, goal systems, water systems, and progress systems are actually connected end-to-end.
+
+This is a wiring audit and completion pass.
+
+The core question is:
+
+“Does every visible part of the Mustard Seed App actually do what it promises?”
+
+If not, identify it, fix it, and report exactly what was fixed.
+
+---
+
+## 1. App Identity Lock
+
+This project is Mustard Seed App V.2.
+
+This is NOT a fitness app.
+
+This is a personal growth and accountability app built around:
+
+1. Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+The app’s core purpose is to help users build discipline, mindset, accountability, and grace through small consistent action.
+
+Jai / J.M. is the user’s accountability partner and growth guide.
+
+All wiring must support this identity.
+
+---
+
+## 2. Primary Wiring Audit Objective
+
+Audit the app from the perspective of a real first-time user.
+
+Confirm that the following journey works from beginning to end:
+
+1. User can sign up or log in
+2. User reaches the welcome/onboarding flow
+3. User completes the orientation
+4. User completes the Five Heartbeats assessment
+5. Assessment results are saved
+6. User can create a goal
+7. Goal saves correctly
+8. Goal connects to a personal WHY
+9. Goal connects to one or more Heartbeats
+10. User can create a small daily promise or action
+11. User can interact with Jai
+12. Jai can reference the user’s goal, why, assessment, and progress
+13. User can record progress
+14. Progress saves to the correct day
+15. Memory/log entries are created correctly
+16. Water is awarded correctly when valid progress is recorded
+17. Seed/tree/growth visual updates from real progress data
+18. Calendar or daily view reflects the recorded action if this feature currently exists
+19. Weekly/monthly recap systems are either wired correctly or clearly marked as incomplete
+20. User can return later and still see saved data
+
+This full journey is the core accountability loop.
+
+The app is not considered properly wired unless this loop works.
+
+---
+
+## 3. Screen-by-Screen Wiring Audit
+
+Review every existing screen in the app.
+
+For each screen, verify:
+
+1. What is the screen supposed to do?
+2. What data does it display?
+3. Where does that data come from?
+4. Does the data persist after refresh?
+5. Are all buttons clickable?
+6. Do buttons route to the correct screen/modal/action?
+7. Do forms validate correctly?
+8. Do form submissions save to the correct database table/model/store?
+9. Do success and error states work?
+10. Are loading states handled?
+11. Are empty states handled?
+12. Does the screen update after data changes?
+
+Create a list of every screen audited.
+
+For each screen, classify it as:
+
+- Fully wired
+- Partially wired
+- Visual only
+- Broken
+- Missing required data connection
+
+If any screen is visual-only but appears functional to the user, flag it as a critical issue.
+
+---
+
+## 4. Button and Navigation Audit
+
+Audit every clickable item in the app.
+
+This includes:
+
+1. Header buttons
+2. Footer buttons
+3. Navigation tabs
+4. Profile buttons
+5. Goal buttons
+6. Chat buttons
+7. Calendar buttons
+8. Assessment buttons
+9. Memory buttons
+10. Photo upload buttons
+11. Water/progress buttons
+12. Back buttons
+13. Save buttons
+14. Cancel buttons
+15. Edit buttons
+16. Delete buttons
+17. Upgrade/subscription buttons if present
+
+For each button or clickable element, verify:
+
+1. It is clickable
+2. It routes correctly
+3. It triggers the correct action
+4. It does not create duplicate records accidentally
+5. It does not fail silently
+6. It gives the user feedback after action
+7. It respects logged-in user data
+8. It does not show stale data
+
+Fix broken buttons or routes.
+
+Do not leave dead buttons in the app.
+
+If a button cannot be completed yet because the underlying feature is not built, label it clearly in the build report.
+
+---
+
+## 5. Data Persistence Audit
+
+Audit all data that should save.
+
+Verify whether the following persist correctly:
+
+1. User profile
+2. Onboarding completion status
+3. Assessment answers
+4. Assessment scores
+5. Strongest Heartbeat
+6. Weakest Heartbeat
+7. Goals
+8. Goal category
+9. Goal WHY
+10. Goal Heartbeat connection
+11. Daily promises/actions
+12. Completed actions
+13. Missed actions
+14. Jai chat history if intended
+15. Memory entries
+16. Photo entries if photo system exists
+17. Water earned
+18. Seed/tree growth status
+19. Calendar entries if calendar exists
+20. Subscription/trial status if present
+
+Test persistence by:
+
+1. Creating data
+2. Refreshing the page
+3. Logging out if auth exists
+4. Logging back in
+5. Confirming the same data still appears
+6. Confirming data belongs only to the correct user
+
+If anything does not persist correctly, fix it.
+
+---
+
+## 6. Jai Chat Wiring Audit
+
+Audit Jai/J.M. carefully.
+
+Jai is not a generic chatbot.
+
+Jai must be connected to the user’s app data where the app currently claims personalization.
+
+Verify whether Jai can access and use:
+
+1. User name
+2. Current goal
+3. User’s WHY
+4. Assessment result
+5. Strongest Heartbeat
+6. Weakest Heartbeat
+7. Recent completed actions
+8. Recent missed actions
+9. Memory entries
+10. Water/progress status
+
+Jai should respond in the Mustard Seed tone:
+
+- Encouraging
+- Grounded
+- Honest
+- Grace-filled
+- Accountable
+- Not robotic
+- Not repetitive
+- Not fake motivational
+
+Test Jai with scenarios like:
+
+1. User completed an action today
+2. User missed yesterday
+3. User asks what to do next
+4. User says they feel stuck
+5. User asks about their goal
+6. User asks about their why
+7. User asks how they are doing this week
+
+If Jai cannot reference stored user data, flag this as a critical wiring gap.
+
+If possible within the current architecture, connect Jai to the correct user data.
+
+Do not hardcode Jai’s responses.
+
+---
+
+## 7. Goal Engine Wiring Audit
+
+Audit goal creation and goal management.
+
+Verify:
+
+1. User can create a goal
+2. Goal saves to the correct user
+3. Goal has a title/name
+4. Goal has a category if the app includes categories
+5. Goal has a WHY
+6. Goal can connect to Heartbeats
+7. Goal can have small steps or daily promises
+8. User can view the goal later
+9. User can update the goal if edit exists
+10. User can complete progress tied to the goal
+11. Progress affects the correct goal only
+12. Goal progress updates visually and numerically if these displays exist
+
+The goal system must not be disconnected from Jai, memory, water, or seed growth.
+
+Goals are the center of the user’s growth loop.
+
+---
+
+## 8. Five Heartbeats Assessment Wiring Audit
+
+Audit the assessment.
+
+Verify:
+
+1. Assessment questions load correctly
+2. Questions map to the correct Heartbeat
+3. User responses save correctly
+4. Scoring logic works correctly
+5. Strongest Heartbeat is calculated correctly
+6. Weakest Heartbeat is calculated correctly
+7. Results are displayed clearly
+8. Results persist after refresh
+9. Results are available to Jai
+10. Results influence recommendations if the app currently claims that
+
+If assessment scoring is visual-only or random, replace it with real scoring logic.
+
+Do not fake results.
+
+---
+
+## 9. Memory System Wiring Audit
+
+Audit the memory/progress log.
+
+Verify:
+
+1. Daily actions create memory entries
+2. Chat-based progress can create memory entries if intended
+3. Photo uploads create memory entries if photo system exists
+4. Memory entries are assigned to the correct user
+5. Memory entries are assigned to the correct date
+6. Multiple entries can exist on the same day
+7. Entries do not jump to the next day incorrectly
+8. Entries persist after refresh
+9. Entries are visible from the correct memory/day view
+10. Jai can reference recent memory entries if intended
+
+Pay special attention to date and timezone logic.
+
+All memory entries should use the user’s local date correctly.
+
+Do not allow today’s progress to appear under tomorrow unless the actual local date has changed.
+
+---
+
+## 10. Water and Seed Growth Wiring Audit
+
+Audit the water and growth system.
+
+Verify:
+
+1. Completing valid progress awards water
+2. Water amount is based on real action rules
+3. Water is tied to the correct user
+4. Water is tied to the correct goal if the app supports goal-specific growth
+5. Water total persists after refresh
+6. Seed/tree visual updates from real stored water/progress data
+7. Visual growth does not update randomly
+8. Water is not awarded multiple times for the same action unless intended
+9. Missed actions do not incorrectly award water
+10. Photo-based water bonuses only happen when photo validation exists and is valid
+
+The seed/tree growth system should reflect real progress.
+
+No fake animation-only growth.
+
+No hardcoded growth state.
+
+---
+
+## 11. Photo Upload Wiring Audit
+
+If photo upload exists, audit it.
+
+Verify:
+
+1. User can upload from camera/gallery if supported
+2. Uploaded photo saves correctly
+3. Photo attaches to the correct user
+4. Photo attaches to the correct day
+5. Photo attaches to the correct goal/action if applicable
+6. Photo appears in memory
+7. Photo can trigger analysis if the app claims photo analysis
+8. Photo can award water only if valid
+9. Irrelevant photos do not automatically award progress
+10. Upload failures show clear error states
+
+If photo analysis is not yet truly implemented, do not pretend it is.
+
+Flag it clearly.
+
+---
+
+## 12. Calendar and Follow-Up Wiring Audit
+
+If calendar/daily planning exists, audit it.
+
+Verify:
+
+1. Goals/actions appear on the correct day
+2. Daily promises appear where expected
+3. Completed actions update the day view
+4. Weekly follow-ups appear only when appropriate
+5. Monthly follow-ups appear only when appropriate
+6. Calendar entries persist
+7. Clicking a calendar entry opens the correct details
+8. No date-shifting bugs occur
+9. Past, present, and future dates are handled correctly
+
+If native calendar syncing is not implemented yet, do not fake it.
+
+Only verify what currently exists.
+
+---
+
+## 13. Trial, Lite, and Subscription Wiring Audit
+
+If trial or subscription logic exists, audit it.
+
+Verify:
+
+1. New users receive intended trial access
+2. Trial start date saves
+3. Trial expiration calculates correctly
+4. User downgrades to Lite after trial if no subscription
+5. Lite features are correctly limited
+6. Premium features are correctly unlocked
+7. Subscription status appears near profile if designed
+8. Upgrade buttons route correctly
+9. Stripe or payment logic is not fake if present
+10. Users cannot access premium-only features after downgrade unless intended
+
+If subscription logic is not implemented, flag it as incomplete.
+
+Do not create fake billing.
+
+---
+
+## 14. Error Handling Audit
+
+Audit the app for failure points.
+
+Verify:
+
+1. Empty states are clear
+2. Loading states are clear
+3. Failed saves show errors
+4. Failed uploads show errors
+5. Failed AI/Jai responses show errors
+6. Failed database calls show errors
+7. Invalid form submissions are blocked
+8. Network errors do not break the whole app
+9. User is not left guessing
+
+The user should never click something important and receive no response.
+
+Silent failure is not acceptable.
+
+---
+
+## 15. Mobile Responsiveness Audit
+
+Audit the app on mobile-sized screens.
+
+Verify:
+
+1. All main screens are usable on mobile
+2. Navigation works on mobile
+3. Chat is usable on mobile
+4. Forms are usable on mobile
+5. Calendar is usable on mobile
+6. Buttons are not cut off
+7. Text does not overflow
+8. Progress visuals do not break layout
+9. Photo upload is usable on mobile
+10. Modals fit the screen
+
+Do not redesign unless something is broken.
+
+Fix layout issues only where necessary.
+
+---
+
+## 16. Required Testing Scenarios
+
+Run these tests manually or through available test logic.
+
+### Test Scenario 1: First-Time User
+
+1. Create new user
+2. Complete onboarding
+3. Complete assessment
+4. Create first goal
+5. Add why
+6. Add daily promise
+7. Confirm data saves
+8. Refresh
+9. Confirm data remains
+
+Expected result:
+
+The user should land in the app with their goal, why, assessment, and first action saved correctly.
+
+---
+
+### Test Scenario 2: Progress Entry
+
+1. Log in as user
+2. Open active goal
+3. Record one completed action
+4. Confirm memory entry is created
+5. Confirm water is awarded
+6. Confirm seed/progress updates
+7. Refresh
+8. Confirm all updates persist
+
+Expected result:
+
+Progress should update the user’s memory, water, and growth visual from real stored data.
+
+---
+
+### Test Scenario 3: Jai Context
+
+1. Ask Jai about the current goal
+2. Ask Jai about the user’s why
+3. Ask Jai what the user should focus on next
+4. Ask Jai about missed progress
+5. Ask Jai about today’s completed action
+
+Expected result:
+
+Jai should reference real user data where available.
+
+If Jai cannot access real data, report this as a critical wiring issue.
+
+---
+
+### Test Scenario 4: Date Accuracy
+
+1. Create multiple progress entries on the same local date
+2. Upload photo if supported
+3. Complete action
+4. Refresh
+5. Confirm all entries remain on the correct local date
+
+Expected result:
+
+Today’s progress must remain attached to today.
+
+---
+
+### Test Scenario 5: Returning User
+
+1. Log out
+2. Log back in
+3. Confirm assessment results remain
+4. Confirm goals remain
+5. Confirm memory remains
+6. Confirm water remains
+7. Confirm seed growth remains
+8. Confirm Jai still has access to context
+
+Expected result:
+
+The app should not reset or lose the user’s growth record.
+
+---
+
+## 17. Fix Rules
+
+When you find broken wiring:
+
+1. Identify the broken connection
+2. Find the source cause
+3. Fix the wiring
+4. Preserve existing design unless design prevents functionality
+5. Preserve existing Mustard Seed language and tone
+6. Do not create fake placeholder logic
+7. Do not hardcode test data as if it were real user data
+8. Do not mark incomplete systems as complete
+9. Do not delete features without reporting why
+10. Confirm the fix works through testing
+
+Every fix must support the real app promise.
+
+---
+
+## 18. Required Final Build Report
+
+When finished, provide a clear build report with the following sections:
+
+### A. Wiring Audit Summary
+
+List:
+
+1. Fully wired systems
+2. Partially wired systems
+3. Broken systems fixed
+4. Systems still incomplete
+5. Systems that were visual-only
+
+---
+
+### B. Screen Audit Results
+
+For each screen, list:
+
+1. Screen name
+2. Wiring status
+3. Data source
+4. Buttons tested
+5. Issues found
+6. Fixes completed
+7. Remaining issues
+
+---
+
+### C. Core Loop Status
+
+Answer directly:
+
+Does the full accountability loop work?
+
+The loop is:
+
+User onboarding → assessment → goal creation → Jai context → progress entry → memory → water → seed growth → returning user persistence.
+
+Mark as one of:
+
+- Fully working
+- Mostly working
+- Partially working
+- Not working
+
+Explain why.
+
+---
+
+### D. Jai Wiring Status
+
+Report:
+
+1. What user data Jai can access
+2. What user data Jai cannot access yet
+3. Whether Jai is using real app data
+4. Whether responses are still generic
+5. What was fixed
+
+---
+
+### E. Water/Growth Wiring Status
+
+Report:
+
+1. What actions award water
+2. How water is calculated
+3. Whether water persists
+4. Whether seed/tree growth uses real water data
+5. Whether duplicate water awards are prevented
+
+---
+
+### F. Memory/Date Wiring Status
+
+Report:
+
+1. Whether memory entries save
+2. Whether dates are correct
+3. Whether timezone issues were found
+4. Whether photos attach to memory if supported
+5. Whether multiple entries can exist on the same day
+
+---
+
+### G. Remaining Completion List
+
+List what still needs to be built or wired next.
+
+Organize remaining work into:
+
+1. Critical before launch
+2. Important before beta
+3. Nice to have later
+
+---
+
+## 19. Definition of Done
+
+This task is complete only when:
+
+1. Every existing screen has been audited
+2. Every major button has been tested
+3. Core data persistence has been verified
+4. Goal data saves and reloads
+5. Assessment data saves and reloads
+6. Memory entries save to the correct date
+7. Water/progress logic is either working or clearly reported as incomplete
+8. Jai is either connected to user data or clearly reported as not fully connected
+9. Broken wiring found during the audit has been fixed where possible
+10. The final report clearly explains what is complete and what still needs work
+
+The final result should make it clear exactly where Mustard Seed App V.2 stands.
+
+Focus on truth over appearance.
+
+The app does not need to look more impressive right now.
+
+It needs to be honest, wired, and functional.

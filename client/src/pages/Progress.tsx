@@ -494,9 +494,15 @@ function GoalCard({
           </span>
         )}
       </div>
-      <p className="text-sm font-medium text-foreground mb-4" data-testid={`text-goal-title-${type}`}>
+      <p className="text-sm font-medium text-foreground mb-1" data-testid={`text-goal-title-${type}`}>
         {data.title}
       </p>
+      {data.emotionalWhy && (
+        <p className="text-[11px] text-muted-foreground italic mb-4 leading-snug" data-testid={`text-goal-why-${type}`}>
+          "{data.emotionalWhy}"
+        </p>
+      )}
+      {!data.emotionalWhy && <div className="mb-4" />}
 
       <div className="flex items-start justify-center gap-6 mb-4">
         <SeedGrowth seedStage={data.seedStage ?? 0} cupsFilled={data.cupsFilled ?? 0} />

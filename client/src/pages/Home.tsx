@@ -301,7 +301,14 @@ export default function Home() {
               <h2 className="text-sm font-semibold text-foreground">Goal</h2>
             </div>
             {goal ? (
-              <p className="text-base font-semibold text-foreground truncate" data-testid="text-goal">{goal}</p>
+              <>
+                <p className="text-base font-semibold text-foreground truncate" data-testid="text-goal">{goal}</p>
+                {(garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy) && (
+                  <p className="text-xs text-muted-foreground italic mt-1 leading-snug" data-testid="text-goal-why">
+                    "{garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy}"
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No active goal yet</p>
             )}

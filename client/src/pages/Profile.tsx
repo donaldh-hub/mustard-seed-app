@@ -3,11 +3,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown } from "lucide-react";
+import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -46,6 +46,13 @@ export default function Profile() {
   });
 
   const signOut = useStore((s) => s.signOut);
+
+  const [notificationsOn, setNotificationsOn] = useState(() => {
+    return localStorage.getItem("pref_notifications") !== "false";
+  });
+  const [privateMode, setPrivateMode] = useState(() => {
+    return localStorage.getItem("pref_private_mode") === "true";
+  });
 
   const handleSignOut = async () => {
     try {
@@ -151,7 +158,10 @@ export default function Profile() {
                <div className="mt-1 w-2 h-2 rounded-full bg-primary" />
                <div>
                  <p className="font-medium text-foreground">Big Goal</p>
-                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || user.goals?.[0] || "Not set yet — tell Jae 'Save: my goal is...'"}</p>
+                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || garden?.untargeted?.title || user.goals?.[0] || "Not set yet — tell Jae 'Save: my goal is...'"}</p>
+                 {(garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy) && (
+                   <p className="text-xs text-muted-foreground/70 italic mt-0.5" data-testid="text-goal-why">"{garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy}"</p>
+                 )}
                </div>
              </div>
              <div className="flex items-start gap-3">
@@ -182,7 +192,15 @@ export default function Profile() {
               </div>
               <Label htmlFor="notifications" className="font-medium">Daily Reminders</Label>
             </div>
-            <Switch id="notifications" defaultChecked />
+            <Switch
+              id="notifications"
+              checked={notificationsOn}
+              onCheckedChange={(v) => {
+                setNotificationsOn(v);
+                localStorage.setItem("pref_notifications", String(v));
+              }}
+              data-testid="switch-notifications"
+            />
           </div>
           
           <div className="flex items-center justify-between">
@@ -192,9 +210,43 @@ export default function Profile() {
               </div>
               <Label htmlFor="privacy" className="font-medium">Private Mode</Label>
             </div>
-            <Switch id="privacy" />
+            <Switch
+              id="privacy"
+              checked={privateMode}
+              onCheckedChange={(v) => {
+                setPrivateMode(v);
+                localStorage.setItem("pref_private_mode", String(v));
+              }}
+              data-testid="switch-privacy"
+            />
           </div>
         </section>
+
+        {!isPremium && (
+          <section className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border border-amber-200 shadow-sm" data-testid="section-upgrade">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-100 rounded-xl shrink-0">
+                <Sparkles className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-amber-900 text-sm">
+                  {trialDays && trialDays > 0 ? `${trialDays} day${trialDays !== 1 ? "s" : ""} left on Premium trial` : "Upgrade to Premium"}
+                </p>
+                <p className="text-xs text-amber-700/80 mt-0.5 leading-snug">
+                  Unlock deep AI coaching, photo memories, and full heartbeat analytics.
+                </p>
+              </div>
+            </div>
+            <Button
+              className="mt-4 w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 text-sm font-semibold"
+              onClick={() => setLocation("/chat")}
+              data-testid="button-upgrade-cta"
+            >
+              <Crown className="w-4 h-4 mr-2" />
+              Learn About Premium
+            </Button>
+          </section>
+        )}
 
         <Button 
           variant="outline" 

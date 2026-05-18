@@ -948,7 +948,9 @@ export async function registerRoutes(
         const depthResult = await generateDepthResponse(rawText, {
           userName: name,
           targetedGoalTitle: targetedGoal?.title,
+          targetedGoalWhy: targetedGoal?.emotionalWhy || undefined,
           untargetedGoalTitle: untargetedGoal?.title,
+          untargetedGoalWhy: untargetedGoal?.emotionalWhy || undefined,
           obstacle,
           streak,
           stage: latestAssessment?.stage,

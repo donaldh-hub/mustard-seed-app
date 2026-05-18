@@ -8,7 +8,9 @@ const openai = new OpenAI({
 export interface JaeContext {
   userName: string;
   targetedGoalTitle?: string;
+  targetedGoalWhy?: string;
   untargetedGoalTitle?: string;
+  untargetedGoalWhy?: string;
   obstacle?: string;
   streak: number;
   stage?: string;
@@ -25,8 +27,10 @@ export interface JaeContext {
 function buildSystemPrompt(ctx: JaeContext): string {
   const goalBlock = [
     ctx.targetedGoalTitle ? `Active Targeted Goal: "${ctx.targetedGoalTitle}"` : "Active Targeted Goal: (none)",
+    ctx.targetedGoalWhy ? `  Why it matters to them: "${ctx.targetedGoalWhy}"` : "",
     ctx.untargetedGoalTitle ? `Active Identity Goal: "${ctx.untargetedGoalTitle}"` : "Active Identity Goal: (none)",
-  ].join("\n");
+    ctx.untargetedGoalWhy ? `  Why it matters to them: "${ctx.untargetedGoalWhy}"` : "",
+  ].filter(Boolean).join("\n");
 
   const heartbeatBlock = ctx.weakestHeartbeat
     ? `Current Heartbeat Focus: ${ctx.weakestHeartbeat} (score ${ctx.weakestScore ?? "unknown"})`
