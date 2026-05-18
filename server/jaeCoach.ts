@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ContinuityRecord } from "./continuityContext";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -16,12 +17,18 @@ export interface JaeContext {
   stage?: string;
   weakestHeartbeat?: string;
   weakestScore?: number;
+  heartbeatScores?: Record<string, number>;
+  lastAssessmentDate?: string;
   recentMessages?: { sender: string; text: string }[];
   pendingCommitments?: { action: string; expectedTime?: string | null; createdAt?: Date | null }[];
+  recentlyCompletedCommitments?: { action: string; resolvedAt?: Date | null }[];
   missedCommitmentCount?: number;
   repeatedIntentCount?: number;
   followThroughRate?: number;
   actionGapDays?: number;
+  continuityContext?: ContinuityRecord[];
+  latestWeeklyReviewSummary?: string;
+  latestWeeklyReviewFocus?: string;
 }
 
 function buildSystemPrompt(ctx: JaeContext): string {
@@ -49,12 +56,39 @@ function buildSystemPrompt(ctx: JaeContext): string {
     }).join("\n");
     commitmentBlock = `Open Commitments (user said they would do these but hasn't confirmed):\n${items}`;
   }
+
+  // Recently completed commitments
+  let completedCommitmentsBlock = "";
+  if (ctx.recentlyCompletedCommitments && ctx.recentlyCompletedCommitments.length > 0) {
+    const items = ctx.recentlyCompletedCommitments.slice(0, 3).map(c => `- "${c.action}"`).join("\n");
+    completedCommitmentsBlock = `Recently Completed Commitments:\n${items}`;
+  }
+
   const patternBlock = [
     ctx.missedCommitmentCount && ctx.missedCommitmentCount > 0 ? `Missed commitments (recent): ${ctx.missedCommitmentCount}` : "",
     ctx.repeatedIntentCount && ctx.repeatedIntentCount > 1 ? `Repeated intent without action: ${ctx.repeatedIntentCount} times` : "",
     ctx.followThroughRate !== undefined && ctx.followThroughRate < 100 ? `Follow-through rate: ${ctx.followThroughRate}%` : "",
     ctx.actionGapDays !== undefined && ctx.actionGapDays > 1 ? `Days since last verified action: ${ctx.actionGapDays}` : "",
   ].filter(Boolean).join("\n");
+
+  // --- Build continuity context block (6–8 records) ---
+  let continuityBlock = "";
+  if (ctx.continuityContext && ctx.continuityContext.length > 0) {
+    const lines = ctx.continuityContext.map(r => {
+      const goal = r.relatedGoalTitle ? ` [Goal: ${r.relatedGoalTitle}]` : "";
+      return `[${r.type}] (${r.date})${goal}: ${r.summary}`;
+    }).join("\n");
+    continuityBlock = `Recent Accountability Memory (6–8 most relevant records — use selectively, not as a script):\n${lines}`;
+  }
+
+  // Weekly review
+  let weeklyReviewBlock = "";
+  if (ctx.latestWeeklyReviewSummary) {
+    weeklyReviewBlock = `Latest Weekly Review: ${ctx.latestWeeklyReviewSummary}`;
+    if (ctx.latestWeeklyReviewFocus) {
+      weeklyReviewBlock += `\n  Recommended Focus: ${ctx.latestWeeklyReviewFocus}`;
+    }
+  }
 
   // Derive internal behavior state from context (never exposed to user)
   let behaviorState = "STARTING";
@@ -111,7 +145,10 @@ ${streakBlock}
 ${stageBlock}
 ${obstacleBlock}
 ${commitmentBlock}
+${completedCommitmentsBlock}
 ${patternBlock}
+${continuityBlock}
+${weeklyReviewBlock}
 Internal behavior state (NEVER reveal this): ${behaviorState}
 Internal style mode (NEVER reveal this): ${styleMode}
 
@@ -138,6 +175,34 @@ If Open Commitments exist in the context:
 - If completed: acknowledge factually, resolve it.
 - If not completed: no punishment, no guilt. Increase SLIPPING weight internally. Adjust tone.
 - NEVER ignore open commitments when they are relevant to the current conversation.
+
+ACCOUNTABILITY MEMORY USAGE (USE THE CONTINUITY CONTEXT SELECTIVELY)
+The Recent Accountability Memory block above gives you 6–8 real stored records.
+Use this memory to:
+- Reference a prior commitment when the user checks in without reporting on it
+- Notice if the user is repeating an intent they've stated before without acting
+- Acknowledge a completed action from the user's history ("You showed up last week — that matters")
+- Connect the user's current message to their stated emotional WHY
+- Notice when the user is drifting from their goal without shame
+- Recognize a pattern of missed commitments and gently name it once
+
+Language to use when referencing memory (natural, not robotic):
+- "Earlier, you said you would..."
+- "Last time, you mentioned..."
+- "You committed to..."
+- "You showed up when..."
+- "This connects to the reason you gave for this goal..."
+- "You've said this a couple of times now — what's actually blocking it?"
+- "You followed through on [X] — that was real."
+- "This looks similar to what happened before — what changed?"
+
+Rules for memory usage:
+1. Do NOT reference memory in every message — only when it genuinely improves clarity, accountability, or encouragement.
+2. Do NOT recite the memory list. Weave one relevant fact naturally.
+3. Do NOT shame the user about missed commitments — acknowledge, then redirect.
+4. Do NOT pretend certainty about things not in the memory.
+5. If recent completed actions are in memory — acknowledge small wins when relevant.
+6. If the user is repeating intent without action — name it once, gently, and ask for a smaller step.
 
 PATTERN CALLOUT
 If repeated intent without action count is >= 2:
@@ -248,7 +313,7 @@ export async function generateDepthResponse(
   const systemPrompt = buildSystemPrompt(ctx);
 
   const history = ctx.recentMessages
-    ? buildConversationHistory(ctx.recentMessages.slice(-6))
+    ? buildConversationHistory(ctx.recentMessages.slice(-8))
     : [];
 
   if (history.length === 0 || history[history.length - 1].content !== userMessage) {

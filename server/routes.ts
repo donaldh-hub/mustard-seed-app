@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
+import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
@@ -926,24 +927,90 @@ export async function registerRoutes(
         jaeText = `${pick(logConfirms)}${streakRef}\n${goalRef}${obstacleRef}\n\n${pick(logFollowups)}`;
 
       } else {
-        const latestAssessment = await storage.getLatestAssessment(userId);
-        const recentMsgs = await storage.getMessages(userId);
-        const last10 = recentMsgs
-          .sort((a: any, b: any) => (a.createdAt > b.createdAt ? 1 : -1))
-          .slice(-10)
-          .map((m: any) => ({ sender: m.sender, text: m.text }));
+        // --- Fetch all context data in parallel for efficiency ---
+        const [
+          latestAssessment,
+          recentMsgs,
+          pendingCommitments,
+          recentCommitments,
+          allEntries,
+          recentPhotoMemories,
+          latestWeeklyReview,
+          activeGoalsForCtx,
+        ] = await Promise.all([
+          storage.getLatestAssessment(userId),
+          storage.getMessages(userId),
+          storage.getPendingCommitments(userId),
+          storage.getRecentCommitments(userId, 20),
+          storage.getEntries(userId),
+          storage.getPhotoMemories(userId),
+          storage.getLatestCompletedReview(userId),
+          storage.getActiveGoals(userId),
+        ]);
 
-        const pendingCommitments = await storage.getPendingCommitments(userId);
-        const recentCommitments = await storage.getRecentCommitments(userId, 20);
+        const sortedMsgs = recentMsgs
+          .sort((a: any, b: any) => (a.createdAt > b.createdAt ? 1 : -1));
+        const last12 = sortedMsgs.slice(-12);
+        const last12Mapped = last12.map((m: any) => ({ sender: m.sender, text: m.text, createdAt: m.createdAt }));
+
         const missedCount = recentCommitments.filter(c => c.status === "missed").length;
         const completedCount = recentCommitments.filter(c => c.status === "completed").length;
         const totalResolved = missedCount + completedCount;
         const followThroughRate = totalResolved > 0 ? Math.round((completedCount / totalResolved) * 100) : 100;
-        const ioMessages = last10.filter(m => m.sender === "user" && /\b(i('m| am) going to|i('ll| will)|i plan to|gonna|planning to)\b/i.test(m.text));
+        const ioMessages = last12Mapped.filter((m: any) => m.sender === "user" && /\b(i('m| am) going to|i('ll| will)|i plan to|gonna|planning to)\b/i.test(m.text));
         const repeatedIntentCount = ioMessages.length;
         const actionGapDays = user.lastVerifiedActionAt
           ? Math.floor((Date.now() - new Date(user.lastVerifiedActionAt).getTime()) / (1000 * 60 * 60 * 24))
           : undefined;
+
+        // Recent happy entries = completed verified actions (most recent 8)
+        const recentHappyEntries = allEntries
+          .filter((e: any) => e.mood === "happy" && e.summary)
+          .slice(0, 8);
+
+        // Recently completed commitments for explicit display
+        const recentlyCompletedCommitments = recentCommitments
+          .filter(c => c.status === "completed")
+          .slice(0, 3)
+          .map(c => ({ action: c.action, resolvedAt: c.resolvedAt }));
+
+        // Build the 6–8 record continuity context
+        const continuityCtx = buildContinuityContext({
+          recentCommitments: recentCommitments.map(c => ({
+            id: c.id,
+            action: c.action,
+            status: c.status,
+            createdAt: c.createdAt,
+            resolvedAt: c.resolvedAt,
+            expectedTime: c.expectedTime,
+          })),
+          recentHappyEntries: recentHappyEntries.map((e: any) => ({
+            summary: e.summary,
+            dateKey: e.dateKey,
+            createdAt: e.createdAt,
+            goalId: e.goalId,
+          })),
+          recentPhotoMemories: recentPhotoMemories.slice(0, 5).map((p: any) => ({
+            analysisResult: p.analysisResult,
+            dateKey: p.dateKey,
+            createdAt: p.createdAt,
+            isGoalAligned: p.isGoalAligned,
+          })),
+          latestWeeklyReview: latestWeeklyReview ? {
+            weekSummary: (latestWeeklyReview as any).weekSummary || (latestWeeklyReview as any).summary || null,
+            recommendedFocus: (latestWeeklyReview as any).recommendedFocus || null,
+            heartbeatInsights: (latestWeeklyReview as any).heartbeatInsights || null,
+            createdAt: latestWeeklyReview.createdAt,
+          } : null,
+          activeGoals: activeGoalsForCtx.map((g: any) => ({
+            id: g.id,
+            title: g.title,
+            type: g.type,
+            emotionalWhy: g.emotionalWhy,
+            createdAt: g.createdAt,
+          })),
+          recentChatMessages: last12Mapped,
+        });
 
         const depthResult = await generateDepthResponse(rawText, {
           userName: name,
@@ -958,16 +1025,26 @@ export async function registerRoutes(
           weakestScore: latestAssessment?.heartbeatScores
             ? (latestAssessment.heartbeatScores as Record<string, number>)[latestAssessment.weakestHeartbeat || ""] ?? undefined
             : undefined,
-          recentMessages: last10,
+          heartbeatScores: latestAssessment?.heartbeatScores as Record<string, number> | undefined,
+          lastAssessmentDate: latestAssessment?.createdAt ? new Date(latestAssessment.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : undefined,
+          recentMessages: last12Mapped,
           pendingCommitments: pendingCommitments.slice(0, 3).map(c => ({
             action: c.action,
             expectedTime: c.expectedTime,
             createdAt: c.createdAt,
           })),
+          recentlyCompletedCommitments,
           missedCommitmentCount: missedCount,
           repeatedIntentCount,
           followThroughRate,
           actionGapDays,
+          continuityContext: continuityCtx,
+          latestWeeklyReviewSummary: latestWeeklyReview
+            ? ((latestWeeklyReview as any).weekSummary || (latestWeeklyReview as any).summary || undefined)
+            : undefined,
+          latestWeeklyReviewFocus: latestWeeklyReview
+            ? ((latestWeeklyReview as any).recommendedFocus || undefined)
+            : undefined,
         });
 
         if (depthResult.text) {

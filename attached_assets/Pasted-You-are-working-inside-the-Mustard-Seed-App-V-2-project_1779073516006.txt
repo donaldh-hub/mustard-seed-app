@@ -1,0 +1,540 @@
+You are working inside the Mustard Seed App V.2 project.
+
+This task is focused on improving Jai/JI’s accountability memory and conversational continuity.
+
+Do not redesign the app.
+Do not change the Mustard Seed brand language.
+Do not add unrelated features.
+Do not create fake memory.
+Do not hardcode example responses.
+Do not replace the existing Jai/JI chat system if it is already working.
+
+The goal is to improve Jai/JI’s ability to reference the user’s recent history, promises, progress, missed commitments, and meaningful memory entries in a grace-filled accountability style.
+
+This is a wiring and intelligence-context upgrade.
+
+---
+
+## 1. Naming Clarification
+
+The app may reference the accountability partner as Jai, JI, J.M., or Jae Mustardseed depending on the current code and UI.
+
+Do not break existing references.
+
+For this task, treat Jai/JI as the same accountability partner.
+
+Preserve existing naming where it already appears in the app unless there is already a single centralized name constant.
+
+---
+
+## 2. Core Purpose Of This Upgrade
+
+Jai/JI should feel like a real accountability partner who remembers enough recent context to respond with integrity.
+
+The user should feel:
+
+“This app remembers what I said. It understands what I am trying to build. It can gently call me back without shaming me.”
+
+Jai/JI needs enough recent context to say things like:
+
+- “You said you wanted to work on this because it matters to your future. What is the smallest honest step today?”
+- “You mentioned this was important earlier, but your recent actions are drifting from that promise. What changed?”
+- “You have been showing up in small ways. Do not overlook that.”
+- “You missed the last commitment, but that does not erase the goal. Let’s reset the next step.”
+- “This looks like a pattern: you intend to act, but the follow-through is getting blocked. Let’s make the promise smaller.”
+
+This must be done in the Mustard Seed tone:
+
+- Grace-filled
+- Honest
+- Grounded
+- Encouraging
+- Personally aware
+- Accountable without being judgmental
+- Direct without being harsh
+- Human without being fake
+
+---
+
+## 3. Required Context Expansion
+
+Currently, Jai/JI can access some user context.
+
+Expand Jai/JI’s context window to include the most recent 6–8 meaningful user records.
+
+This should include the most relevant available records from:
+
+1. Recent chat messages
+2. Recent memory entries
+3. Recent journal/progress entries
+4. Recent completed actions
+5. Recent missed commitments
+6. Recent pending commitments
+7. Recent photo-verified actions if available
+8. Recent weekly review insights if available
+9. Recent goals or goal updates
+10. Recent emotional WHY statements tied to goals
+
+Use 6–8 records as the target range.
+
+Do not limit Jai/JI to only 3–5 recent entries.
+
+The purpose is to give Jai/JI enough context to detect continuity, contradiction, progress, drift, and repeated intent.
+
+---
+
+## 4. Context Selection Rules
+
+Do not simply inject random recent data.
+
+Select the most useful 6–8 context items for accountability.
+
+Prioritize records in this order:
+
+1. Active goal and emotional WHY
+2. Pending commitments
+3. Missed commitments
+4. Recently completed commitments
+5. Repeated user intentions
+6. Recent memory entries connected to the active goal
+7. Recent journal/progress entries
+8. Recent weekly review insights
+9. Recent photo/action validation entries
+10. Recent chat statements where the user said they would do something
+
+The context should help Jai/JI answer:
+
+1. What is the user trying to build?
+2. What did the user recently say they would do?
+3. What did the user actually do?
+4. Where is the user drifting?
+5. Where is the user improving?
+6. What should Jai/JI gently bring back into the conversation?
+
+---
+
+## 5. Accountability Continuity Logic
+
+Add or improve logic that allows Jai/JI to recognize the difference between:
+
+1. A user making a new commitment
+2. A user repeating a prior commitment
+3. A user avoiding a prior commitment
+4. A user completing a commitment
+5. A user missing a commitment
+6. A user showing progress even if imperfect
+7. A user drifting away from their stated WHY
+
+When appropriate, Jai/JI should be able to reference prior context with language like:
+
+- “Earlier, you said…”
+- “Last time, you mentioned…”
+- “You committed to…”
+- “You showed up when…”
+- “This connects to the WHY you gave me…”
+- “This looks similar to what happened before…”
+- “You have not failed, but we do need to be honest about the pattern.”
+
+Do not make Jai/JI sound like a scolding parent.
+
+Do not shame the user.
+
+Do not overuse callbacks in every message.
+
+Callbacks should appear when they improve accountability, clarity, or encouragement.
+
+---
+
+## 6. Memory Context Injection Requirements
+
+Find the existing Jai/JI chat request flow.
+
+Before each Jai/JI response, dynamically build a context object that includes:
+
+1. User profile summary
+2. Active goal summary
+3. Emotional WHY
+4. Current Heartbeat assessment summary
+5. Weakest Heartbeat
+6. Current streak
+7. Follow-through rate if available
+8. Pending commitments
+9. Missed commitments
+10. Completed recent commitments
+11. Recent 6–8 meaningful memory/context records
+12. Recent weekly review insight if available
+13. Recent photo/action validation insight if available
+
+This context must be built from real stored user data.
+
+Do not hardcode fake examples.
+
+Do not inject data belonging to another user.
+
+Do not expose raw internal IDs to the AI response unless needed internally.
+
+---
+
+## 7. Suggested Context Object Shape
+
+Use the existing architecture if it already has a better pattern.
+
+If not, create or adapt a clean context shape similar to this:
+
+{
+  user: {
+    id,
+    name,
+    timezone,
+    currentStage
+  },
+  activeGoals: [
+    {
+      id,
+      title,
+      type,
+      emotionalWhy,
+      connectedHeartbeats,
+      knownObstacle,
+      createdAt
+    }
+  ],
+  heartbeatProfile: {
+    strongestHeartbeat,
+    weakestHeartbeat,
+    scores,
+    lastAssessmentDate
+  },
+  accountabilityState: {
+    currentStreak,
+    followThroughRate,
+    pendingCommitmentsCount,
+    missedCommitmentsCount,
+    daysSinceLastVerifiedAction,
+    repeatedIntentCount
+  },
+  commitments: {
+    pending: [],
+    missed: [],
+    recentlyCompleted: []
+  },
+  recentContinuityContext: [
+    {
+      type,
+      date,
+      title,
+      summary,
+      relatedGoalId,
+      relatedHeartbeat,
+      status,
+      accountabilityRelevance
+    }
+  ],
+  latestWeeklyReview: {
+    date,
+    summary,
+    recommendedFocus,
+    heartbeatInsight
+  }
+}
+
+Only include fields that are supported by the existing database or can be derived honestly from existing records.
+
+---
+
+## 8. Recent Continuity Context Rules
+
+Create or improve a helper function that selects the most meaningful 6–8 recent context records.
+
+Each selected item should include:
+
+1. Type of record
+2. Date
+3. Short summary
+4. Related goal if available
+5. Related Heartbeat if available
+6. Status if applicable
+7. Why it matters for accountability
+
+Examples of record types:
+
+- chat_commitment
+- completed_action
+- missed_commitment
+- pending_commitment
+- memory_entry
+- journal_entry
+- photo_verified_action
+- weekly_review
+- goal_created
+- why_statement
+- repeated_intent
+
+This helper should not overload Jai/JI with huge raw text.
+
+Summarize records clearly before injecting them.
+
+---
+
+## 9. Prompt Behavior Rules For Jai/JI
+
+Update Jai/JI’s system prompt or instruction builder so it understands how to use the expanded continuity context.
+
+Jai/JI should:
+
+1. Reference recent context when it is useful
+2. Gently call back prior commitments when relevant
+3. Connect user actions back to the emotional WHY
+4. Notice repeated intent without follow-through
+5. Recognize small wins
+6. Encourage a smaller next step when the user is stuck
+7. Ask one clear follow-up question when needed
+8. Avoid overwhelming the user
+9. Avoid guilt-based language
+10. Avoid pretending certainty when context is limited
+
+Jai/JI should not:
+
+1. Shame the user
+2. Use aggressive accountability language
+3. Mention internal scoring unless user asks
+4. Recite the whole memory context
+5. Bring up irrelevant old details
+6. Over-reference the past in every message
+7. Sound robotic or like a report
+
+The goal is continuity, not interrogation.
+
+---
+
+## 10. Example Response Style
+
+Use this style as guidance only.
+
+Do not hardcode these as canned responses.
+
+Example 1 — missed commitment:
+
+“You said this goal mattered because it connects to who you are becoming, and I want to honor that with you.
+
+You missed the last commitment, but that does not cancel the promise.
+
+Let’s make the next step smaller and honest: what is one action you can complete today in under 10 minutes?”
+
+Example 2 — repeated intent:
+
+“I notice you have said a few times that you want to restart, but the follow-through keeps getting blocked.
+
+That is not failure. That is information.
+
+What is the smallest version of this promise that you can actually keep today?”
+
+Example 3 — completed progress:
+
+“You showed up today, and that counts.
+
+It may look small, but small steps are how this seed gets watered.
+
+What helped you follow through this time?”
+
+Example 4 — drifting from WHY:
+
+“This goal started with a clear WHY.
+
+Your recent actions are moving a little away from that, so let’s not ignore it.
+
+What changed: the goal, the timing, or the size of the next step?”
+
+---
+
+## 11. Data Privacy And User Boundaries
+
+Do not expose raw private data unnecessarily.
+
+Do not show hidden context as a dump in the chat.
+
+Jai/JI should use context naturally.
+
+If the user asks what Jai/JI remembers, provide a clear user-facing summary, not raw database records.
+
+Only use the current authenticated user’s data.
+
+No cross-user leakage.
+
+---
+
+## 12. Performance Requirements
+
+Because the context is expanding from 3–5 to 6–8 meaningful records, make sure the chat request remains efficient.
+
+Do not send huge unfiltered logs.
+
+Do not send full chat history if summarized context is enough.
+
+Use concise summaries.
+
+Recommended approach:
+
+1. Fetch recent candidate records
+2. Score/filter for accountability relevance
+3. Select top 6–8
+4. Summarize them
+5. Inject into Jai/JI prompt/context object
+
+---
+
+## 13. Testing Requirements
+
+After implementation, test the following scenarios.
+
+### Test 1: Prior Commitment Callback
+
+1. Create or identify a user with an active goal
+2. Have the user tell Jai/JI they will complete a specific action
+3. Do not complete that action
+4. Ask Jai/JI what to focus on next
+
+Expected result:
+
+Jai/JI should be able to gently reference the prior commitment without shame.
+
+---
+
+### Test 2: Completed Action Recognition
+
+1. Create or identify a completed action
+2. Ask Jai/JI how the user is doing
+
+Expected result:
+
+Jai/JI should acknowledge the completed action and connect it to the user’s growth.
+
+---
+
+### Test 3: Repeated Intent Detection
+
+1. Create multiple recent messages or commitments where the user says they will restart or take action
+2. Leave some incomplete
+3. Ask Jai/JI for guidance
+
+Expected result:
+
+Jai/JI should notice the pattern of repeated intent and suggest a smaller, more realistic next step.
+
+---
+
+### Test 4: Emotional WHY Connection
+
+1. Confirm the active goal has an emotional WHY
+2. Ask Jai/JI why the goal matters or what to do when motivation is low
+
+Expected result:
+
+Jai/JI should connect the response back to the user’s emotional WHY.
+
+---
+
+### Test 5: 6–8 Context Records
+
+1. Create or identify at least 8 recent meaningful records
+2. Trigger a Jai/JI response
+3. Confirm the context builder selects 6–8 relevant records
+4. Confirm irrelevant or stale records are excluded
+
+Expected result:
+
+Jai/JI should use the larger context window without dumping or overexplaining it.
+
+---
+
+### Test 6: No Cross-User Leakage
+
+1. Test with two users
+2. Create goals, memories, and commitments for both users
+3. Ask Jai/JI about each user’s progress separately
+
+Expected result:
+
+Each user only receives responses based on their own data.
+
+No cross-user context should appear.
+
+---
+
+## 14. Required Final Report
+
+When complete, provide a build report with these sections:
+
+### A. Files Changed
+
+List every file changed and why.
+
+### B. Context Builder Summary
+
+Explain how Jai/JI’s context is now built.
+
+Include:
+
+1. What data sources are used
+2. How 6–8 records are selected
+3. How records are summarized
+4. How stale or irrelevant records are avoided
+
+### C. Jai/JI Behavior Update
+
+Explain how Jai/JI now uses continuity context.
+
+Include:
+
+1. Prior commitment callbacks
+2. Missed commitment handling
+3. Completed action recognition
+4. Repeated intent detection
+5. Emotional WHY references
+
+### D. Testing Results
+
+Report each required test and whether it passed.
+
+Use this format:
+
+- Test name:
+- Status:
+- Evidence:
+- Issues found:
+- Fix applied if needed:
+
+### E. Remaining Gaps
+
+List anything still incomplete.
+
+Separate into:
+
+1. Critical before launch
+2. Important before beta
+3. Nice to have later
+
+---
+
+## 15. Definition Of Done
+
+This task is complete only when:
+
+1. Jai/JI receives 6–8 recent meaningful accountability context records
+2. Context comes from real stored user data
+3. Jai/JI can reference prior commitments when relevant
+4. Jai/JI can recognize missed commitments without judgment
+5. Jai/JI can recognize completed actions
+6. Jai/JI can identify repeated intent patterns
+7. Jai/JI can connect responses to the emotional WHY
+8. Context remains user-specific with no cross-user leakage
+9. The chat remains efficient and does not send huge raw logs
+10. The final report clearly proves what changed and what passed testing
+
+The goal is not more memory for the sake of memory.
+
+The goal is continuity, integrity, and personal accountability.
+
+Jai/JI should feel like the user is not starting over every time they open the chat.
+
+Build this carefully.
