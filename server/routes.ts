@@ -2678,6 +2678,67 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Stripe Checkout ───
+  // Requires: STRIPE_SECRET_KEY, STRIPE_PRICE_ID, APP_BASE_URL (optional)
+  //
+  // POST /api/users/:userId/stripe/create-checkout
+  //   Creates a Stripe Checkout Session for Premium upgrade.
+  //   Returns { url } — frontend redirects the browser to this URL.
+  //
+  // GET /api/stripe/config
+  //   Returns { configured: boolean } so the frontend can show/hide the upgrade CTA gracefully.
+
+  app.get("/api/stripe/config", (_req, res) => {
+    const configured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
+    return res.json({ configured });
+  });
+
+  app.post("/api/users/:userId/stripe/create-checkout", async (req, res) => {
+    const userId = req.params.userId;
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const priceId = process.env.STRIPE_PRICE_ID;
+
+    if (!stripeKey || !priceId) {
+      console.warn(
+        "[CONFIG_WARNING] Stripe checkout requested but STRIPE_SECRET_KEY or STRIPE_PRICE_ID is not set. " +
+        "Set these environment variables to enable real payment flows."
+      );
+      return res.status(503).json({
+        message: "Payment processing is not configured. Please contact support.",
+        configError: true,
+      });
+    }
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // Dynamic import avoids bundling Stripe in non-payment code paths
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-04-30.basil" } as any);
+
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: user.email,
+        client_reference_id: userId,
+        metadata: { userId },
+        success_url: `${baseUrl}/chat?upgraded=1`,
+        cancel_url: `${baseUrl}/profile`,
+      });
+
+      console.log(`[STRIPE] Checkout session created for user ${userId.slice(0, 8)}***`);
+      return res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[STRIPE] create-checkout error:", err?.message || err);
+      return res.status(500).json({ message: "Could not create checkout session. Please try again." });
+    }
+  });
+
   // ─── Store Receipt Validation (Apple / Google) ───
   // These endpoints are ready to plug in native app store receipt validation.
   // The native app sends a receipt, the server validates with the store,

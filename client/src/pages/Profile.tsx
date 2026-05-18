@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles } from "lucide-react";
+import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
@@ -53,6 +53,28 @@ export default function Profile() {
   const [privateMode, setPrivateMode] = useState(() => {
     return localStorage.getItem("pref_private_mode") === "true";
   });
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
+  }, []);
+
+  const handleUpgrade = async () => {
+    if (!userId) return;
+    setCheckoutError(null);
+    setCheckoutLoading(true);
+    try {
+      const { url } = await api.createStripeCheckout(userId);
+      window.location.href = url;
+    } catch (err: any) {
+      setCheckoutError(err.message?.includes("not configured")
+        ? "Payment processing is not yet available. Please check back soon."
+        : (err.message || "Could not start checkout. Please try again."));
+      setCheckoutLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -69,7 +91,11 @@ export default function Profile() {
   const heartbeatScores = (assessment?.heartbeatScores as Record<string, number>) || {};
 
   const badge = user.subscriptionBadge || "Lite";
-  const isPremium = user.subscriptionTier === "premium";
+  const subscriptionState = user.subscriptionState as string | undefined;
+  // Only hide the upgrade CTA for users who have actively paid (not trial).
+  // PREMIUM_TRIAL_ACTIVE users haven't paid yet — they should still see the upgrade section.
+  const PAID_STATES = ["PREMIUM_ACTIVE", "PREMIUM_GRACE_PERIOD", "CANCELED_PENDING_EXPIRATION", "PAYMENT_FAILED"];
+  const isPremium = PAID_STATES.includes(subscriptionState ?? "");
   const trialDays = user.trialDaysRemaining;
 
   return (
@@ -237,14 +263,41 @@ export default function Profile() {
                 </p>
               </div>
             </div>
-            <Button
-              className="mt-4 w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 text-sm font-semibold"
-              onClick={() => setLocation("/chat")}
-              data-testid="button-upgrade-cta"
-            >
-              <Crown className="w-4 h-4 mr-2" />
-              Learn About Premium
-            </Button>
+
+            {checkoutError && (
+              <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700">{checkoutError}</p>
+              </div>
+            )}
+
+            {stripeConfigured === false && !checkoutError && (
+              <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">Payment processing is coming soon. Check back shortly.</p>
+              </div>
+            )}
+
+            {stripeConfigured !== false && (
+              <Button
+                className="mt-4 w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl h-10 text-sm font-semibold disabled:opacity-60"
+                onClick={handleUpgrade}
+                disabled={checkoutLoading}
+                data-testid="button-upgrade-cta"
+              >
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Starting checkout…
+                  </>
+                ) : (
+                  <>
+                    <Crown className="w-4 h-4 mr-2" />
+                    Upgrade to Premium
+                  </>
+                )}
+              </Button>
+            )}
           </section>
         )}
 

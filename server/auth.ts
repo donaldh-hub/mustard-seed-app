@@ -4,7 +4,68 @@ import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
+import { Resend } from "resend";
 import { storage, pool } from "./storage";
+
+/**
+ * sendPasswordResetEmail — sends a reset link via Resend.
+ * If RESEND_API_KEY is not configured, logs a clear config warning
+ * and returns false (caller falls through to the safe generic response).
+ */
+async function sendPasswordResetEmail(
+  toEmail: string,
+  resetUrl: string
+): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn(
+      "[CONFIG_WARNING] RESEND_API_KEY is not set. " +
+      "Password reset emails will not be delivered. " +
+      "Set RESEND_API_KEY to enable real email delivery."
+    );
+    return false;
+  }
+
+  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseedapp.com";
+
+  try {
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from: fromEmail,
+      to: toEmail,
+      subject: "Reset your Mustard Seed password",
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+          <h2 style="color: #1c1917; font-size: 20px; margin-bottom: 8px;">Reset your password</h2>
+          <p style="color: #57534e; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
+            Someone requested a password reset for your Mustard Seed account.
+            If this was you, click the button below. This link expires in 1 hour.
+          </p>
+          <a href="${resetUrl}"
+            style="display: inline-block; background: #E8B828; color: #1c1917; font-weight: 700;
+                   padding: 12px 28px; border-radius: 9999px; text-decoration: none; font-size: 15px;">
+            Reset Password
+          </a>
+          <p style="color: #a8a29e; font-size: 13px; margin-top: 24px; line-height: 1.5;">
+            If you didn't request this, you can safely ignore this email.<br/>
+            This link will expire in 1 hour.
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error("[AUTH] Resend email error:", error.name, error.message);
+      return false;
+    }
+
+    console.log(`[AUTH] Password reset email sent to ${toEmail.replace(/^(.{2}).*(@.*)$/, "$1***$2")}`);
+    return true;
+  } catch (err: any) {
+    console.error("[AUTH] Resend unexpected error:", err?.message || err);
+    return false;
+  }
+}
 
 const PgSession = connectPgSimple(session);
 
@@ -14,8 +75,33 @@ declare module "express-session" {
   }
 }
 
+// DEV_FALLBACK_SECRET is intentionally weak — only allowed in non-production.
+const DEV_FALLBACK_SECRET = "mustard-seed-dev-only-not-for-production";
+
 export function setupSession(app: Express) {
-  const sessionSecret = process.env.SESSION_SECRET || "mustard-seed-dev-secret-change-in-production";
+  const isProd = process.env.NODE_ENV === "production";
+  const provided = process.env.SESSION_SECRET;
+
+  if (isProd && !provided) {
+    // Hard stop: running in production without a real session secret is unsafe.
+    // Using a known default allows session forgery.
+    console.error(
+      "[CONFIG_ERROR] SESSION_SECRET environment variable is not set. " +
+      "The application cannot start safely in production without a real session secret. " +
+      "Set SESSION_SECRET to a cryptographically random string of at least 32 characters."
+    );
+    process.exit(1);
+  }
+
+  if (!isProd && !provided) {
+    console.warn(
+      "[CONFIG_WARNING] SESSION_SECRET is not set. " +
+      "Using a development fallback — this is NOT safe for production. " +
+      "Set SESSION_SECRET before deploying."
+    );
+  }
+
+  const sessionSecret = provided || DEV_FALLBACK_SECRET;
 
   app.use(
     session({
@@ -30,7 +116,7 @@ export function setupSession(app: Express) {
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isProd,
         sameSite: "lax",
       },
     })
@@ -273,13 +359,27 @@ export function registerAuthRoutes(app: Express) {
       await storage.createPasswordResetToken(user.id, token, expiresAt);
       await storage.logAuthEvent(user.id, "password_reset_requested", "email");
 
-      const resetUrl = `${req.protocol}://${req.get("host")}/auth?reset=${token}`;
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const resetUrl = `${baseUrl}/auth?reset=${token}`;
+      // Relative path — works regardless of public hostname; frontend navigates relative to its own origin.
+      const devResetPath = `/auth?reset=${token}`;
 
-      console.log(`[AUTH] Password reset requested for ${email}. Reset URL: ${resetUrl}`);
+      // Attempt real email delivery via Resend. Failure is logged server-side
+      // but never exposed to the client (safe generic response in all cases).
+      const emailSent = await sendPasswordResetEmail(email.toLowerCase().trim(), resetUrl);
+
+      if (!emailSent && process.env.NODE_ENV !== "production") {
+        // Dev convenience: surface relative reset path in the response so developers can
+        // test the reset flow without a live email provider.
+        console.log(`[AUTH_DEV] Reset URL for ${email}: ${resetUrl}`);
+        return res.json({
+          message: "If an account exists with this email, a reset link has been sent.",
+          devResetUrl: devResetPath,
+        });
+      }
 
       return res.json({
         message: "If an account exists with this email, a reset link has been sent.",
-        ...(process.env.NODE_ENV !== "production" ? { devResetUrl: resetUrl } : {}),
       });
     } catch (err) {
       console.error("[AUTH] forgot-password error:", err);

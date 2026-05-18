@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Crown, Sparkles, X } from "lucide-react";
+import { Crown, Sparkles, X, Loader2, AlertCircle } from "lucide-react";
+import { api } from "@/lib/api";
+import { useStore } from "@/lib/store";
 
 const FEATURE_MESSAGES: Record<string, { title: string; description: string }> = {
   dual_goals: {
@@ -41,7 +44,36 @@ export function UpgradePrompt({
   show: boolean;
   onClose: () => void;
 }) {
+  const userId = useStore((s) => s.userId);
   const featureInfo = FEATURE_MESSAGES[feature] || { title: "Premium Feature", description: "This feature is available with Premium." };
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (show) {
+      setError(null);
+      api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
+    }
+  }, [show]);
+
+  const handleUpgrade = async () => {
+    if (!userId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const { url } = await api.createStripeCheckout(userId);
+      window.location.href = url;
+    } catch (err: any) {
+      if (err.message?.includes("not configured")) {
+        setError("Payment processing is not yet available. Please check back soon.");
+      } else {
+        setError(err.message || "Could not start checkout. Please try again.");
+      }
+      setLoading(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -83,8 +115,43 @@ export function UpgradePrompt({
               ))}
             </div>
 
-            <button onClick={onClose} className="w-full text-center text-sm text-muted-foreground py-1">
-              Got it
+            {error && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700">{error}</p>
+              </div>
+            )}
+
+            {stripeConfigured === false && !error && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">Payment processing is not yet configured. Please check back soon.</p>
+              </div>
+            )}
+
+            {stripeConfigured !== false && (
+              <button
+                onClick={handleUpgrade}
+                disabled={loading}
+                data-testid="button-upgrade-to-premium"
+                className="w-full h-11 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Starting checkout…
+                  </>
+                ) : (
+                  <>
+                    <Crown className="w-4 h-4" />
+                    Upgrade to Premium
+                  </>
+                )}
+              </button>
+            )}
+
+            <button onClick={onClose} className="w-full text-center text-sm text-muted-foreground py-1" data-testid="button-close-upgrade-prompt-text">
+              Maybe later
             </button>
           </motion.div>
         </motion.div>

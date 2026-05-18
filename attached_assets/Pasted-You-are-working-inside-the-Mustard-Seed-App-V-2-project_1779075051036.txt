@@ -1,0 +1,529 @@
+You are working inside the Mustard Seed App V.2 project.
+
+This task is focused ONLY on securing launch blockers and beta-readiness infrastructure.
+
+Do not redesign the app.
+Do not change the app’s brand language.
+Do not add unrelated features.
+Do not rebuild working systems.
+Do not create fake checkout logic.
+Do not hardcode secrets.
+Do not remove existing Mustard Seed app flows.
+Do not weaken existing Jai/JI memory, assessment, goal, water, calendar, or accountability wiring.
+
+The app currently has a working core accountability loop and an upgraded Jai/JI continuity memory system.
+
+Now we need to secure the production-critical systems that are still incomplete.
+
+---
+
+# 1. Primary Objective
+
+Complete the following launch-blocker infrastructure items:
+
+1. Production-safe SESSION_SECRET handling
+2. Stripe checkout frontend/payment path
+3. Email provider integration for password reset delivery
+4. Google sign-in environment variable/config validation
+
+These are not cosmetic improvements.
+
+These are trust, access, payment, and production-readiness systems.
+
+---
+
+# 2. Current Known Gaps
+
+Based on the latest build report, these are the known remaining blockers:
+
+## Critical before launch
+
+1. SESSION_SECRET environment variable must be set in production
+   - Current fallback uses a dev default
+   - That is not acceptable for production
+
+2. Stripe checkout frontend needs to be built
+   - Backend engine exists
+   - Users currently have no payment path after trial ends
+
+## Important before beta
+
+3. Email delivery provider is needed for password reset emails
+   - Use Resend or SendGrid if the project already has a preference or dependency
+   - Do not fake email delivery
+
+4. GOOGLE_CLIENT_ID environment variable is needed for real Google sign-in
+   - Google OAuth stub exists
+   - Real Google sign-in must validate configuration clearly
+
+---
+
+# 3. Required Work Area A — SESSION_SECRET Production Safety
+
+Audit the current server session configuration.
+
+Find where SESSION_SECRET is used.
+
+Then update the logic so that:
+
+1. In production, the app requires a real SESSION_SECRET environment variable
+2. In development, a safe dev fallback may be allowed only if clearly marked as development-only
+3. The server must not silently use a weak/default secret in production
+4. Startup should clearly report a configuration error if SESSION_SECRET is missing in production
+5. No secret value should ever be logged
+6. No secret should be committed into code
+
+Expected behavior:
+
+- Development:
+  - App can run with a dev fallback if needed
+  - Console warning is acceptable, but do not expose secret values
+
+- Production:
+  - App refuses unsafe session configuration
+  - Missing SESSION_SECRET should trigger a clear startup/config error
+
+Add or update documentation comments if helpful.
+
+Do not break local development.
+
+---
+
+# 4. Required Work Area B — Stripe Checkout Frontend
+
+Audit the existing Stripe backend/payment engine.
+
+Find existing routes, utilities, APIs, or services related to:
+
+1. Stripe checkout
+2. Subscription creation
+3. Trial/lite/premium tiering
+4. Subscription status
+5. Upgrade CTA
+6. Billing routes
+7. Webhooks if present
+
+Build the missing frontend payment path so users can actually upgrade.
+
+The Stripe checkout flow should support:
+
+1. Trial users upgrading to Premium
+2. Lite users upgrading to Premium
+3. Profile page upgrade button
+4. Any existing upgrade CTA
+5. Proper loading state
+6. Proper error state
+7. Redirect to Stripe Checkout using real backend route
+8. Return/cancel URL behavior if backend already supports it
+9. No fake success state
+10. No hardcoded payment success
+
+If Stripe environment variables are missing, the UI should show a clear admin/configuration message, not a broken experience.
+
+Do not expose Stripe secret keys in frontend code.
+
+Only frontend-safe publishable values may be used client-side.
+
+The payment path must be real.
+
+If the backend route already exists, connect to it.
+
+If the backend route is incomplete, complete the minimal real route needed to create a Stripe Checkout session using environment variables.
+
+Required Stripe environment variables may include:
+
+1. STRIPE_SECRET_KEY
+2. STRIPE_PRICE_ID
+3. STRIPE_WEBHOOK_SECRET if webhook handling exists
+4. PUBLIC_STRIPE_PUBLISHABLE_KEY or VITE_STRIPE_PUBLISHABLE_KEY if needed by the frontend
+
+Use the project’s existing conventions.
+
+Do not invent multiple pricing plans unless the app already supports them.
+
+For now, connect the existing Premium upgrade path.
+
+---
+
+# 5. Required Work Area C — Password Reset Email Delivery
+
+Audit the current forgot password / reset password flow.
+
+Find:
+
+1. Forgot password form
+2. Reset password route
+3. Token generation
+4. Token expiration
+5. Email sending stub if present
+6. User lookup logic
+7. Security behavior
+
+Implement or complete real password reset email delivery using the project’s existing preferred provider if present.
+
+If no provider is already chosen, use a clean abstraction that supports Resend first, with clear environment variable requirements.
+
+Required behavior:
+
+1. User clicks “Forgot password?”
+2. User submits email
+3. App generates secure reset token
+4. Token is stored safely with expiration
+5. Email is sent through provider
+6. Email contains reset link
+7. User can set a new password from reset link
+8. Token cannot be reused after successful reset
+9. Token expires correctly
+10. Response should not reveal whether email exists in the system
+11. Errors should be handled clearly
+12. No fake “email sent” backend-only stub unless provider config is missing
+
+Security rules:
+
+1. Do not log reset tokens
+2. Do not expose tokens except in the emailed reset link
+3. Do not reveal account existence
+4. Hash reset tokens in storage if feasible within current architecture
+5. Use expiration timestamps
+6. Invalidate token after use
+
+Environment variables may include:
+
+1. RESEND_API_KEY
+2. FROM_EMAIL
+3. APP_BASE_URL
+
+If Resend is not available or the project already uses SendGrid, use the existing project convention.
+
+If email provider variables are missing, the app should still behave safely:
+
+1. User-facing message should remain generic
+2. Server should clearly report missing provider config in logs without exposing secrets
+3. Do not pretend email was truly delivered in the build report
+
+---
+
+# 6. Required Work Area D — Google Sign-In Configuration Validation
+
+Audit the existing Google OAuth or Google sign-in stub.
+
+Find where GOOGLE_CLIENT_ID is referenced or should be referenced.
+
+Update the system so that:
+
+1. Google sign-in only appears as enabled if GOOGLE_CLIENT_ID is configured
+2. If GOOGLE_CLIENT_ID is missing, Google sign-in should be hidden, disabled, or show a clear configuration-safe message
+3. The app should not present Google sign-in as fully functional if it is only a stub
+4. No fake Google login success
+5. No hardcoded client ID
+6. No secrets exposed
+
+If the project already has a frontend Google login button, make sure it checks configuration before presenting itself as functional.
+
+If the backend requires additional Google OAuth variables, document them in the final report.
+
+Possible environment variables:
+
+1. GOOGLE_CLIENT_ID
+2. GOOGLE_CLIENT_SECRET if server-side OAuth is used
+3. GOOGLE_CALLBACK_URL if needed
+
+Do not overbuild Google OAuth beyond the existing architecture.
+
+The purpose is to remove fake/stub confusion and ensure real configuration validation.
+
+---
+
+# 7. Environment Variable Audit
+
+Create or update an environment/config validation layer if the project already has one.
+
+The app should clearly classify environment variables as:
+
+## Required for production
+
+1. SESSION_SECRET
+2. DATABASE_URL if applicable
+3. STRIPE_SECRET_KEY
+4. STRIPE_PRICE_ID
+5. APP_BASE_URL
+6. Email provider key if password reset is enabled
+
+## Required for optional features
+
+1. GOOGLE_CLIENT_ID
+2. GOOGLE_CLIENT_SECRET if needed
+3. STRIPE_WEBHOOK_SECRET if webhook handling is active
+4. RESEND_API_KEY or SENDGRID_API_KEY
+
+## Development-only allowed fallback
+
+1. SESSION_SECRET only in dev mode, if necessary
+
+Do not commit real values.
+
+Do not print real values.
+
+Do not expose secrets in the client bundle.
+
+---
+
+# 8. UI Requirements
+
+Update only the necessary UI elements for:
+
+1. Upgrade / payment path
+2. Forgot password flow
+3. Google sign-in availability
+4. Clear loading/error states
+
+Preserve existing Mustard Seed visual style.
+
+No redesign.
+
+No layout overhaul.
+
+No new branding.
+
+Required UI behavior:
+
+## Upgrade CTA
+
+1. Visible where already intended
+2. Starts real checkout flow
+3. Shows loading while creating checkout session
+4. Shows clear error if configuration is missing
+5. Does not fake premium upgrade
+
+## Forgot Password
+
+1. User can request reset
+2. User sees safe confirmation message
+3. Reset link page works
+4. New password submission works
+5. Expired/invalid token handled clearly
+
+## Google Sign-In
+
+1. If configured, works according to current architecture
+2. If not configured, does not pretend to work
+3. User should not hit a dead button
+
+---
+
+# 9. Testing Requirements
+
+Run tests or manual verification for each area.
+
+## Test A — SESSION_SECRET
+
+Test development behavior:
+
+1. Run app without SESSION_SECRET in development
+2. Confirm app can run only with dev-safe fallback if current project needs it
+3. Confirm warning does not expose secret value
+
+Test production behavior:
+
+1. Simulate NODE_ENV=production without SESSION_SECRET
+2. Confirm app refuses unsafe startup or throws clear configuration error
+3. Confirm no secret value is logged
+
+---
+
+## Test B — Stripe Checkout
+
+Test with missing Stripe config:
+
+1. Remove or simulate missing Stripe env vars
+2. Click upgrade CTA
+3. Confirm app shows safe configuration error
+4. Confirm no fake success
+
+Test with configured Stripe variables if available:
+
+1. Click upgrade CTA
+2. Confirm backend creates checkout session
+3. Confirm frontend redirects to Stripe Checkout
+4. Confirm cancel/return path works if implemented
+5. Confirm subscription/tier logic is not faked
+
+If real Stripe variables are not available, report that checkout route is implemented but live redirect requires env config.
+
+---
+
+## Test C — Password Reset
+
+Test request flow:
+
+1. Click forgot password
+2. Submit email
+3. Confirm safe generic message appears
+4. Confirm token is generated securely
+5. Confirm email sending is attempted only when provider config exists
+
+Test reset flow:
+
+1. Use generated reset link in dev/test mode if safe and available
+2. Set new password
+3. Confirm token cannot be reused
+4. Confirm expired/invalid token fails cleanly
+5. Confirm user can log in with new password
+
+If email provider variables are missing, report exactly what is needed.
+
+Do not claim email delivery works unless provider delivery was actually configured and tested.
+
+---
+
+## Test D — Google Sign-In
+
+Test missing config:
+
+1. Run without GOOGLE_CLIENT_ID
+2. Confirm Google sign-in is hidden, disabled, or clearly marked unavailable
+3. Confirm no broken button remains
+
+Test configured behavior if variables are available:
+
+1. Confirm Google sign-in initializes
+2. Confirm login flow reaches expected provider or route
+3. Confirm errors are handled cleanly
+
+If Google credentials are not available, report configuration required.
+
+---
+
+# 10. Regression Testing
+
+After completing the infrastructure work, confirm the core app still works:
+
+1. Register/login with email
+2. Complete assessment
+3. Create goal with emotional WHY
+4. Chat with Jai/JI
+5. Confirm Jai/JI continuity still receives context
+6. Record progress
+7. Confirm memory entry is created
+8. Confirm water is awarded
+9. Confirm calendar/date still works
+10. Refresh and confirm data persists
+
+Do not break the existing accountability loop.
+
+This is mandatory.
+
+---
+
+# 11. Required Final Build Report
+
+When finished, provide a detailed build report with these sections:
+
+## A. Files Changed
+
+List every file changed and why.
+
+## B. SESSION_SECRET Production Safety
+
+Report:
+
+1. Where session config was updated
+2. How dev fallback works
+3. How production missing secret is handled
+4. Test result
+5. Remaining setup needed
+
+## C. Stripe Checkout Path
+
+Report:
+
+1. Existing backend/payment code found
+2. Frontend upgrade buttons connected
+3. Checkout session route status
+4. Required Stripe environment variables
+5. What was tested
+6. Whether live checkout redirect was verified
+7. Any remaining Stripe gaps
+
+## D. Password Reset Email Delivery
+
+Report:
+
+1. Provider used or abstraction created
+2. Token generation/storage behavior
+3. Token expiration behavior
+4. Email delivery behavior
+5. Required environment variables
+6. What was tested
+7. Any remaining email gaps
+
+## E. Google Sign-In Configuration
+
+Report:
+
+1. Where Google config is checked
+2. What happens when GOOGLE_CLIENT_ID is missing
+3. What happens when it is present
+4. Required variables
+5. What was tested
+6. Any remaining Google OAuth gaps
+
+## F. Environment Variable Checklist
+
+Provide a clear list:
+
+### Required for production
+
+### Required for payment
+
+### Required for password reset
+
+### Required for Google sign-in
+
+### Optional/development only
+
+Do not include real secret values.
+
+## G. Regression Test Results
+
+Report whether the existing Mustard Seed core loop still works:
+
+1. Auth
+2. Assessment
+3. Goal with WHY
+4. Jai/JI continuity
+5. Progress
+6. Memory
+7. Water
+8. Calendar
+9. Persistence
+
+## H. Remaining Gaps
+
+Separate into:
+
+1. Critical before launch
+2. Important before beta
+3. Nice to have later
+
+---
+
+# 12. Definition Of Done
+
+This task is complete only when:
+
+1. SESSION_SECRET is production-safe
+2. Stripe upgrade path is connected to a real checkout flow or clearly blocked by missing env config
+3. Password reset email flow is secure and provider-ready
+4. Google sign-in no longer behaves like a fake/stub feature
+5. Environment variables are clearly validated and documented
+6. Missing config creates clear errors, not fake success
+7. No secrets are committed or exposed
+8. Existing Mustard Seed core accountability loop still works after changes
+9. Final report clearly proves what was changed, tested, and what still needs external configuration
+
+The goal is to secure what already works.
+
+Do not expand the product.
+
+Harden the foundation.

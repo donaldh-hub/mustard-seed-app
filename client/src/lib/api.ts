@@ -90,4 +90,8 @@ export const api = {
   getWeeklyReviewHistory: (userId: string) => fetchJson<any[]>(`/users/${userId}/weekly-review/history`),
 
   getSubscription: (userId: string) => fetchJson<any>(`/users/${userId}/subscription`),
+
+  getStripeConfig: () => fetchJson<{ configured: boolean }>("/stripe/config"),
+  createStripeCheckout: (userId: string) =>
+    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST" }),
 };
