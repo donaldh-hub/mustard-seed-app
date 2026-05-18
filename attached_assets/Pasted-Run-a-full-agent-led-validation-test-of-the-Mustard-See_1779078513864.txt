@@ -1,0 +1,173 @@
+Run a full agent-led validation test of the Mustard Seed app’s goal-neutral accountability behavior.
+
+This is not a new feature build unless a tested behavior fails.
+
+The purpose is to prove that the current app correctly supports multiple user goal types without defaulting to fitness, workout, gym, weight loss, or exercise language unless the user’s stated goal is actually fitness-related.
+
+TESTING REQUIREMENTS:
+
+1. Test the full app flow using at least five different goal types:
+
+A. Fitness / walking goal
+Example goal:
+“I want to walk 15 minutes a day so I can rebuild my energy and consistency.”
+
+B. Gardening goal
+Example goal:
+“I want to start a small vegetable garden and keep it alive by watering it and preparing the soil.”
+
+C. Writing goal
+Example goal:
+“I want to write one page a day so I can finish the first draft of my book.”
+
+D. Home discipline / cleaning goal
+Example goal:
+“I want to rebuild order in my home by cleaning and organizing one small area each day.”
+
+E. Business / launch goal
+Example goal:
+“I want to launch my first simple offer and take one action each day toward publishing it.”
+
+2. For each goal type, test the following user flow:
+
+- Create the goal
+- Confirm the goal appears correctly in the app
+- Trigger Jai’s first response
+- Submit a text-based action update
+- Upload or simulate a photo/proof update where supported
+- Confirm the action is evaluated against the user’s stated goal
+- Confirm water/reward credit is awarded only when the action supports the goal
+- Confirm memory/log entry is created with the correct date
+- Confirm progress view updates correctly
+- Confirm calendar/home/progress/water/seed-growth behavior remains intact
+
+3. Test goal-specific aligned actions.
+
+Use examples like:
+
+Fitness:
+“Walked 15 minutes after work.”
+
+Gardening:
+“Bought fertilizer and seeds.”
+“Watered the seedlings.”
+
+Writing:
+“Finished one paragraph.”
+“Outlined the next chapter.”
+
+Cleaning:
+“Organized the kitchen counter.”
+“Cleaned one drawer.”
+
+Business:
+“Drafted the offer headline.”
+“Published the landing page draft.”
+
+4. Test irrelevant or unclear proof.
+
+For each non-fitness goal, submit at least one unclear or unrelated action/photo description.
+
+Examples:
+
+Gardening goal:
+“I watched TV for two hours.”
+
+Writing goal:
+“I bought shoes.”
+
+Cleaning goal:
+“I took a random selfie.”
+
+Business goal:
+“I went to the gym.”
+
+Expected behavior:
+Jai should not automatically award full progress/water unless the user connects the action to the stated goal.
+
+Jai should ask a clarifying question using goal-neutral language such as:
+“Help me connect this to your goal.”
+“Does this support the promise behind your goal?”
+“What part of this action moved your goal forward?”
+
+Do not use default gym, workout, exercise, weight-loss, or fitness language unless the goal is fitness-related.
+
+5. Confirm that Jai’s language changes by goal type.
+
+The same accountability philosophy should apply across all goals, but the words should fit the user’s actual goal.
+
+Examples:
+
+Gardening language should mention seed, soil, watering, planting, preparation, consistency, care, or growth where appropriate.
+
+Writing language should mention draft, page, paragraph, outline, revision, consistency, or progress where appropriate.
+
+Cleaning/home discipline language should mention order, space, reset, small area, organization, or rebuilding rhythm where appropriate.
+
+Business/launch language should mention offer, draft, launch, publishing, customer, next step, or execution where appropriate.
+
+Fitness language should only appear when the user’s stated goal is fitness, walking, movement, health, or training-related.
+
+6. Confirm the following regression areas remain intact:
+
+- Sign in / auth screen still loads
+- Welcome flow still works
+- Orientation flow still works
+- Goal creation still works
+- Jai chat still works
+- Photo/proof handling still works
+- Water/reward logic still works
+- Seed growth visual still works
+- Calendar entries still work
+- Memory/log entries still work
+- Progress screen still works
+- Home screen still works
+- Lite/premium logic is not broken
+- No blank pages
+- No broken routes
+- No console errors
+- No TypeScript errors
+- No build errors
+
+7. Produce a clear validation report with this structure:
+
+A. Summary Result
+State whether the app passed, partially passed, or failed goal-neutral validation.
+
+B. Test Matrix
+Include each tested goal type, submitted action, expected behavior, actual behavior, and pass/fail status.
+
+C. Jai Language Audit
+List examples of Jai’s responses for each goal type.
+Confirm whether Jai avoided fitness assumptions.
+
+D. Water/Reward Audit
+Confirm when water was awarded and when it was correctly withheld or clarification was requested.
+
+E. Memory/Progress Audit
+Confirm whether goal actions were saved to memory/logs with the correct date and reflected in progress.
+
+F. Regression Audit
+Confirm whether existing app systems stayed intact.
+
+G. Issues Found
+List every issue found with file locations and likely cause.
+
+H. Fixes Applied
+Only if needed, apply targeted fixes.
+Do not redesign the app.
+Do not rewrite unrelated systems.
+Do not change the app’s visual identity.
+Do not remove existing working behavior.
+
+I. Final Readiness Score
+Give a percentage estimate for goal-neutral readiness and launch-readiness based on the tested behavior.
+
+IMPORTANT:
+This is a validation-and-hardening pass.
+
+Do not build new features unless a test fails.
+
+If a test fails, fix only the broken behavior and retest that exact flow.
+
+The final output must clearly prove whether Mustard Seed behaves as a universal digital accountability partner for any meaningful goal, not a fitness app with broader wording.
