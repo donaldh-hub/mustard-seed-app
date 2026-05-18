@@ -77,12 +77,22 @@ export default function Welcome() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7, duration: 0.5 }}
-          className="text-base text-stone-500 leading-relaxed max-w-xs mb-10"
+          className="text-base text-stone-500 leading-relaxed max-w-xs mb-4"
           data-testid="text-supporting"
         >
           You'll answer a few quick questions so I can understand where you are.
           <br />
           From there, we build.
+        </motion.p>
+
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.85, duration: 0.5 }}
+          className="text-sm text-stone-400 leading-relaxed max-w-xs mb-10 text-center"
+          data-testid="text-goal-neutral"
+        >
+          Whether you're rebuilding fitness, starting a garden, writing a book, or rebuilding discipline — this app is for your goal.
         </motion.p>
       </div>
 

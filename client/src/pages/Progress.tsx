@@ -631,7 +631,7 @@ function FormOverlay({
             {isTargeted ? "Goal Description" : "Identity Statement (\"I am becoming...\")"}
           </label>
           <Input
-            placeholder={isTargeted ? "e.g. Lose 20 pounds in 90 days" : "e.g. I am becoming disciplined"}
+            placeholder={isTargeted ? "e.g. Write 500 words 3x a week, Start a small garden, Walk 15 min daily" : "e.g. I am becoming consistent, I am becoming a disciplined creator"}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             data-testid="input-goal-title"

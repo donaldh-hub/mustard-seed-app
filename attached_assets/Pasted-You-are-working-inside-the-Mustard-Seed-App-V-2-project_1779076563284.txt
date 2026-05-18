@@ -1,0 +1,775 @@
+You are working inside the Mustard Seed App V.2 project.
+
+This task is focused on permanently locking the app’s positioning, language, AI behavior, reward logic, and photo-validation framing around one core truth:
+
+Mustard Seed is NOT a fitness app.
+
+Mustard Seed is a digital accountability partner for any person pursuing any meaningful goal.
+
+Fitness may be used as one example, but the system must never become fitness-specific.
+
+Do not redesign the app.
+Do not remove existing working systems.
+Do not break the current Jai/JI memory system.
+Do not break the assessment, goal, water, seed, calendar, memory, or progress wiring.
+Do not create fake demo logic.
+Do not make the app gym-centered.
+Do not make photo validation only look for gym or fitness evidence.
+
+The purpose of this task is to wire the correct language and positioning permanently into the app so every user understands that Mustard Seed helps them pursue their own goal, whatever that goal is.
+
+---
+
+# 1. Core Positioning Lock
+
+The app’s permanent positioning is:
+
+“Mustard Seed is a digital accountability partner that helps users take aligned action toward the goals they say matter.”
+
+The app is designed for any meaningful goal, including but not limited to:
+
+1. Fitness
+2. Gardening
+3. Writing
+4. Business
+5. Budgeting
+6. Cleaning
+7. Studying
+8. Parenting
+9. Faith
+10. Career growth
+11. Creative projects
+12. Health habits
+13. Home projects
+14. Relationship goals
+15. Personal discipline
+
+Fitness is only one example.
+
+Do not allow the app language, AI behavior, reward logic, or photo validation logic to imply that the app is mainly for exercise, workouts, gyms, weight loss, running, or strength training.
+
+---
+
+# 2. Permanent Product Rule
+
+Wire this product rule into app copy, Jai/JI behavior, and internal guidance:
+
+“Mustard Seed does not reward workouts. It rewards aligned action.”
+
+Aligned action means the user took a real step toward the goal they created and the WHY they attached to it.
+
+Examples:
+
+1. If the goal is fitness, a gym photo may count.
+2. If the goal is gardening, fertilizer in the cart may count.
+3. If the goal is writing, a draft page may count.
+4. If the goal is budgeting, a completed budget sheet may count.
+5. If the goal is business, product photos or a website update may count.
+6. If the goal is studying, notes or completed practice may count.
+7. If the goal is cleaning, one cleared room or organized drawer may count.
+8. If the goal is faith, a journal entry or study plan may count.
+
+The question is not:
+
+“Did this user work out?”
+
+The question is:
+
+“Did this user take a real step toward what they said mattered?”
+
+---
+
+# 3. Language Replacement Rules
+
+Audit the entire app for language that sounds fitness-specific or gym-specific unless it is clearly being used only as an example.
+
+Replace narrow language with goal-neutral Mustard Seed language.
+
+Use these replacements as guidance:
+
+## Replace:
+
+“workout”
+
+## With:
+
+“action”
+“step”
+“promise”
+“progress”
+“aligned action”
+
+---
+
+## Replace:
+
+“gym progress”
+
+## With:
+
+“goal progress”
+“growth progress”
+“progress toward your promise”
+
+---
+
+## Replace:
+
+“fitness streak”
+
+## With:
+
+“follow-through streak”
+“consistency streak”
+
+---
+
+## Replace:
+
+“exercise proof”
+
+## With:
+
+“proof of progress”
+“evidence of action”
+“progress proof”
+
+---
+
+## Replace:
+
+“upload your workout photo”
+
+## With:
+
+“upload proof of progress”
+“upload a photo that shows your step”
+“add evidence of your action”
+
+---
+
+## Replace:
+
+“Did you train today?”
+
+## With:
+
+“Did you take the next honest step today?”
+
+---
+
+## Replace:
+
+“Get back to the gym.”
+
+## With:
+
+“Return to the promise.”
+
+---
+
+## Replace:
+
+“Complete your workout.”
+
+## With:
+
+“Complete your next step.”
+
+---
+
+## Replace:
+
+“Fitness goal”
+
+## With:
+
+“Growth goal”
+“Active goal”
+“Targeted goal”
+“Goal”
+
+---
+
+Preserve fitness examples only if they are listed among several other examples.
+
+The app should not feel like a gym app with other goals forced inside it.
+
+---
+
+# 4. Core App Language To Add Where Appropriate
+
+Add or reinforce this language in onboarding, orientation, goal creation, progress/photo upload, and Jai/JI instructions where it naturally fits.
+
+Use this exact language where appropriate:
+
+“Mustard Seed is not here to judge the size of your goal. It is here to help you stay connected to the promise behind it.”
+
+“Your seed grows when you take aligned action.”
+
+“Aligned action is any honest step that supports the goal and WHY you chose.”
+
+“Some users are rebuilding fitness. Some are starting a garden. Some are writing a book. Some are rebuilding discipline in daily life. The system is the same: name the goal, remember the WHY, take the next honest step, and water the seed.”
+
+“Proof of progress should match the goal. A gym photo can count for a fitness goal. Fertilizer in the cart can count for a gardening goal. A draft page can count for a writing goal. The app is looking for movement toward the promise, not one specific kind of activity.”
+
+“Mustard Seed does not reward workouts. It rewards aligned action.”
+
+Do not overuse these phrases.
+
+Place them where they clarify the product.
+
+---
+
+# 5. Onboarding / Orientation Update
+
+Audit the welcome, onboarding, and orientation screens.
+
+Ensure the early user experience clearly communicates:
+
+1. This is a goal accountability app
+2. The app works for any meaningful goal
+3. The Five Heartbeats apply to all growth areas
+4. Jai/JI is an accountability partner, not a fitness coach
+5. Water is earned through aligned action
+6. Photo proof should match the user’s selected goal
+7. Small steps count when they are honest and connected to the user’s WHY
+
+The user should understand within the first few screens:
+
+“This app is for my goal, not just somebody trying to get back in shape.”
+
+If there is an orientation explanation of the Five Heartbeats, make sure each Heartbeat uses universal language.
+
+The Five Heartbeats are:
+
+1. Vision & Why
+2. Small Steps + Consistency
+3. Mindset over Method
+4. Feedback & Adaptation
+5. Courageous Action
+
+Do not describe these as fitness principles.
+
+Describe them as growth principles.
+
+---
+
+# 6. Goal Creation Update
+
+Audit the goal creation flow.
+
+Make sure users are invited to create any kind of meaningful goal.
+
+Goal examples should include a balanced mix.
+
+Use examples like:
+
+1. “Start a garden”
+2. “Write 500 words three times a week”
+3. “Walk for 15 minutes after work”
+4. “Build a simple monthly budget”
+5. “Declutter one room”
+6. “Study for my certification”
+7. “Launch a small business product”
+8. “Reconnect with my morning routine”
+
+Avoid making the default examples mostly fitness-based.
+
+The goal creation form should ask:
+
+1. What are you trying to grow?
+2. Why does this matter to you?
+3. What is the smallest honest step you can take?
+4. What kind of proof might show progress for this goal?
+
+If the current form already has working fields, do not break them.
+
+Only adjust labels, helper text, examples, and Jai/JI interpretation rules as needed.
+
+---
+
+# 7. Photo Upload / Vision Analysis Positioning
+
+Audit the photo upload and vision analysis language.
+
+The photo system must be goal-aware.
+
+It must not assume photos are gym-related.
+
+Update the instruction logic so photo validation asks:
+
+“Does this photo reasonably support the user’s stated goal, WHY, or next step?”
+
+Not:
+
+“Does this photo show fitness activity?”
+
+Examples of valid photo evidence by goal type:
+
+## Fitness
+
+1. Gym equipment
+2. Walking trail
+3. Workout setup
+4. Meal prep
+5. Running shoes
+6. Completed activity screenshot
+
+## Gardening
+
+1. Seeds
+2. Soil
+3. Fertilizer
+4. Gardening tools
+5. Watering can
+6. Planted bed
+7. Sprout growth
+8. Weeds cleared
+
+## Writing
+
+1. Draft page
+2. Notebook
+3. Laptop writing session
+4. Outline
+5. Word count
+6. Writing desk setup
+
+## Budgeting
+
+1. Budget sheet
+2. Expense list
+3. Paid bill confirmation
+4. Savings tracker
+5. Envelope system
+6. Financial planning notes
+
+## Business
+
+1. Product sample
+2. Order packaging
+3. Website update
+4. Logo draft
+5. Inventory organization
+6. Customer response work
+
+## Cleaning / Home
+
+1. Before/after room progress
+2. Organized drawer
+3. Trash bags removed
+4. Supplies gathered
+5. Laundry folded
+6. Workspace cleared
+
+The app should reward evidence of aligned movement, not one category of movement.
+
+---
+
+# 8. Water / Seed Reward Logic Language
+
+Audit the reward/water system language.
+
+Make sure water is described as being earned through:
+
+1. Aligned action
+2. Follow-through
+3. Honest progress
+4. Returning after a missed step
+5. Meaningful effort
+6. Goal-connected proof
+7. Reflection and adaptation
+
+Do not describe water as only coming from workouts, gym visits, exercise sessions, or physical activity.
+
+If the reward engine has internal classifications, preserve the working logic, but make sure labels and explanations remain goal-neutral.
+
+The user-facing logic should be:
+
+1. User chooses a goal
+2. User connects it to a WHY
+3. User takes an honest step
+4. User records or proves that step
+5. The system evaluates whether the step aligns with the goal
+6. If valid, the seed receives water
+
+The seed grows from aligned action.
+
+---
+
+# 9. Jai/JI System Prompt Update
+
+Audit Jai/JI’s system prompt and continuity context instructions.
+
+Add or reinforce this core instruction:
+
+“Jai/JI is a goal accountability partner, not a fitness coach. Jai/JI must adapt to the user’s chosen goal and avoid assuming that progress means exercise, workouts, gym attendance, weight loss, or fitness. When referencing examples, Jai/JI may use fitness only if the user’s goal is fitness-related or if it is clearly one example among many.”
+
+Jai/JI should understand:
+
+1. A gardener buying fertilizer may be making progress
+2. A writer drafting one page may be making progress
+3. A student opening the study guide may be making progress
+4. A parent creating a calmer bedtime routine may be making progress
+5. A business owner organizing inventory may be making progress
+6. A person returning to the gym may be making progress
+
+Jai/JI should ask:
+
+“What step supports the goal and WHY?”
+
+Not:
+
+“Did you work out?”
+
+---
+
+# 10. Jai/JI Response Style Rules
+
+Jai/JI should use universal accountability language.
+
+Preferred language:
+
+1. “next honest step”
+2. “aligned action”
+3. “the promise behind the goal”
+4. “return to the promise”
+5. “small step”
+6. “follow-through”
+7. “progress proof”
+8. “what you said mattered”
+9. “water the seed”
+10. “growth takes shape before it is obvious”
+
+Avoid defaulting to:
+
+1. “workout”
+2. “gym”
+3. “fitness”
+4. “exercise”
+5. “training”
+6. “weight loss”
+7. “run”
+8. “lift”
+
+Unless the user’s goal or message is specifically fitness-related.
+
+---
+
+# 11. Jai/JI Example Response Guidance
+
+Use these as guidance only.
+
+Do not hardcode them as canned responses.
+
+## Fitness example
+
+“You made it to the gym today, and that counts. Now let’s connect it back to the promise: what is the smallest action you want to complete while you’re there?”
+
+## Gardening example
+
+“That fertilizer in the cart is not random. It supports the garden you said you wanted to grow. That is aligned action. What is the next small step after you get it home?”
+
+## Writing example
+
+“You opened the draft again. That may look small, but it is a return to the promise. What is one paragraph you can finish today?”
+
+## Budgeting example
+
+“You looked at the numbers instead of avoiding them. That is courageous action. What is the next honest step with your budget?”
+
+## Cleaning example
+
+“You cleared one drawer. That is not the whole room, but it is movement. Small steps still water the seed.”
+
+The tone should remain:
+
+1. Grace-filled
+2. Honest
+3. Grounded
+4. Encouraging
+5. Accountable
+6. Goal-aware
+7. Not judgmental
+8. Not generic
+
+---
+
+# 12. App-Wide Copy Audit
+
+Search the codebase for fitness-specific terms and review whether they are appropriate.
+
+Search terms should include:
+
+1. workout
+2. fitness
+3. gym
+4. exercise
+5. training
+6. lift
+7. weights
+8. run
+9. cardio
+10. meal prep
+11. weight loss
+12. home gym
+
+For each term found:
+
+1. Keep it only if it is clearly part of a user-created goal, example set, or optional category
+2. Replace it if it appears as default system language
+3. Broaden it if it makes the app feel fitness-first
+4. Preserve it if removing it would break user data or example diversity
+
+Do not remove user-entered data.
+
+Do not modify database records created by users.
+
+This is a language and system-positioning update, not a data purge.
+
+---
+
+# 13. Internal Documentation / Constants
+
+If the app has a constants file, prompt file, system prompt builder, onboarding copy file, or shared language file, add a central positioning note there.
+
+Add a clear internal developer note:
+
+“Mustard Seed is goal-neutral and growth-centered. Fitness is one example, not the product category. All reward, photo validation, Jai/JI coaching, onboarding, and progress language must support any meaningful user-defined goal.”
+
+Place this in the most appropriate centralized location so future code changes do not drift back into fitness-specific language.
+
+Do not add duplicate notes in too many places.
+
+Create one strong source of truth if possible.
+
+---
+
+# 14. Testing Requirements
+
+After making changes, test the app with at least three different goal types.
+
+## Test 1: Fitness Goal
+
+Create a user or use a test user with a fitness-related goal.
+
+Example:
+
+“Walk for 15 minutes after work.”
+
+Confirm:
+
+1. Jai/JI can respond appropriately
+2. Photo/progress language fits
+3. Water language is still accurate
+4. The app does not lose fitness support
+
+Expected result:
+
+Fitness still works as one valid goal category.
+
+---
+
+## Test 2: Gardening Goal
+
+Create a user or use a test user with a gardening goal.
+
+Example:
+
+“Start a small vegetable garden.”
+
+Progress proof example:
+
+“Bought fertilizer and seeds.”
+
+Confirm:
+
+1. Jai/JI treats fertilizer/seeds as valid aligned action
+2. Water/seed language makes sense
+3. Photo/proof language is goal-aware
+4. The app does not ask gym/workout questions
+
+Expected result:
+
+The gardening user should feel the app was built for their goal too.
+
+---
+
+## Test 3: Writing Goal
+
+Create a user or use a test user with a writing goal.
+
+Example:
+
+“Write 500 words three times a week.”
+
+Progress proof example:
+
+“Finished one page of a draft.”
+
+Confirm:
+
+1. Jai/JI recognizes draft progress
+2. The app uses goal-neutral progress language
+3. Water/reward language still works
+4. Jai/JI does not default to fitness metaphors
+
+Expected result:
+
+The writing user should feel fully supported by the same system.
+
+---
+
+## Test 4: Photo/Proof Language
+
+Review the upload flow.
+
+Confirm:
+
+1. It says proof of progress, not workout proof
+2. It explains that evidence should match the user’s goal
+3. It does not imply only gym photos count
+4. It still works with current photo upload wiring
+
+---
+
+## Test 5: Jai/JI Goal-Neutral Response
+
+Ask Jai/JI:
+
+1. “I bought fertilizer today.”
+2. “I opened my draft but only wrote one paragraph.”
+3. “I walked for 15 minutes.”
+4. “I organized the first drawer.”
+5. “Does this count?”
+
+Expected result:
+
+Jai/JI should evaluate each action according to the user’s goal and WHY, not according to a fitness framework.
+
+---
+
+# 15. Regression Testing
+
+After this language-positioning update, confirm no existing wiring broke.
+
+Test:
+
+1. Register/login
+2. Onboarding/orientation
+3. Assessment
+4. Goal creation with emotional WHY
+5. Jai/JI chat
+6. Progress entry
+7. Photo/proof upload if available
+8. Memory entry creation
+9. Water award
+10. Seed growth display
+11. Calendar entry
+12. Refresh persistence
+13. Logout/login persistence
+
+Do not mark the task complete if this update breaks the core accountability loop.
+
+---
+
+# 16. Required Final Build Report
+
+When finished, provide a build report with these sections:
+
+## A. Files Changed
+
+List every file changed and why.
+
+## B. Positioning Lock Summary
+
+Explain where the app now clearly communicates:
+
+“Mustard Seed is a goal accountability partner, not a fitness app.”
+
+## C. Copy Audit Results
+
+Report:
+
+1. Fitness-specific terms found
+2. Which terms were replaced
+3. Which terms were preserved as examples
+4. Why preserved terms were kept
+
+## D. Jai/JI Behavior Update
+
+Report:
+
+1. What prompt/system instructions were changed
+2. How Jai/JI now stays goal-neutral
+3. How Jai/JI evaluates aligned action
+4. How Jai/JI handles non-fitness goals
+
+## E. Photo/Proof Validation Update
+
+Report:
+
+1. How photo/proof language changed
+2. Whether validation now compares evidence to user goal
+3. Whether gardening/writing/business-style examples work
+4. Any remaining vision-analysis limitations
+
+## F. Water/Reward Language Update
+
+Report:
+
+1. How water is now framed
+2. How aligned action is described
+3. Whether reward logic stayed intact
+4. Whether any reward logic had to be changed
+
+## G. Testing Results
+
+Report each required test:
+
+1. Fitness goal test
+2. Gardening goal test
+3. Writing goal test
+4. Photo/proof language test
+5. Jai/JI goal-neutral response test
+6. Regression test
+
+For each test, include:
+
+- Status:
+- Evidence:
+- Issues found:
+- Fix applied if needed:
+
+## H. Remaining Gaps
+
+Separate into:
+
+1. Critical before launch
+2. Important before beta
+3. Nice to have later
+
+---
+
+# 17. Definition Of Done
+
+This task is complete only when:
+
+1. The app no longer presents itself as fitness-first
+2. Jai/JI no longer defaults to gym or workout assumptions
+3. Goal creation supports broad user goals naturally
+4. Photo/proof language is goal-aware
+5. Water is framed as earned through aligned action
+6. Fitness remains supported as one valid example
+7. Gardening and writing goals test successfully
+8. Existing core wiring still works
+9. The final report proves what changed and what was tested
+
+The app must feel like it belongs to the user’s goal.
+
+Whether the user is lifting weights, planting seeds, writing pages, organizing a room, building a business, or rebuilding discipline, the same truth applies:
+
+Mustard Seed helps the user name the goal, remember the WHY, take the next honest step, and water the seed.
+
+Lock this into the app permanently.

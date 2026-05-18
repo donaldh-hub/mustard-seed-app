@@ -2,26 +2,28 @@ import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import jaiOrientation from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
 
+// These are universal growth principles — not fitness principles.
+// They apply to any meaningful goal: writing, gardening, business, budgeting, studying, or anything else.
 const heartbeats = [
   {
     title: "Clarity of Vision & Why",
-    desc: "Know exactly what you're building and why it matters before you move.",
+    desc: "Know exactly what you're growing toward and why it matters — before you take the first step.",
   },
   {
     title: "Small Steps + Consistency",
-    desc: "Progress compounds when small actions are repeated daily.",
+    desc: "Growth compounds when honest, small actions are repeated over time. The size of the step doesn't matter. The direction does.",
   },
   {
     title: "Mindset Over Method",
-    desc: "Your thinking determines your execution more than any tactic ever will.",
+    desc: "Your willingness to keep going determines your results more than any tactic, tool, or plan.",
   },
   {
     title: "Feedback & Adaptation",
-    desc: "Review what happened, adjust what's needed, and keep moving forward.",
+    desc: "Review what happened, adjust what's needed, and return to the promise. Progress is rarely a straight line.",
   },
   {
     title: "Courageous Action",
-    desc: "Act even when it's uncomfortable, uncertain, or inconvenient.",
+    desc: "Take the next honest step — even when it's uncomfortable, uncertain, or inconvenient.",
   },
 ];
 
@@ -92,6 +94,16 @@ export default function Orientation() {
             </motion.div>
           ))}
         </div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8, duration: 0.5 }}
+          className="text-sm text-stone-500 text-center mb-4 leading-relaxed"
+          data-testid="text-positioning-note"
+        >
+          These principles work for <span className="font-semibold text-stone-700">any goal</span> — rebuilding fitness, starting a garden, writing a book, launching a business, or rebuilding daily discipline. The system is the same.
+        </motion.p>
 
         <motion.p
           initial={{ opacity: 0 }}
