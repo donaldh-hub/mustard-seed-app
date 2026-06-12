@@ -3,11 +3,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles, Loader2, AlertCircle } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles, Loader2, AlertCircle, Moon, Sun, Trash2, ClipboardCheck } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
+import { applyTheme, getStoredTheme } from "@/lib/theme";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -19,9 +21,16 @@ const HEARTBEAT_LABELS: Record<string, string> = {
   courage: "Courageous Action",
 };
 
+const ASSESSMENT_REMINDER_OPTIONS = [
+  { value: "0", label: "Off" },
+  { value: "3", label: "Every 3 months" },
+  { value: "6", label: "Every 6 months" },
+];
+
 export default function Profile() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -56,10 +65,33 @@ export default function Profile() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">(() => getStoredTheme());
+  const [dataCleared, setDataCleared] = useState(false);
 
   useEffect(() => {
     api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
   }, []);
+
+  const updateSettingsMut = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.updateUser(userId!, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["user", userId] }),
+  });
+
+  const handleThemeChange = (next: "light" | "dark") => {
+    setTheme(next);
+    applyTheme(next);
+    updateSettingsMut.mutate({ themePreference: next });
+  };
+
+  const handleClearLocalData = () => {
+    const preserve = new Set(["pref_theme"]);
+    Object.keys(localStorage)
+      .filter((k) => !preserve.has(k))
+      .forEach((k) => localStorage.removeItem(k));
+    sessionStorage.clear();
+    setDataCleared(true);
+    setTimeout(() => setDataCleared(false), 3000);
+  };
 
   const handleUpgrade = async () => {
     if (!userId) return;
@@ -246,6 +278,112 @@ export default function Profile() {
               data-testid="switch-privacy"
             />
           </div>
+        </section>
+
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-border/40 space-y-6" data-testid="section-notification-settings">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            Notification Settings
+          </h2>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-muted/50 rounded-lg">
+                <Bell className="w-5 h-5 text-foreground" />
+              </div>
+              <Label htmlFor="notify-daily-encouragement" className="font-medium">Daily Encouragement</Label>
+            </div>
+            <Switch
+              id="notify-daily-encouragement"
+              checked={user.notifyDailyEncouragement !== false}
+              onCheckedChange={(v) => updateSettingsMut.mutate({ notifyDailyEncouragement: v })}
+              data-testid="switch-notify-daily-encouragement"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-muted/50 rounded-lg">
+                <ClipboardCheck className="w-5 h-5 text-foreground" />
+              </div>
+              <Label htmlFor="notify-weekly-summary" className="font-medium">Weekly Summary</Label>
+            </div>
+            <Switch
+              id="notify-weekly-summary"
+              checked={user.notifyWeeklySummary !== false}
+              onCheckedChange={(v) => updateSettingsMut.mutate({ notifyWeeklySummary: v })}
+              data-testid="switch-notify-weekly-summary"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-muted/50 rounded-lg">
+                <RefreshCw className="w-5 h-5 text-foreground" />
+              </div>
+              <Label htmlFor="notify-assessment-reminder" className="font-medium">Assessment Reminder</Label>
+            </div>
+            <Switch
+              id="notify-assessment-reminder"
+              checked={user.notifyAssessmentReminder !== false}
+              onCheckedChange={(v) => updateSettingsMut.mutate({ notifyAssessmentReminder: v })}
+              data-testid="switch-notify-assessment-reminder"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label htmlFor="reassessment-cadence" className="font-medium">Reassessment Cadence</Label>
+            <Select
+              value={String(user.assessmentReminderCadenceMonths ?? 3)}
+              onValueChange={(v) => updateSettingsMut.mutate({ assessmentReminderCadenceMonths: Number(v) })}
+            >
+              <SelectTrigger id="reassessment-cadence" className="w-40" data-testid="select-reassessment-cadence">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ASSESSMENT_REMINDER_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-border/40 space-y-6" data-testid="section-appearance">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            Appearance
+          </h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-muted/50 rounded-lg">
+                {theme === "dark" ? <Moon className="w-5 h-5 text-foreground" /> : <Sun className="w-5 h-5 text-foreground" />}
+              </div>
+              <Label htmlFor="theme-toggle" className="font-medium">Dark Mode</Label>
+            </div>
+            <Switch
+              id="theme-toggle"
+              checked={theme === "dark"}
+              onCheckedChange={(v) => handleThemeChange(v ? "dark" : "light")}
+              data-testid="switch-theme"
+            />
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-border/40 space-y-4" data-testid="section-data-management">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            Data Management
+          </h2>
+          <Button
+            onClick={handleClearLocalData}
+            variant="outline"
+            className="w-full rounded-xl h-12 justify-start"
+            data-testid="button-clear-local-data"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            {dataCleared ? "Local data cleared" : "Clear Local Data"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Clears locally stored preferences and dismissed prompts on this device. Your account, goals, and journal entries are not affected.
+          </p>
         </section>
 
         {!isPremium && (

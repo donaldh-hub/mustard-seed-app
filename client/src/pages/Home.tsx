@@ -75,6 +75,10 @@ export default function Home() {
     const stored = sessionStorage.getItem(key);
     return stored ? Number(stored) > Date.now() - 3 * 60 * 60 * 1000 : false;
   });
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const [reassessmentBannerDismissed, setReassessmentBannerDismissed] = useState(() => {
+    return localStorage.getItem(`reassessment_banner_dismissed_${userId}`) === todayStr;
+  });
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -168,6 +172,15 @@ export default function Home() {
   const streakBroken = hoursSinceLastVA >= 48 && currentStreak >= 1;
   const streakNewBegins = currentStreak === 1 && previousStreak > 0 && hoursSinceLastVA < 24;
 
+  // Reassessment reminder: based on user's cadence preference and time since last assessment
+  const cadenceMonths = (user as any)?.assessmentReminderCadenceMonths ?? 3;
+  const notifyAssessmentReminder = (user as any)?.notifyAssessmentReminder !== false;
+  const daysSinceAssessment = assessment?.createdAt
+    ? (Date.now() - new Date(assessment.createdAt).getTime()) / 86400000
+    : 0;
+  const reassessmentDue = notifyAssessmentReminder && cadenceMonths > 0 && daysSinceAssessment >= cadenceMonths * 30;
+  const showReassessmentBanner = reassessmentDue && !reassessmentBannerDismissed;
+
   return (
     <div className="h-full flex flex-col bg-background">
       <div className="flex-1 overflow-y-auto pb-24">
@@ -200,6 +213,47 @@ export default function Home() {
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-amber-900">Your Weekly Review is Ready</p>
                   <p className="text-xs text-amber-700/70 mt-0.5">Tap to view your progress report</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {showReassessmentBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-primary/5 border border-primary/20 rounded-2xl p-4 shadow-sm flex items-start gap-3"
+              data-testid="banner-reassessment-reminder"
+            >
+              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <ClipboardCheck className="w-4.5 h-4.5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">
+                  It's been about {Math.floor(daysSinceAssessment)} days since your last check-in.
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Want to take a fresh assessment?</p>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    className="rounded-full h-8"
+                    onClick={() => setLocation("/assessment")}
+                    data-testid="button-retake-assessment-banner"
+                  >
+                    Retake Assessment
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="rounded-full h-8"
+                    onClick={() => {
+                      setReassessmentBannerDismissed(true);
+                      localStorage.setItem(`reassessment_banner_dismissed_${userId}`, todayStr);
+                    }}
+                    data-testid="button-dismiss-reassessment-banner"
+                  >
+                    Not now
+                  </Button>
                 </div>
               </div>
             </motion.div>

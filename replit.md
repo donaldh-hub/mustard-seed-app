@@ -116,3 +116,9 @@ Applied to `routes.ts`, `rewardEngine.ts`, `api.ts`, `Chat.tsx`, `GoalCompletion
 - **Static path resolution**: `server/static.ts` uses `path.resolve(__dirname, "public")` with `process.cwd()+"/dist/public"` fallback
 - **Port**: 5000 (mapped to external port 80)
 - **Health check**: GET `/` returns 200 (index.html served by express.static)
+
+### Reassessment Reminders & Settings Overhaul
+- **User preference fields** (`shared/schema.ts`): `assessmentReminderCadenceMonths` (0=off, default 3), `notifyDailyEncouragement`, `notifyWeeklySummary`, `notifyAssessmentReminder` (all default true), `themePreference` ("light"/"dark", default "light"). Updated via existing `PATCH /api/users/:id`.
+- **Reminder logic**: `Home.tsx` computes `daysSinceAssessment` from `assessment.createdAt` and compares against `cadenceMonths * 30`. When due and `notifyAssessmentReminder` is true, shows a dismissible banner ("It's been about N days since your last check-in...") with a "Retake Assessment" CTA. Dismissal is stored per-day in localStorage (`reassessment_banner_dismissed_<userId>` = today's date), so it reappears the next day if still due.
+- **Settings & Profile** (`Profile.tsx`): Added "Notification Settings" section (Daily Encouragement, Weekly Summary, Assessment Reminder toggles + Reassessment Cadence dropdown: Off/3 months/6 months), an "Appearance" section (Dark Mode toggle), and a "Data Management" section (Clear Local Data — wipes localStorage/sessionStorage prefs and dismissed-banner state without touching account data).
+- **Theme system**: `client/src/lib/theme.ts` provides `applyTheme()`/`getStoredTheme()`. Applied on app boot in `main.tsx` (toggles `.dark` class on `<html>`, persisted to `localStorage["pref_theme"]`) and synced to `user.themePreference` on change via `PATCH /api/users/:id`.

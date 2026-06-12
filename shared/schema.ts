@@ -53,6 +53,11 @@ export const users = pgTable("users", {
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
   lastReceiptValidation: timestamp("last_receipt_validation"),
   firstGoalMomentumUsed: boolean("first_goal_momentum_used").notNull().default(false),
+  assessmentReminderCadenceMonths: integer("assessment_reminder_cadence_months").notNull().default(3),
+  notifyDailyEncouragement: boolean("notify_daily_encouragement").notNull().default(true),
+  notifyWeeklySummary: boolean("notify_weekly_summary").notNull().default(true),
+  notifyAssessmentReminder: boolean("notify_assessment_reminder").notNull().default(true),
+  themePreference: text("theme_preference").notNull().default("light"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
