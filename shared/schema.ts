@@ -58,6 +58,7 @@ export const users = pgTable("users", {
   notifyWeeklySummary: boolean("notify_weekly_summary").notNull().default(true),
   notifyAssessmentReminder: boolean("notify_assessment_reminder").notNull().default(true),
   themePreference: text("theme_preference").notNull().default("light"),
+  lastAssessmentReminderSentAt: timestamp("last_assessment_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -94,6 +94,31 @@ function stripSmartQuotes(text: string): string {
     .replace(/["'\s]+$/, "");
 }
 
+async function maybeInjectReassessmentNudge(userId: string): Promise<void> {
+  const user = await storage.getUser(userId);
+  if (!user || user.notifyAssessmentReminder === false) return;
+
+  const cadenceMonths = user.assessmentReminderCadenceMonths ?? 3;
+  if (cadenceMonths <= 0) return;
+
+  const assessment = await storage.getLatestAssessment(userId);
+  if (!assessment?.createdAt) return;
+
+  const daysSinceAssessment = (Date.now() - new Date(assessment.createdAt).getTime()) / 86400000;
+  if (daysSinceAssessment < cadenceMonths * 30) return;
+
+  const lastSent = user.lastAssessmentReminderSentAt;
+  if (lastSent && Date.now() - new Date(lastSent).getTime() < 24 * 3600000) return;
+
+  const days = Math.floor(daysSinceAssessment);
+  await storage.createMessage({
+    userId,
+    text: `It's been about ${days} days since your last check-in. Want to take a fresh assessment and see what's changed?`,
+    sender: "jae",
+  });
+  await storage.updateUser(userId, { lastAssessmentReminderSentAt: new Date() } as any);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -150,7 +175,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/users/:userId/messages", async (req, res) => {
-    const msgs = await storage.getMessages(req.params.userId);
+    const userId = req.params.userId;
+    await maybeInjectReassessmentNudge(userId);
+    const msgs = await storage.getMessages(userId);
     return res.json(msgs);
   });
 
