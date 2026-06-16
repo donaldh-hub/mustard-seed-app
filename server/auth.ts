@@ -6,6 +6,15 @@ import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { Resend } from "resend";
 import { storage, pool } from "./storage";
+import rateLimit from "express-rate-limit";
+
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many attempts. Please wait 15 minutes before trying again." },
+});
 
 /**
  * sendPasswordResetEmail — sends a reset link via Resend.
@@ -160,7 +169,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", authRateLimit, async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
@@ -210,7 +219,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authRateLimit, async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -339,7 +348,7 @@ export function registerAuthRoutes(app: Express) {
     });
   });
 
-  app.post("/api/auth/forgot-password", async (req, res) => {
+  app.post("/api/auth/forgot-password", authRateLimit, async (req, res) => {
     const { email } = req.body;
 
     if (!email) {

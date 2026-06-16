@@ -17,6 +17,33 @@ import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRema
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
+// ─── Security helpers ────────────────────────────────────────────────────────
+
+// Fields clients must never be allowed to set via PATCH /api/users/:id
+const PROTECTED_USER_FIELDS = new Set([
+  "id", "passwordHash", "email", "emailVerified", "googleId", "authProvider",
+  "lastLoginAt", "subscriptionTier", "subscriptionState", "subscriptionPlatform",
+  "subscriptionProductId", "trialStartedAt", "trialExpiresAt", "subscriptionExpiresAt",
+  "lastReceiptValidation", "createdAt",
+]);
+
+// Returns false and sends 403 if req.session.userId !== claimedId
+function assertOwns(req: Request, res: Response, claimedId: string): boolean {
+  if (req.session?.userId !== claimedId) {
+    res.status(403).json({ message: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+
+// Returns false and sends 403 if goal doesn't belong to the session user
+async function assertGoalOwns(req: Request, res: Response, goalId: string): Promise<Goal | null> {
+  const goal = await storage.getGoal(goalId);
+  if (!goal) { res.status(404).json({ message: "Goal not found" }); return null; }
+  if (goal.userId !== req.session?.userId) { res.status(403).json({ message: "Forbidden" }); return null; }
+  return goal;
+}
+
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
 }
@@ -174,6 +201,14 @@ export async function registerRoutes(
   app.use("/api/users", requireAuth);
   app.use("/api/goals", requireAuth);
 
+  // Ownership enforcement: any route using :userId param must belong to the session user
+  app.param("userId", (req: Request, res: Response, next: NextFunction, value: string) => {
+    if (req.session?.userId !== value) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    return next();
+  });
+
   app.post("/api/users", async (req, res) => {
     const result = insertUserSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ message: result.error.message });
@@ -192,6 +227,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/users/:id", async (req, res) => {
+    if (!assertOwns(req, res, req.params.id)) return;
     const user = await storage.getUser(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -214,7 +250,11 @@ export async function registerRoutes(
   });
 
   app.patch("/api/users/:id", async (req, res) => {
-    const user = await storage.updateUser(req.params.id, req.body);
+    if (!assertOwns(req, res, req.params.id)) return;
+    const safeUpdates = Object.fromEntries(
+      Object.entries(req.body).filter(([k]) => !PROTECTED_USER_FIELDS.has(k))
+    );
+    const user = await storage.updateUser(req.params.id, safeUpdates);
     if (!user) return res.status(404).json({ message: "User not found" });
     return res.json(user);
   });
@@ -1821,8 +1861,12 @@ export async function registerRoutes(
     try {
       const userId = req.params.userId;
       const { answers } = req.body;
-      if (!Array.isArray(answers) || answers.length !== 10) {
-        return res.status(400).json({ message: "answers must be an array of 10 numbers" });
+      if (
+        !Array.isArray(answers) ||
+        answers.length !== 10 ||
+        !answers.every((a: unknown) => typeof a === "number" && a >= 1 && a <= 6)
+      ) {
+        return res.status(400).json({ message: "answers must be an array of 10 numbers between 1 and 6" });
       }
 
       const previousAssessment = await storage.getLatestAssessment(userId);
@@ -2062,6 +2106,8 @@ export async function registerRoutes(
 
   app.patch("/api/goals/:goalId", async (req, res) => {
     try {
+      const existing = await assertGoalOwns(req, res, req.params.goalId);
+      if (!existing) return;
       const goal = await storage.updateGoal(req.params.goalId, req.body);
       if (!goal) return res.status(404).json({ message: "Goal not found" });
       return res.json(goal);
@@ -2073,6 +2119,8 @@ export async function registerRoutes(
 
   app.post("/api/goals/:goalId/archive", async (req, res) => {
     try {
+      const existing = await assertGoalOwns(req, res, req.params.goalId);
+      if (!existing) return;
       const goal = await storage.updateGoal(req.params.goalId, { status: "archived", isActive: 0 });
       if (!goal) return res.status(404).json({ message: "Goal not found" });
       return res.json(goal);
@@ -2084,8 +2132,8 @@ export async function registerRoutes(
 
   app.post("/api/goals/:goalId/complete", async (req, res) => {
     try {
-      const goal = await storage.getGoal(req.params.goalId);
-      if (!goal) return res.status(404).json({ message: "Goal not found" });
+      const goal = await assertGoalOwns(req, res, req.params.goalId);
+      if (!goal) return;
 
       const statusLabel = goal.goalType === "untargeted"
         ? (req.body.completionType || "integrated")
@@ -2106,8 +2154,8 @@ export async function registerRoutes(
 
   app.post("/api/goals/:goalId/log", async (req, res) => {
     try {
-      const goal = await storage.getGoal(req.params.goalId);
-      if (!goal) return res.status(404).json({ message: "Goal not found" });
+      const goal = await assertGoalOwns(req, res, req.params.goalId);
+      if (!goal) return;
 
       const summary = req.body.summary || "Activity logged";
       const mood = req.body.mood || "neutral";
