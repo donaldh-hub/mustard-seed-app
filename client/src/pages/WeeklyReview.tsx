@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, AlertCircle } from "lucide-react";
 
 const DIR_SYMBOL: Record<string, string> = {
   up: "↑",
@@ -34,12 +34,13 @@ export default function WeeklyReview() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) setLocation("/");
   }, [userId]);
 
-  const { data: review, isLoading } = useQuery({
+  const { data: review, isLoading, isError: isGenerateError } = useQuery({
     queryKey: ["weekly-review-generate", userId],
     queryFn: () => api.generateWeeklyReview(userId!),
     enabled: !!userId,
@@ -54,10 +55,15 @@ export default function WeeklyReview() {
       queryClient.invalidateQueries({ queryKey: ["entries"] });
       setLocation("/home");
     },
+    onError: () => {
+      setCompleting(false);
+      setCompleteError("Something went wrong. Please try again.");
+    },
   });
 
   const handleAcknowledge = () => {
     setCompleting(true);
+    setCompleteError(null);
     completeMutation.mutate();
   };
 
@@ -71,6 +77,35 @@ export default function WeeklyReview() {
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-sm text-muted-foreground">Generating your Weekly Review...</p>
             <p className="text-xs text-muted-foreground/60">Analyzing the past 7 days</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isGenerateError) {
+    return (
+      <div className="h-full flex flex-col bg-background">
+        <header className="p-4 flex items-center gap-3 border-b border-border/50">
+          <button onClick={() => setLocation("/home")} data-testid="button-back-from-review">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="font-serif font-semibold text-lg">Weekly Review</h1>
+        </header>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center space-y-4" data-testid="text-generate-error">
+            <div className="flex items-center justify-center gap-2 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              <p className="text-sm font-medium">Something went wrong. Please try again.</p>
+            </div>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["weekly-review-generate", userId] })}
+              data-testid="button-retry-generate"
+            >
+              Retry
+            </Button>
           </div>
         </div>
       </div>
@@ -214,7 +249,7 @@ export default function WeeklyReview() {
       </div>
 
       <div className="fixed bottom-16 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
-        <div className="max-w-md mx-auto">
+        <div className="max-w-md mx-auto space-y-2">
           <Button
             onClick={handleAcknowledge}
             disabled={completing || review.status === "completed"}
@@ -233,6 +268,12 @@ export default function WeeklyReview() {
               "Acknowledge Review"
             )}
           </Button>
+          {completeError && (
+            <div className="flex items-center justify-center gap-1.5 text-red-600 text-sm" data-testid="text-complete-error">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{completeError}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
