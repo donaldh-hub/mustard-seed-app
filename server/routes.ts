@@ -120,6 +120,50 @@ async function maybeInjectReassessmentNudge(userId: string): Promise<void> {
   await storage.updateUser(userId, { lastAssessmentReminderSentAt: new Date() } as any);
 }
 
+const DAILY_ENCOURAGEMENTS = [
+  "Small steps still move you forward. What's one thing you can do today?",
+  "Consistency over intensity — showing up today is enough.",
+  "Every time you check in, you're building something real. Keep going.",
+  "You don't need a perfect day. You need a present one.",
+  "Progress isn't always visible, but it's always happening when you keep showing up.",
+  "One choice at a time. That's all this is.",
+  "You've shown up before. You can show up again today.",
+];
+
+async function maybeInjectDailyEncouragement(userId: string): Promise<void> {
+  const user = await storage.getUser(userId);
+  if (!user || user.notifyDailyEncouragement === false) return;
+
+  const lastSent = (user as any).lastDailyEncouragementSentAt;
+  if (lastSent && Date.now() - new Date(lastSent).getTime() < 20 * 3600000) return;
+
+  const idx = new Date().getDay() % DAILY_ENCOURAGEMENTS.length;
+  await storage.createMessage({ userId, text: DAILY_ENCOURAGEMENTS[idx], sender: "jae" });
+  await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
+}
+
+async function maybeInjectWeeklySummaryToChat(userId: string): Promise<void> {
+  const user = await storage.getUser(userId);
+  if (!user || (user as any).notifyWeeklySummary === false) return;
+
+  const lastSent = (user as any).lastWeeklySummaryChatAt;
+  if (lastSent && Date.now() - new Date(lastSent).getTime() < 6 * 24 * 3600000) return;
+
+  const latestReview = await storage.getLatestCompletedReview(userId);
+  if (!latestReview?.completedAt) return;
+
+  if (lastSent && new Date(lastSent) >= new Date(latestReview.completedAt)) return;
+
+  const summary = (latestReview as any).weekSummary || (latestReview as any).summary;
+  const focus = (latestReview as any).recommendedFocus;
+  if (!summary) return;
+
+  const text = `Here's a quick look at your week:\n\n${summary}${focus ? `\n\nFocus going forward: ${focus}` : ""}`;
+  await storage.createMessage({ userId, text, sender: "jae" });
+  await storage.updateUser(userId, { lastWeeklySummaryChatAt: new Date() } as any);
+}
+
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -177,7 +221,11 @@ export async function registerRoutes(
 
   app.get("/api/users/:userId/messages", async (req, res) => {
     const userId = req.params.userId;
-    await maybeInjectReassessmentNudge(userId);
+    await Promise.all([
+      maybeInjectReassessmentNudge(userId),
+      maybeInjectDailyEncouragement(userId),
+      maybeInjectWeeklySummaryToChat(userId),
+    ]);
     const msgs = await storage.getMessages(userId);
     return res.json(msgs);
   });
@@ -965,6 +1013,7 @@ export async function registerRoutes(
           recentPhotoMemories,
           latestWeeklyReview,
           activeGoalsForCtx,
+          journalEntries,
         ] = await Promise.all([
           storage.getLatestAssessment(userId),
           storage.getMessages(userId),
@@ -974,7 +1023,17 @@ export async function registerRoutes(
           storage.getPhotoMemories(userId),
           storage.getLatestCompletedReview(userId),
           storage.getActiveGoals(userId),
+          storage.getGroundingJournalEntries(userId),
         ]);
+
+        const journalInsights = journalEntries.length > 0
+          ? journalEntries
+              .filter((e: any) => e.keyTheme || e.valueNamed || e.possibleFirstSeed || e.releasePoint)
+              .map((e: any) =>
+                `Day ${e.dayNumber} ${e.session}: Theme="${e.keyTheme ?? "—"}", Value="${e.valueNamed ?? "—"}", Release="${e.releasePoint ?? "—"}"${e.possibleFirstSeed ? `, First seed="${e.possibleFirstSeed}"` : ""}`
+              )
+              .join("\n")
+          : undefined;
 
         const sortedMsgs = recentMsgs
           .sort((a: any, b: any) => (a.createdAt > b.createdAt ? 1 : -1));
@@ -1073,6 +1132,7 @@ export async function registerRoutes(
           latestWeeklyReviewFocus: latestWeeklyReview
             ? ((latestWeeklyReview as any).recommendedFocus || undefined)
             : undefined,
+          groundingJournalInsights: journalInsights,
         });
 
         if (depthResult.text) {
@@ -1764,6 +1824,9 @@ export async function registerRoutes(
       if (!Array.isArray(answers) || answers.length !== 10) {
         return res.status(400).json({ message: "answers must be an array of 10 numbers" });
       }
+
+      const previousAssessment = await storage.getLatestAssessment(userId);
+
       const totalScore = answers.reduce((sum: number, v: number) => sum + v, 0);
 
       let stage: string;
@@ -1795,6 +1858,41 @@ export async function registerRoutes(
       });
 
       await storage.updateUser(userId, { weeklyCycleStart: new Date() } as any);
+
+      if (previousAssessment) {
+        const prevScore = previousAssessment.totalScore;
+        const scoreDelta = totalScore - prevScore;
+        const prevScores = (previousAssessment.heartbeatScores as Record<string, number>) || {};
+        const HB_LABELS: Record<string, string> = {
+          clarity: "Clarity of Vision",
+          consistency: "Consistency",
+          mindset: "Mindset",
+          adaptation: "Adaptation",
+          courage: "Courageous Action",
+        };
+        const improvements = Object.entries(heartbeatScores)
+          .filter(([k, v]) => prevScores[k] !== undefined && v > prevScores[k])
+          .map(([k, v]) => `${HB_LABELS[k] ?? k} (${prevScores[k]} → ${v})`);
+        const declines = Object.entries(heartbeatScores)
+          .filter(([k, v]) => prevScores[k] !== undefined && v < prevScores[k])
+          .map(([k, v]) => `${HB_LABELS[k] ?? k} (${prevScores[k]} → ${v})`);
+
+        const direction = scoreDelta > 0 ? "up" : scoreDelta < 0 ? "down" : "steady";
+        const deltaStr = scoreDelta > 0 ? `+${scoreDelta}` : `${scoreDelta}`;
+
+        let comparisonMsg = `Your score moved from ${prevScore} to ${totalScore} (${deltaStr} points ${direction}).`;
+        if (improvements.length > 0) comparisonMsg += ` Heartbeats that grew: ${improvements.join(", ")}.`;
+        if (declines.length > 0) comparisonMsg += ` Areas to watch: ${declines.join(", ")}.`;
+        if (scoreDelta > 0) {
+          comparisonMsg += " That's real movement — the kind that shows up when you keep showing up.";
+        } else if (scoreDelta === 0) {
+          comparisonMsg += " Holding steady is not nothing. Keep building.";
+        } else {
+          comparisonMsg += " Honesty in a check-in is a form of progress. Now you know where to focus.";
+        }
+
+        await storage.createMessage({ userId, text: comparisonMsg, sender: "jae" });
+      }
 
       return res.json(assessment);
     } catch (err) {
@@ -2752,7 +2850,7 @@ export async function registerRoutes(
         mode: "subscription",
         payment_method_types: ["card"],
         line_items: [{ price: priceId, quantity: 1 }],
-        customer_email: user.email,
+        customer_email: user.email ?? undefined,
         client_reference_id: userId,
         metadata: { userId },
         success_url: `${baseUrl}/chat?upgraded=1`,

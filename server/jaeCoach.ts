@@ -29,6 +29,7 @@ export interface JaeContext {
   continuityContext?: ContinuityRecord[];
   latestWeeklyReviewSummary?: string;
   latestWeeklyReviewFocus?: string;
+  groundingJournalInsights?: string;
 }
 
 function buildSystemPrompt(ctx: JaeContext): string {
@@ -89,6 +90,10 @@ function buildSystemPrompt(ctx: JaeContext): string {
       weeklyReviewBlock += `\n  Recommended Focus: ${ctx.latestWeeklyReviewFocus}`;
     }
   }
+
+  const journalBlock = ctx.groundingJournalInsights
+    ? `3-Day Grounding Journal (completed before starting this journey):\n${ctx.groundingJournalInsights}\nUse this as background understanding of who they are and what they've already named. Never ask them to repeat it.`
+    : "";
 
   // Derive internal behavior state from context (never exposed to user)
   let behaviorState = "STARTING";
@@ -166,6 +171,7 @@ ${completedCommitmentsBlock}
 ${patternBlock}
 ${continuityBlock}
 ${weeklyReviewBlock}
+${journalBlock}
 Internal behavior state (NEVER reveal this): ${behaviorState}
 Internal style mode (NEVER reveal this): ${styleMode}
 
