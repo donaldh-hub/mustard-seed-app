@@ -1455,13 +1455,13 @@ export async function registerRoutes(
         }
         // Reflection Memory: store neutral entry for substantive RW/IO content
         if (entryQualification === "reflectionEntry" && rawText.length >= 20) {
-          const today = new Date().toISOString().split("T")[0];
           await storage.createEntry({
             userId,
             goalId: null,
-            date: today,
+            date: clientLocalDate || todayStr(),
             summary: rawText.length > 140 ? rawText.substring(0, 140) : rawText,
             mood: "neutral",
+            ...(clientTimezone ? { userTimezone: clientTimezone } : {}),
           });
           console.log(`[CREDIBILITY] reflection_memory_saved | length=${rawText.length}`);
         }
