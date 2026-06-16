@@ -218,25 +218,32 @@ export default function Home() {
             </motion.div>
           )}
 
-          {!(user as any)?.groundingJournalCompleted && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-sm cursor-pointer"
-              onClick={() => setLocation("/journal")}
-              data-testid="banner-grounding-journal"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                  <BookMarked className="w-4.5 h-4.5 text-emerald-700" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-emerald-900">Start Your 3-Day Grounding Journal</p>
-                  <p className="text-xs text-emerald-700/70 mt-0.5">Your first conversation with Jae begins here.</p>
-                </div>
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-sm cursor-pointer"
+            onClick={() => setLocation("/journal")}
+            data-testid="banner-grounding-journal"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                <BookMarked className="w-4.5 h-4.5 text-emerald-700" />
               </div>
-            </motion.div>
-          )}
+              <div className="flex-1">
+                {(user as any)?.groundingJournalCompleted ? (
+                  <>
+                    <p className="text-sm font-semibold text-emerald-900">3-Day Grounding Journal</p>
+                    <p className="text-xs text-emerald-700/70 mt-0.5">View your reflections</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-emerald-900">Start Your 3-Day Grounding Journal</p>
+                    <p className="text-xs text-emerald-700/70 mt-0.5">Your first conversation with Jae begins here.</p>
+                  </>
+                )}
+              </div>
+            </div>
+          </motion.div>
 
           {showReassessmentBanner && (
             <motion.div

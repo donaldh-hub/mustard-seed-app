@@ -5,9 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
-import { Loader2, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Loader2, ChevronRight, CheckCircle2, ArrowLeft } from "lucide-react";
 
 // ── Journal content ──────────────────────────────────────────────────────────
 
@@ -75,10 +75,23 @@ const STEP_ORDER: StepId[] = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const SESSION_LABELS: Record<string, string> = {
+  morning: "Morning Focus",
+  evening: "Evening Reflection",
+  grounding_statement: "Grounding Statement",
+  intention: "Opening Intention",
+};
+
 export default function GroundingJournal() {
   const userId = useStore((s) => s.userId);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  const { data: journalData, isLoading: journalLoading } = useQuery({
+    queryKey: ["grounding-journal", userId],
+    queryFn: () => api.getGroundingJournal(userId!),
+    enabled: !!userId,
+  });
 
   const [stepIndex, setStepIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -173,6 +186,92 @@ export default function GroundingJournal() {
     (s) => !s.endsWith("-jae") && s !== "complete"
   ).length;
   const progress = Math.min(100, Math.round((promptStepsDone / totalPromptSteps) * 100));
+
+  // ── Completed read-only view ──────────────────────────────────────────────
+
+  if (!journalLoading && journalData?.completed) {
+    const entries: any[] = journalData.entries ?? [];
+    const dayGroups: Record<number, any[]> = {};
+    entries.forEach((e) => {
+      if (!dayGroups[e.dayNumber]) dayGroups[e.dayNumber] = [];
+      dayGroups[e.dayNumber].push(e);
+    });
+    const DAY_THEME_LABELS = ["RESET", "REFOCUS", "REBUILD"];
+
+    return (
+      <div className="h-full overflow-y-auto bg-background">
+        <div className="max-w-lg mx-auto px-5 py-8 pb-24 space-y-6">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setLocation("/home")} className="p-2 rounded-xl hover:bg-muted/50">
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider">3-Day Grounding Journal</p>
+              <h1 className="font-serif text-xl font-bold text-foreground">Your Reflections</h1>
+            </div>
+          </div>
+
+          {[1, 2, 3].map((day) => {
+            const dayEntries = dayGroups[day] ?? [];
+            if (dayEntries.length === 0) return null;
+            return (
+              <div key={day} className="space-y-3">
+                <p className="text-xs font-bold text-primary uppercase tracking-widest">
+                  Day {day} — {DAY_THEME_LABELS[day - 1]}
+                </p>
+                {dayEntries.map((entry: any) => (
+                  <div key={entry.id} className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {SESSION_LABELS[entry.session] ?? entry.session}
+                    </p>
+
+                    {Array.isArray(entry.prompts) && entry.prompts.length > 0 && (
+                      <div className="space-y-3">
+                        {entry.prompts.map((p: any, i: number) => (
+                          <div key={i} className="space-y-1">
+                            <p className="text-xs text-muted-foreground font-medium">{p.prompt}</p>
+                            <p className="text-sm text-foreground leading-relaxed">{p.response}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {entry.jaeReflection && (
+                      <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <img src={JaeAvatar} className="w-6 h-6 rounded-full object-cover" alt="Jae" />
+                          <p className="text-xs font-semibold text-primary">Jae reflected</p>
+                        </div>
+                        <p className="text-sm text-foreground leading-relaxed">{entry.jaeReflection}</p>
+                        {entry.possibleFirstSeed && (
+                          <div className="mt-2 bg-white rounded-lg p-3 border border-primary/20">
+                            <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your First Seed</p>
+                            <p className="text-sm font-medium text-foreground">{entry.possibleFirstSeed}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {entry.userFollowUpResponse && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground font-medium">Your follow-up</p>
+                        <p className="text-sm text-foreground leading-relaxed">{entry.userFollowUpResponse}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+
+          <div className="text-center py-4">
+            <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Journal complete. Jae carries this forward with you.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
