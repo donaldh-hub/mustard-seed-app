@@ -112,4 +112,8 @@ export const api = {
     }),
   completeGroundingJournal: (userId: string) =>
     fetchJson<any>(`/users/${userId}/grounding-journal/complete`, { method: "POST" }),
+
+  exportData: (userId: string) => fetch(`${BASE}/users/${userId}/export-data`, { credentials: "include" }),
+  resetProgress: (userId: string) =>
+    fetchJson<{ message: string }>(`/users/${userId}/reset-progress`, { method: "POST" }),
 };

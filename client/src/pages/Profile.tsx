@@ -4,7 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles, Loader2, AlertCircle, Moon, Sun, Trash2, ClipboardCheck } from "lucide-react";
+import { Bell, Shield, LogOut, RefreshCw, CalendarDays, Crown, Sparkles, Loader2, AlertCircle, Moon, Sun, Trash2, ClipboardCheck, Download, RotateCcw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
@@ -67,6 +78,8 @@ export default function Profile() {
   const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => getStoredTheme());
   const [dataCleared, setDataCleared] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
@@ -81,6 +94,32 @@ export default function Profile() {
     setTheme(next);
     applyTheme(next);
     updateSettingsMut.mutate({ themePreference: next });
+  };
+
+  const handleExportData = async () => {
+    if (!userId) return;
+    setExportLoading(true);
+    try {
+      const res = await api.exportData(userId);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mustard-seed-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+    setExportLoading(false);
+  };
+
+  const handleResetProgress = async () => {
+    if (!userId) return;
+    setResetLoading(true);
+    try {
+      await api.resetProgress(userId);
+      queryClient.invalidateQueries({ queryKey: ["user", userId] });
+    } catch {}
+    setResetLoading(false);
   };
 
   const handleClearLocalData = () => {
@@ -372,6 +411,54 @@ export default function Profile() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
             Data Management
           </h2>
+          <Button
+            onClick={handleExportData}
+            variant="outline"
+            className="w-full rounded-xl h-12 justify-start"
+            disabled={exportLoading}
+            data-testid="button-export-data"
+          >
+            {exportLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {exportLoading ? "Exporting…" : "Export My Data"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Downloads a JSON file with your goals, journal entries, and progress history.
+          </p>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full rounded-xl h-12 justify-start text-orange-600 border-orange-200 hover:bg-orange-50"
+                disabled={resetLoading}
+                data-testid="button-reset-progress"
+              >
+                {resetLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-2" />}
+                {resetLoading ? "Resetting…" : "Reset Progress Tree"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset your progress tree?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This resets your water level, tree stage, and streak back to the beginning. Your goals, journal entries, and history are kept safe.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                  onClick={handleResetProgress}
+                >
+                  Yes, reset
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <p className="text-xs text-muted-foreground">
+            Resets your tree stage, water level, and streak. Your history is preserved.
+          </p>
+
           <Button
             onClick={handleClearLocalData}
             variant="outline"

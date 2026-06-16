@@ -3022,5 +3022,82 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Export Data ───
+  app.get("/api/users/:userId/export-data", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const [user, goals, entries, assessment, journalEntries] = await Promise.all([
+        storage.getUser(userId),
+        storage.getAllGoals(userId),
+        storage.getEntries(userId),
+        storage.getLatestAssessment(userId),
+        storage.getGroundingJournalEntries(userId),
+      ]);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const safeUser = {
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        goals: user.goals,
+        struggles: user.struggles,
+        commitmentLevel: user.commitmentLevel,
+        streak: user.streak,
+        treeStage: user.treeStage,
+        waterLevel: user.waterLevel,
+        subscriptionTier: user.subscriptionTier,
+        groundingJournalCompleted: user.groundingJournalCompleted,
+      };
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        user: safeUser,
+        assessment: assessment || null,
+        goals,
+        entries,
+        journalEntries,
+      };
+
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="mustard-seed-export-${new Date().toISOString().slice(0, 10)}.json"`);
+      return res.json(payload);
+    } catch (err) {
+      console.error("[EXPORT] export error:", err);
+      return res.status(500).json({ message: "Export failed" });
+    }
+  });
+
+  // ─── Reset Progress ───
+  app.post("/api/users/:userId/reset-progress", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const updated = await storage.updateUser(userId, {
+        waterLevel: 30,
+        treeStage: 1,
+        streak: 0,
+        previousStreak: 0,
+        driftMarkers: 0,
+        consecutiveIOCount: 0,
+        cBurnActive: 0,
+      } as any);
+
+      await storage.createMessage({
+        userId,
+        text: "Your progress tree has been reset. Every journey has a fresh start — your goals, journal, and history are still here. Let's grow again. 🌱",
+        sender: "jae",
+        messageType: "text",
+        status: "sent",
+      });
+
+      return res.json({ message: "Progress reset", user: updated });
+    } catch (err) {
+      console.error("[RESET] reset error:", err);
+      return res.status(500).json({ message: "Reset failed" });
+    }
+  });
+
   return httpServer;
 }
