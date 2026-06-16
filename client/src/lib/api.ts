@@ -94,4 +94,22 @@ export const api = {
   getStripeConfig: () => fetchJson<{ configured: boolean }>("/stripe/config"),
   createStripeCheckout: (userId: string) =>
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST" }),
+
+  getGroundingJournal: (userId: string) =>
+    fetchJson<{ entries: any[]; completed: boolean }>(`/users/${userId}/grounding-journal`),
+  submitJournalEntry: (
+    userId: string,
+    data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[] }
+  ) =>
+    fetchJson<{ entry: any; jae: any }>(`/users/${userId}/grounding-journal/entry`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  saveJournalFollowUp: (userId: string, entryId: string, followUpResponse: string) =>
+    fetchJson<any>(`/users/${userId}/grounding-journal/follow-up`, {
+      method: "PATCH",
+      body: JSON.stringify({ entryId, followUpResponse }),
+    }),
+  completeGroundingJournal: (userId: string) =>
+    fetchJson<any>(`/users/${userId}/grounding-journal/complete`, { method: "POST" }),
 };

@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
+import { generateJournalReflection } from "./jaeJournal";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -2838,6 +2839,88 @@ export async function registerRoutes(
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Sync error" });
+    }
+  });
+
+  // --- 3-Day Grounding Journal ---
+
+  app.get("/api/users/:userId/grounding-journal", async (req, res) => {
+    const entries = await storage.getGroundingJournalEntries(req.params.userId);
+    const user = await storage.getUser(req.params.userId);
+    return res.json({ entries, completed: user?.groundingJournalCompleted ?? false });
+  });
+
+  app.post("/api/users/:userId/grounding-journal/entry", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { dayNumber, session, prompts } = req.body as {
+        dayNumber: 1 | 2 | 3;
+        session: "intention" | "morning" | "evening" | "grounding_statement";
+        prompts: { prompt: string; response: string }[];
+      };
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const dayThemes: Record<number, "RESET" | "REFOCUS" | "REBUILD"> = { 1: "RESET", 2: "REFOCUS", 3: "REBUILD" };
+      const previousEntries = await storage.getGroundingJournalEntries(userId);
+      const prevSummary = previousEntries.map((e) => ({
+        dayNumber: e.dayNumber,
+        session: e.session,
+        keyTheme: e.keyTheme,
+        valueNamed: e.valueNamed,
+        releasePoint: e.releasePoint,
+        jaeReflection: e.jaeReflection,
+      }));
+
+      const jaeResponse = await generateJournalReflection({
+        userName: user.name || "friend",
+        dayNumber,
+        dayTheme: dayThemes[dayNumber],
+        session,
+        prompts,
+        previousEntries: prevSummary,
+      });
+
+      const entry = await storage.createGroundingJournalEntry({
+        userId,
+        dayNumber,
+        session,
+        prompts,
+        jaeReflection: jaeResponse.reflection,
+        jaeFollowUpQuestion: jaeResponse.followUpQuestion,
+        userFollowUpResponse: null,
+        keyTheme: jaeResponse.keyTheme,
+        releasePoint: jaeResponse.releasePoint,
+        valueNamed: jaeResponse.valueNamed,
+        possibleFirstSeed: jaeResponse.possibleFirstSeed,
+        isComplete: true,
+      });
+
+      return res.json({ entry, jae: jaeResponse });
+    } catch (err: any) {
+      console.error("[JOURNAL] entry error:", err);
+      return res.status(500).json({ message: "Journal entry error" });
+    }
+  });
+
+  app.patch("/api/users/:userId/grounding-journal/follow-up", async (req, res) => {
+    try {
+      const { entryId, followUpResponse } = req.body as { entryId: string; followUpResponse: string };
+      const updated = await storage.updateGroundingJournalEntry(entryId, { userFollowUpResponse: followUpResponse });
+      return res.json({ entry: updated });
+    } catch (err) {
+      return res.status(500).json({ message: "Follow-up save error" });
+    }
+  });
+
+  app.post("/api/users/:userId/grounding-journal/complete", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const user = await storage.updateUser(userId, { groundingJournalCompleted: true } as any);
+      return res.json({ completed: true, user });
+    } catch (err) {
+      return res.status(500).json({ message: "Completion error" });
     }
   });
 

@@ -16,6 +16,7 @@ import ProgressPage from "@/pages/Progress";
 import CalendarPage from "@/pages/Calendar";
 import Profile from "@/pages/Profile";
 import WeeklyReview from "@/pages/WeeklyReview";
+import GroundingJournal from "@/pages/GroundingJournal";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 
@@ -74,6 +75,7 @@ function Router() {
           <Route path="/calendar" component={CalendarPage} />
           <Route path="/profile" component={Profile} />
           <Route path="/weekly-review" component={WeeklyReview} />
+          <Route path="/journal" component={GroundingJournal} />
           <Route component={NotFound} />
         </Switch>
       </Layout>

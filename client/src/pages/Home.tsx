@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame, ClipboardCheck, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpen, Sprout, TreeDeciduous, Flame, ClipboardCheck, X, BookMarked } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -213,6 +213,26 @@ export default function Home() {
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-amber-900">Your Weekly Review is Ready</p>
                   <p className="text-xs text-amber-700/70 mt-0.5">Tap to view your progress report</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {!(user as any)?.groundingJournalCompleted && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-sm cursor-pointer"
+              onClick={() => setLocation("/journal")}
+              data-testid="banner-grounding-journal"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                  <BookMarked className="w-4.5 h-4.5 text-emerald-700" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-emerald-900">Start Your 3-Day Grounding Journal</p>
+                  <p className="text-xs text-emerald-700/70 mt-0.5">Your first conversation with Jae begins here.</p>
                 </div>
               </div>
             </motion.div>

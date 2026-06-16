@@ -58,9 +58,29 @@ export const users = pgTable("users", {
   notifyWeeklySummary: boolean("notify_weekly_summary").notNull().default(true),
   notifyAssessmentReminder: boolean("notify_assessment_reminder").notNull().default(true),
   themePreference: text("theme_preference").notNull().default("light"),
+  groundingJournalCompleted: boolean("grounding_journal_completed").notNull().default(false),
   lastAssessmentReminderSentAt: timestamp("last_assessment_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const groundingJournalEntries = pgTable("grounding_journal_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  dayNumber: integer("day_number").notNull(),
+  session: text("session").notNull(),
+  prompts: jsonb("prompts").notNull().default(sql`'[]'::jsonb`),
+  jaeReflection: text("jae_reflection"),
+  jaeFollowUpQuestion: text("jae_follow_up_question"),
+  userFollowUpResponse: text("user_follow_up_response"),
+  keyTheme: text("key_theme"),
+  releasePoint: text("release_point"),
+  valueNamed: text("value_named"),
+  possibleFirstSeed: text("possible_first_seed"),
+  isComplete: boolean("is_complete").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type GroundingJournalEntry = typeof groundingJournalEntries.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

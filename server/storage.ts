@@ -1,4 +1,4 @@
-import { 
+import {
   type User, type InsertUser, users,
   type Message, type InsertMessage, messages,
   type Entry, type InsertEntry, entries,
@@ -7,6 +7,7 @@ import {
   type WeeklyReview, type InsertWeeklyReview, weeklyReviews,
   type PhotoMemory, type InsertPhotoMemory, photoMemories,
   type Commitment, type InsertCommitment, commitments,
+  type GroundingJournalEntry, groundingJournalEntries,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -61,6 +62,10 @@ export interface IStorage {
   getPendingCommitments(userId: string): Promise<Commitment[]>;
   resolveCommitment(id: string, status: "completed" | "missed"): Promise<Commitment | undefined>;
   getRecentCommitments(userId: string, limit?: number): Promise<Commitment[]>;
+
+  getGroundingJournalEntries(userId: string): Promise<GroundingJournalEntry[]>;
+  createGroundingJournalEntry(data: Omit<GroundingJournalEntry, "id" | "createdAt">): Promise<GroundingJournalEntry>;
+  updateGroundingJournalEntry(id: string, data: Partial<GroundingJournalEntry>): Promise<GroundingJournalEntry | undefined>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -281,6 +286,22 @@ export class DatabaseStorage implements IStorage {
       .where(eq(commitments.userId, userId))
       .orderBy(desc(commitments.createdAt))
       .limit(limit);
+  }
+
+  async getGroundingJournalEntries(userId: string): Promise<GroundingJournalEntry[]> {
+    return db.select().from(groundingJournalEntries)
+      .where(eq(groundingJournalEntries.userId, userId))
+      .orderBy(asc(groundingJournalEntries.createdAt));
+  }
+
+  async createGroundingJournalEntry(data: Omit<GroundingJournalEntry, "id" | "createdAt">): Promise<GroundingJournalEntry> {
+    const [entry] = await db.insert(groundingJournalEntries).values(data as any).returning();
+    return entry;
+  }
+
+  async updateGroundingJournalEntry(id: string, data: Partial<GroundingJournalEntry>): Promise<GroundingJournalEntry | undefined> {
+    const [entry] = await db.update(groundingJournalEntries).set(data as any).where(eq(groundingJournalEntries.id, id)).returning();
+    return entry;
   }
 }
 
