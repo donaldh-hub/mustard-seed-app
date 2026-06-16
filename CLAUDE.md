@@ -1,16 +1,12 @@
-# Project conventions
+# Mustard Seed — Agent Instructions
 
-## Git commits
+## Role
+This Replit environment is for HOSTING ONLY.
+Do not write, edit, or commit code here.
+Do not run git add, git commit, or git push.
+Do not make changes to any files.
 
-After completing each significant feature or fix, automatically run:
-
-```
-git add -A
-git commit -m "<descriptive message>"
-```
-
-The commit message should describe what changed and why, following the
-repo's existing commit message style (see `git log`).
-
-Do NOT push automatically — pushing to `origin main` triggers Replit's
-auto-deploy, so pushes remain a manual, explicit step decided by the user.
+## Workflow
+All code is built externally and pushed to GitHub.
+GitHub auto-deploys to this Replit environment.
+Your only job here is to run the app.
