@@ -238,15 +238,23 @@ export async function processRewardTransaction(
     return skip("duplicate_submission");
   }
 
-  // If no goal exists, AP is still acknowledged but no water/DB update on goal
+  // If no goal exists, AP is still acknowledged but no water/DB update on goal.
+  // Still save a memory entry so the calendar has something to show.
   if (!matchGoal) {
     console.log(`[REWARD] NO_GOAL | apDelta=${apDelta} | no water awarded | text="${rawText.substring(0, 60)}"`);
     _markRewardGranted(userId, rawText, todayStr);
+    let entryCreated = false;
+    try {
+      await storage.createEntry({ userId, goalId: null, date: todayStr, summary: rawText, mood: "happy", ...(userTimezone ? { userTimezone } : {}) });
+      entryCreated = true;
+    } catch (err) {
+      console.error(`[MEMORY_WRITE_ERROR] no_goal_entry | userId=${userId} | err="${(err as Error).message}"`);
+    }
     return {
       success: true,
       skipReason: "no_active_goal",
       waterAwarded: false,
-      entryCreated: false,
+      entryCreated,
       apActuallyAwarded: apDelta,
       postUpdateAP: null,
       growthResult: null,
