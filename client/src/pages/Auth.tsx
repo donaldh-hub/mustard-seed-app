@@ -46,6 +46,10 @@ export default function Auth() {
     if (token) {
       setResetToken(token);
       setView("reset");
+      return;
+    }
+    if (params.get("view") === "register") {
+      setView("register");
     }
   }, []);
 

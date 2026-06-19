@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
 import Layout from "@/components/Layout";
 import Auth from "@/pages/Auth";
+import LandingPage from "@/pages/LandingPage";
 import Welcome from "@/pages/Welcome";
 import Orientation from "@/pages/Orientation";
 import Assessment from "@/pages/Assessment";
@@ -25,7 +26,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const setUserId = useStore((s) => s.setUserId);
   const setAuthStatus = useStore((s) => s.setAuthStatus);
   const completeOnboarding = useStore((s) => s.completeOnboarding);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
     api.authMe()
@@ -36,7 +37,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {
         setAuthStatus("unauthenticated");
-        setLocation("/auth", { replace: true });
+        if (location !== "/") {
+          setLocation("/auth", { replace: true });
+        }
       });
   }, []);
 
@@ -49,7 +52,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (authStatus === "unauthenticated") {
-    return null;
+    return location === "/" ? <LandingPage /> : null;
   }
 
   return <>{children}</>;
