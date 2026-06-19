@@ -1,4 +1,4 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
@@ -13,7 +13,7 @@ import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type Re
 import { analyzePhoto } from "./visionAnalysis";
 import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
-import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt, validateReceiptUpdate } from "./subscriptionEngine";
+import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -190,6 +190,163 @@ async function maybeInjectWeeklySummaryToChat(userId: string): Promise<void> {
   await storage.updateUser(userId, { lastWeeklySummaryChatAt: new Date() } as any);
 }
 
+
+// ─── Stripe Webhook ───────────────────────────────────────────────────────
+// Must be mounted before express.json() — Stripe signature verification
+// requires the raw, unparsed request body. Drives the same state machine
+// (computeStateTransition) used for Apple/Google receipt validation.
+export function registerStripeWebhook(app: Express) {
+  app.post(
+    "/api/stripe/webhook",
+    express.raw({ type: "application/json" }),
+    async (req: Request, res: Response) => {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+      if (!stripeKey || !webhookSecret) {
+        console.warn(
+          "[CONFIG_WARNING] Stripe webhook received but STRIPE_SECRET_KEY or " +
+          "STRIPE_WEBHOOK_SECRET is not set. Set both to enable subscription sync."
+        );
+        return res.status(503).json({ message: "Webhook not configured" });
+      }
+
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-04-30.basil" } as any);
+
+      let event: any;
+      try {
+        const signature = req.headers["stripe-signature"];
+        event = stripe.webhooks.constructEvent(req.body, signature as string, webhookSecret);
+      } catch (err: any) {
+        console.error("[STRIPE] Webhook signature verification failed:", err?.message || err);
+        return res.status(400).json({ message: "Invalid signature" });
+      }
+
+      try {
+        switch (event.type) {
+          case "checkout.session.completed": {
+            const session = event.data.object;
+            if (session.mode !== "subscription") break;
+
+            const userId = session.client_reference_id || session.metadata?.userId;
+            if (!userId) {
+              console.error("[STRIPE] checkout.session.completed missing userId reference");
+              break;
+            }
+
+            const user = await storage.getUser(userId);
+            if (!user) break;
+
+            const subscription: any = await stripe.subscriptions.retrieve(session.subscription as string);
+            const periodEnd = new Date(subscription.current_period_end * 1000);
+            const productId = subscription.items?.data?.[0]?.price?.id;
+
+            const transition = computeStateTransition(user.subscriptionState as any, {
+              platform: "STRIPE",
+              type: "subscription_created",
+              subscriptionId: subscription.id,
+              productId,
+              expiresAt: periodEnd,
+            });
+
+            await storage.updateUser(userId, {
+              ...transition,
+              stripeCustomerId: session.customer as string,
+            } as any);
+
+            console.log(`[STRIPE] Subscription activated for user ${userId.slice(0, 8)}***`);
+            break;
+          }
+
+          case "invoice.payment_succeeded": {
+            const invoice = event.data.object;
+            // The first invoice on a new subscription is already handled by
+            // checkout.session.completed — only react to renewals here.
+            if (invoice.billing_reason === "subscription_create") break;
+
+            const user = await storage.getUserByStripeCustomerId(invoice.customer as string);
+            if (!user) break;
+
+            const subscription: any = await stripe.subscriptions.retrieve(invoice.subscription as string);
+            const periodEnd = new Date(subscription.current_period_end * 1000);
+
+            const transition = computeStateTransition(user.subscriptionState as any, {
+              platform: "STRIPE",
+              type: "subscription_renewed",
+              expiresAt: periodEnd,
+            });
+
+            await storage.updateUser(user.id, transition as any);
+            console.log(`[STRIPE] Subscription renewed for user ${user.id.slice(0, 8)}***`);
+            break;
+          }
+
+          case "invoice.payment_failed": {
+            const invoice = event.data.object;
+            const user = await storage.getUserByStripeCustomerId(invoice.customer as string);
+            if (!user) break;
+
+            const transition = computeStateTransition(user.subscriptionState as any, {
+              platform: "STRIPE",
+              type: "payment_failed",
+            });
+
+            await storage.updateUser(user.id, transition as any);
+            console.log(`[STRIPE] Payment failed for user ${user.id.slice(0, 8)}***`);
+            break;
+          }
+
+          case "customer.subscription.updated": {
+            const subscription = event.data.object as any;
+            const user = await storage.getUserByStripeCustomerId(subscription.customer as string);
+            if (!user) break;
+
+            const periodEnd = new Date(subscription.current_period_end * 1000);
+
+            if (subscription.cancel_at_period_end) {
+              const transition = computeStateTransition(user.subscriptionState as any, {
+                platform: "STRIPE",
+                type: "subscription_canceled",
+                expiresAt: periodEnd,
+              });
+              await storage.updateUser(user.id, transition as any);
+            } else if (subscription.status === "active" && user.subscriptionState !== "PREMIUM_ACTIVE") {
+              const transition = computeStateTransition(user.subscriptionState as any, {
+                platform: "STRIPE",
+                type: "payment_recovered",
+                expiresAt: periodEnd,
+              });
+              await storage.updateUser(user.id, transition as any);
+            }
+            break;
+          }
+
+          case "customer.subscription.deleted": {
+            const subscription = event.data.object as any;
+            const user = await storage.getUserByStripeCustomerId(subscription.customer as string);
+            if (!user) break;
+
+            await storage.updateUser(user.id, {
+              subscriptionState: "PREMIUM_EXPIRED",
+              subscriptionTier: "lite",
+            } as any);
+            console.log(`[STRIPE] Subscription ended for user ${user.id.slice(0, 8)}***`);
+            break;
+          }
+
+          default:
+            break;
+        }
+
+        return res.json({ received: true });
+      } catch (err: any) {
+        console.error("[STRIPE] Webhook handling error:", err?.message || err);
+        return res.status(500).json({ message: "Webhook processing error" });
+      }
+    }
+  );
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -2901,6 +3058,7 @@ export async function registerRoutes(
         customer_email: user.email ?? undefined,
         client_reference_id: userId,
         metadata: { userId },
+        subscription_data: { metadata: { userId } },
         success_url: `${baseUrl}/chat?upgraded=1`,
         cancel_url: `${baseUrl}/profile`,
       });

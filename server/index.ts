@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes, registerStripeWebhook } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupSession, registerAuthRoutes } from "./auth";
@@ -11,7 +11,8 @@ async function ensureSchema() {
     await pool.query(`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS last_daily_encouragement_sent_at TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS last_weekly_summary_chat_at TIMESTAMP;
+        ADD COLUMN IF NOT EXISTS last_weekly_summary_chat_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS grounding_journal_entries (
@@ -41,6 +42,10 @@ console.log("deployment refresh");
 
 const app = express();
 const httpServer = createServer(app);
+
+// Must be registered before express.json() — Stripe signature verification
+// requires the raw, unparsed request body.
+registerStripeWebhook(app);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: false }));
