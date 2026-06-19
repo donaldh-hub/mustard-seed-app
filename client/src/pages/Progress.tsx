@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X, Crown, Zap } from "lucide-react";
+import { Droplets, Plus, Archive, CheckCircle2, Target, Flame, TrendingUp, Clock, X, Crown, Zap, AlertCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,7 @@ export default function ProgressPage() {
   const [formHabit, setFormHabit] = useState("");
   const [formFocus, setFormFocus] = useState("");
   const [goalPulsing, setGoalPulsing] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const prevWaterEventsRef = useRef<number | null>(null);
 
   const isAnyModalOpen = !!formMode || !!logGoalId || !!completeGoalId;
@@ -103,6 +104,7 @@ export default function ProgressPage() {
   const archiveMut = useMutation({
     mutationFn: (goalId: string) => api.archiveGoal(goalId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["garden", userId] }),
+    onError: () => setMutationError("Something went wrong. Please try again."),
   });
 
   const completeMut = useMutation({
@@ -111,6 +113,7 @@ export default function ProgressPage() {
       queryClient.invalidateQueries({ queryKey: ["garden", userId] });
       setCompleteGoalId(null);
     },
+    onError: () => setMutationError("Something went wrong. Please try again."),
   });
 
   const logMut = useMutation({
@@ -122,6 +125,7 @@ export default function ProgressPage() {
       setLogSummary("");
       setLogProgress("");
     },
+    onError: () => setMutationError("Something went wrong. Please try again."),
   });
 
   function resetForm() {
@@ -167,6 +171,12 @@ export default function ProgressPage() {
         </header>
 
         <div className="px-4 space-y-4">
+          {mutationError && !logGoalId && !completeGoalId && (
+            <div className="flex items-center gap-1.5 text-red-600 text-xs bg-red-50 border border-red-200 rounded-xl px-3 py-2" data-testid="text-archive-error">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{mutationError}</span>
+            </div>
+          )}
           <GoalCard
             label="TARGETED GOAL"
             type="targeted"
@@ -182,9 +192,9 @@ export default function ProgressPage() {
                 setFormMode("targeted");
               }
             }}
-            onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
-            onArchive={(id) => archiveMut.mutate(id)}
-            onComplete={(id) => { setCompleteGoalId(id); }}
+            onLog={(id) => { setLogGoalId(id); setLogProgress(""); setMutationError(null); }}
+            onArchive={(id) => { setMutationError(null); archiveMut.mutate(id); }}
+            onComplete={(id) => { setCompleteGoalId(id); setMutationError(null); }}
           />
           <GoalCard
             label="IDENTITY GOAL"
@@ -199,9 +209,9 @@ export default function ProgressPage() {
                 setFormMode("untargeted");
               }
             }}
-            onLog={(id) => { setLogGoalId(id); setLogProgress(""); }}
-            onArchive={(id) => archiveMut.mutate(id)}
-            onComplete={(id) => { setCompleteGoalId(id); setCompletionType("integrated"); }}
+            onLog={(id) => { setLogGoalId(id); setLogProgress(""); setMutationError(null); }}
+            onArchive={(id) => { setMutationError(null); archiveMut.mutate(id); }}
+            onComplete={(id) => { setCompleteGoalId(id); setCompletionType("integrated"); setMutationError(null); }}
           />
 
           {targeted && (
@@ -349,17 +359,26 @@ export default function ProgressPage() {
               <Button
                 className="w-full"
                 disabled={!logSummary.trim() || logMut.isPending}
-                onClick={() => logMut.mutate({
-                  goalId: logGoalId,
-                  data: {
-                    summary: logSummary.trim(),
-                    progressValue: logProgress ? parseFloat(logProgress) : undefined,
-                  }
-                })}
+                onClick={() => {
+                  setMutationError(null);
+                  logMut.mutate({
+                    goalId: logGoalId,
+                    data: {
+                      summary: logSummary.trim(),
+                      progressValue: logProgress ? parseFloat(logProgress) : undefined,
+                    }
+                  });
+                }}
                 data-testid="button-submit-log"
               >
                 {logMut.isPending ? "Logging..." : "Log"}
               </Button>
+              {mutationError && logGoalId && (
+                <div className="flex items-center gap-1.5 text-red-600 text-xs" data-testid="text-log-error">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{mutationError}</span>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -403,12 +422,21 @@ export default function ProgressPage() {
                 <Button
                   className="flex-1"
                   disabled={completeMut.isPending}
-                  onClick={() => completeMut.mutate({ goalId: completeGoalId, type: completionType })}
+                  onClick={() => {
+                    setMutationError(null);
+                    completeMut.mutate({ goalId: completeGoalId, type: completionType });
+                  }}
                   data-testid="button-confirm-complete"
                 >
                   {completeMut.isPending ? "..." : "Complete"}
                 </Button>
               </div>
+              {mutationError && completeGoalId && (
+                <div className="flex items-center gap-1.5 text-red-600 text-xs" data-testid="text-complete-error">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{mutationError}</span>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

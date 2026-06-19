@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { AlertCircle } from "lucide-react";
 import { useLocation } from "wouter";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -40,6 +41,7 @@ export default function Assessment() {
   const [answers, setAnswers] = useState<(number | null)[]>(Array(10).fill(null));
   const [result, setResult] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const userId = useStore((s) => s.userId);
   const setUserId = useStore((s) => s.setUserId);
@@ -58,6 +60,7 @@ export default function Assessment() {
   const handleSubmit = async () => {
     if (!allAnswered || submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       let currentUserId = userId;
       if (!currentUserId) {
@@ -88,6 +91,7 @@ export default function Assessment() {
       }, 3500);
     } catch (e) {
       console.error(e);
+      setSubmitError("Something went wrong. Please try again.");
       setSubmitting(false);
     }
   };
@@ -219,6 +223,24 @@ export default function Assessment() {
         >
           {submitting ? "Submitting..." : "Submit Assessment"}
         </Button>
+
+        {submitError && (
+          <div className="flex flex-col items-center gap-2 mt-2" data-testid="text-submit-error">
+            <div className="flex items-center gap-1.5 text-red-600 text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full text-xs"
+              onClick={handleSubmit}
+              data-testid="button-retry-assessment"
+            >
+              Retry
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

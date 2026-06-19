@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
-import { Loader2, ChevronRight, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle } from "lucide-react";
 
 // ── Journal content ──────────────────────────────────────────────────────────
 
@@ -98,6 +98,7 @@ export default function GroundingJournal() {
   const [jaeData, setJaeData] = useState<Record<string, any>>({});
   const [followUpText, setFollowUpText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [intention, setIntention] = useState("");
 
@@ -141,6 +142,7 @@ export default function GroundingJournal() {
   const handleSubmitSession = async () => {
     if (!userId || saving) return;
     setSaving(true);
+    setSubmitError(null);
     try {
       const prompts = currentPrompts().map((p) => ({
         prompt: p,
@@ -157,6 +159,7 @@ export default function GroundingJournal() {
       advance();
     } catch (err) {
       console.error("[JOURNAL] submit error", err);
+      setSubmitError("Something went wrong. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -408,6 +411,12 @@ export default function GroundingJournal() {
                     </>
                   )}
                 </Button>
+                {submitError && (
+                  <div className="flex items-center gap-1.5 text-red-600 text-sm" data-testid="text-journal-submit-error">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{submitError}</span>
+                  </div>
+                )}
               </div>
             )}
 
