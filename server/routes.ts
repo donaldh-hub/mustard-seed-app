@@ -11,9 +11,9 @@ import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateW
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
-import { insertUserSchema, assessments, insertGoalSchema } from "@shared/schema";
+import { assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
-import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, computeTrialExpiresAt, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
+import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -364,23 +364,6 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Forbidden" });
     }
     return next();
-  });
-
-  app.post("/api/users", async (req, res) => {
-    const result = insertUserSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json({ message: result.error.message });
-    const now = new Date();
-    const trialExpires = computeTrialExpiresAt(now);
-    const userData = {
-      ...result.data,
-      weeklyCycleStart: now,
-      subscriptionTier: "premium",
-      subscriptionState: "PREMIUM_TRIAL_ACTIVE" as const,
-      trialStartedAt: now,
-      trialExpiresAt: trialExpires,
-    };
-    const user = await storage.createUser(userData as any);
-    return res.json(user);
   });
 
   app.get("/api/users/:id", async (req, res) => {

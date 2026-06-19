@@ -36,7 +36,6 @@ export const api = {
   authResetPassword: (token: string, password: string) =>
     fetchJson<any>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
 
-  createUser: (data: any) => fetchJson<any>("/users", { method: "POST", body: JSON.stringify(data) }),
   getUser: (id: string) => fetchJson<any>(`/users/${id}`),
   updateUser: (id: string, data: any) => fetchJson<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 

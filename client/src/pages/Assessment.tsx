@@ -37,19 +37,16 @@ const STAGE_EMOJI: Record<string, string> = {
 };
 
 export default function Assessment() {
-  const [name, setName] = useState("");
   const [answers, setAnswers] = useState<(number | null)[]>(Array(10).fill(null));
   const [result, setResult] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const userId = useStore((s) => s.userId);
-  const setUserId = useStore((s) => s.setUserId);
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const qc = useQueryClient();
 
-  const isReturningUser = !!userId;
-  const allAnswered = (isReturningUser || name.trim().length > 0) && answers.every((a) => a !== null);
+  const allAnswered = answers.every((a) => a !== null);
 
   const handleSelect = (qIndex: number, value: number) => {
     const updated = [...answers];
@@ -58,31 +55,16 @@ export default function Assessment() {
   };
 
   const handleSubmit = async () => {
-    if (!allAnswered || submitting) return;
+    if (!allAnswered || submitting || !userId) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      let currentUserId = userId;
-      if (!currentUserId) {
-        const user = await api.createUser({
-          name: name.trim(),
-          isOnboarded: 1,
-        });
-        setUserId(user.id);
-        currentUserId = user.id;
-      } else if (name.trim()) {
-        await api.updateUser(currentUserId, { name: name.trim() });
-      }
-
-      const assessmentResult = await api.submitAssessment(
-        currentUserId!,
-        answers as number[]
-      );
+      const assessmentResult = await api.submitAssessment(userId, answers as number[]);
       localStorage.setItem("assessmentResult", JSON.stringify(assessmentResult));
       setResult(assessmentResult);
 
-      qc.invalidateQueries({ queryKey: ["assessment", currentUserId] });
-      qc.invalidateQueries({ queryKey: ["user", currentUserId] });
+      qc.invalidateQueries({ queryKey: ["assessment", userId] });
+      qc.invalidateQueries({ queryKey: ["user", userId] });
 
       completeOnboarding();
 
@@ -157,23 +139,6 @@ export default function Assessment() {
             No overthinking — answer based on how true this feels TODAY.
           </p>
         </div>
-
-        {!isReturningUser && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              What should I call you?
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name..."
-              className="w-full bg-white border border-border rounded-xl px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-              autoComplete="off"
-              data-testid="input-name"
-            />
-          </div>
-        )}
 
         <div className="bg-white/80 rounded-xl p-3 border border-border/30 text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 justify-center">
           {SCALE_LABELS.map((label, i) => (

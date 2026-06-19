@@ -258,7 +258,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/google", async (req, res) => {
+  app.post("/api/auth/google", authRateLimit, async (req, res) => {
     const { credential } = req.body;
 
     if (!credential) {
@@ -396,7 +396,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/reset-password", async (req, res) => {
+  app.post("/api/auth/reset-password", authRateLimit, async (req, res) => {
     const { token, password } = req.body;
 
     if (!token || !password) {
