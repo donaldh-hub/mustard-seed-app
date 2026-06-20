@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
 
 type AuthView = "login" | "register" | "forgot" | "reset" | "resetSent";
@@ -33,6 +34,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetToken, setResetToken] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -155,6 +157,10 @@ export default function Auth() {
     }
     if (password !== confirmPassword) {
       setError("Passwords don't match.");
+      return;
+    }
+    if (!agreedToTerms) {
+      setError("Please agree to the Terms of Service and Privacy Policy to continue.");
       return;
     }
     setLoading(true);
@@ -350,7 +356,11 @@ export default function Auth() {
 
                 {googleClientId && (
                   <>
-                    <div ref={googleBtnRef} className="w-full mb-4" data-testid="btn-google-register" />
+                    <div
+                      ref={googleBtnRef}
+                      className={cn("w-full mb-4", !agreedToTerms && "pointer-events-none opacity-50")}
+                      data-testid="btn-google-register"
+                    />
                     <div className="flex items-center gap-3 mb-4">
                       <div className="flex-1 h-px bg-stone-200" />
                       <span className="text-xs text-stone-400">or</span>
@@ -397,13 +407,34 @@ export default function Auth() {
                     data-testid="input-register-confirm"
                   />
 
+                  <label className="flex items-start gap-2 text-sm text-stone-600 px-1">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 flex-none rounded border-stone-300 text-amber-500 focus:ring-amber-400"
+                      data-testid="checkbox-agree-terms"
+                    />
+                    <span>
+                      By creating an account, you agree to our{" "}
+                      <Link href="/terms-of-service" className="font-semibold text-amber-600 hover:underline">
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/privacy-policy" className="font-semibold text-amber-600 hover:underline">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </span>
+                  </label>
+
                   {error && (
                     <p className="text-sm text-red-500 px-1" data-testid="text-auth-error">{error}</p>
                   )}
 
                   <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !agreedToTerms}
                     data-testid="btn-register-submit"
                     className={btnClass}
                     style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
@@ -564,6 +595,16 @@ export default function Auth() {
           )}
         </AnimatePresence>
       </motion.div>
+
+      <footer className="mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-stone-400">
+        <Link href="/privacy-policy" className="hover:text-stone-600 hover:underline" data-testid="link-auth-footer-privacy">
+          Privacy Policy
+        </Link>
+        <span className="text-stone-300">•</span>
+        <Link href="/terms-of-service" className="hover:text-stone-600 hover:underline" data-testid="link-auth-footer-terms">
+          Terms of Service
+        </Link>
+      </footer>
     </div>
   );
 }

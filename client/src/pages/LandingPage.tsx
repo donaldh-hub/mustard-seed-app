@@ -1,4 +1,4 @@
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
 import jaiPodcast from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import jaiArmsCrossed from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
@@ -234,6 +234,19 @@ export default function LandingPage() {
       <footer className="bg-black px-6 py-10 text-center">
         <div className="font-serif text-lg font-bold text-white">Mustard Seed</div>
         <p className="mt-2 text-sm text-stone-400">Your digital accountability partner.</p>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-stone-400">
+          <Link href="/privacy-policy" className="hover:text-stone-200 hover:underline" data-testid="link-footer-privacy">
+            Privacy Policy
+          </Link>
+          <span className="text-stone-600">•</span>
+          <Link href="/terms-of-service" className="hover:text-stone-200 hover:underline" data-testid="link-footer-terms">
+            Terms of Service
+          </Link>
+          <span className="text-stone-600">•</span>
+          <Link href="/subscription-info" className="hover:text-stone-200 hover:underline" data-testid="link-footer-subscription">
+            Subscription Info
+          </Link>
+        </div>
         <p className="mt-4 text-xs text-stone-500">
           © {new Date().getFullYear()} Mustard Seed. All rights reserved.
         </p>

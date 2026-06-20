@@ -18,6 +18,9 @@ import CalendarPage from "@/pages/Calendar";
 import Profile from "@/pages/Profile";
 import WeeklyReview from "@/pages/WeeklyReview";
 import GroundingJournal from "@/pages/GroundingJournal";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsOfService from "@/pages/TermsOfService";
+import SubscriptionInfo from "@/pages/SubscriptionInfo";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 
@@ -64,6 +67,10 @@ function Router() {
   if (location === "/auth" || location.startsWith("/auth?")) {
     return <Auth />;
   }
+
+  if (location === "/privacy-policy") return <PrivacyPolicy />;
+  if (location === "/terms-of-service") return <TermsOfService />;
+  if (location === "/subscription-info") return <SubscriptionInfo />;
 
   return (
     <AuthGate>
