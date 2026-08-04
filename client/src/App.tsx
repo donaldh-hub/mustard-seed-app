@@ -18,6 +18,7 @@ import CalendarPage from "@/pages/Calendar";
 import Profile from "@/pages/Profile";
 import WeeklyReview from "@/pages/WeeklyReview";
 import GroundingJournal from "@/pages/GroundingJournal";
+import SevenDayRebuild from "@/pages/SevenDayRebuild";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import SubscriptionInfo from "@/pages/SubscriptionInfo";
@@ -86,6 +87,7 @@ function Router() {
           <Route path="/profile" component={Profile} />
           <Route path="/weekly-review" component={WeeklyReview} />
           <Route path="/journal" component={GroundingJournal} />
+          <Route path="/rebuild" component={SevenDayRebuild} />
           <Route component={NotFound} />
         </Switch>
       </Layout>

@@ -112,6 +112,32 @@ export const api = {
   completeGroundingJournal: (userId: string) =>
     fetchJson<any>(`/users/${userId}/grounding-journal/complete`, { method: "POST" }),
 
+  getRebuild: (userId: string) =>
+    fetchJson<{ instances: any[]; hasCompletedRebuild: boolean; lastRebuildActivityAt: string | null }>(`/users/${userId}/rebuild`),
+  rebuildReflect: (
+    userId: string,
+    instanceNumber: number,
+    data: { prompts: { prompt: string; response: string }[]; characterTrack?: string; chapterNumber?: number; stageNumber?: number; day7GoalPlan?: Record<string, any> }
+  ) =>
+    fetchJson<{ jae: any }>(`/users/${userId}/rebuild/${instanceNumber}/reflect`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  rebuildComplete: (
+    userId: string,
+    instanceNumber: number,
+    data?: { memoryData?: Record<string, any>; day7Stages?: Record<string, any> }
+  ) =>
+    fetchJson<{ completed: boolean; nextUnlocked: number | null }>(`/users/${userId}/rebuild/${instanceNumber}/complete`, {
+      method: "POST",
+      body: JSON.stringify(data ?? {}),
+    }),
+  rebuildDay5Followup: (userId: string, followUpStatus: "pending" | "confirmed" | "not_done") =>
+    fetchJson<any>(`/users/${userId}/rebuild/5/followup`, {
+      method: "PATCH",
+      body: JSON.stringify({ followUpStatus }),
+    }),
+
   exportData: (userId: string) => fetch(`${BASE}/users/${userId}/export-data`, { credentials: "include" }),
   resetProgress: (userId: string) =>
     fetchJson<{ message: string }>(`/users/${userId}/reset-progress`, { method: "POST" }),

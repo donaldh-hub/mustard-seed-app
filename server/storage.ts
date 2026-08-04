@@ -8,6 +8,7 @@ import {
   type PhotoMemory, type InsertPhotoMemory, photoMemories,
   type Commitment, type InsertCommitment, commitments,
   type GroundingJournalEntry, groundingJournalEntries,
+  type RebuildInstance, rebuildInstances,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -308,6 +309,40 @@ export class DatabaseStorage implements IStorage {
   async updateGroundingJournalEntry(id: string, data: Partial<GroundingJournalEntry>): Promise<GroundingJournalEntry | undefined> {
     const [entry] = await db.update(groundingJournalEntries).set(data as any).where(eq(groundingJournalEntries.id, id)).returning();
     return entry;
+  }
+
+  // ─── 7-Day Rebuild ───────────────────────────────────────────────────────────
+
+  async getRebuildInstances(userId: string): Promise<RebuildInstance[]> {
+    return db.select().from(rebuildInstances)
+      .where(eq(rebuildInstances.userId, userId))
+      .orderBy(asc(rebuildInstances.instanceNumber));
+  }
+
+  async getRebuildInstance(userId: string, instanceNumber: number): Promise<RebuildInstance | undefined> {
+    const [row] = await db.select().from(rebuildInstances)
+      .where(and(eq(rebuildInstances.userId, userId), eq(rebuildInstances.instanceNumber, instanceNumber)));
+    return row;
+  }
+
+  async initRebuildInstances(userId: string, totalInstances: number): Promise<RebuildInstance[]> {
+    const existing = await this.getRebuildInstances(userId);
+    if (existing.length > 0) return existing;
+    const rows = Array.from({ length: totalInstances }, (_, i) => ({
+      userId,
+      instanceNumber: i + 1,
+      status: i === 0 ? "unlocked" : "locked",
+    }));
+    const created = await db.insert(rebuildInstances).values(rows as any).returning();
+    return created.sort((a, b) => a.instanceNumber - b.instanceNumber);
+  }
+
+  async updateRebuildInstance(userId: string, instanceNumber: number, data: Partial<RebuildInstance>): Promise<RebuildInstance | undefined> {
+    const [row] = await db.update(rebuildInstances)
+      .set({ ...data as any, lastActivityAt: new Date() })
+      .where(and(eq(rebuildInstances.userId, userId), eq(rebuildInstances.instanceNumber, instanceNumber)))
+      .returning();
+    return row;
   }
 }
 
