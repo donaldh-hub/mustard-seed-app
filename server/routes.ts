@@ -5,6 +5,7 @@ import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection } from "./jaeJournal";
+import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -3011,9 +3012,14 @@ export async function registerRoutes(
     const userId = req.params.userId;
 
     const stripeKey = process.env.STRIPE_SECRET_KEY;
-    const priceId = process.env.STRIPE_PRICE_ID;
+    // [FLAGGED] Two price IDs needed:
+    //   STRIPE_PRICE_ID         → $17.99/mo standard rate
+    //   STRIPE_PRICE_ID_REBUILD → $15.99/mo rate for users who completed the paid Rebuild
+    // Both must be set up as recurring prices in your Stripe dashboard.
+    const standardPriceId = process.env.STRIPE_PRICE_ID;
+    const rebuildPriceId = process.env.STRIPE_PRICE_ID_REBUILD;
 
-    if (!stripeKey || !priceId) {
+    if (!stripeKey || !standardPriceId) {
       console.warn(
         "[CONFIG_WARNING] Stripe checkout requested but STRIPE_SECRET_KEY or STRIPE_PRICE_ID is not set. " +
         "Set these environment variables to enable real payment flows."
@@ -3027,6 +3033,11 @@ export async function registerRoutes(
     try {
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+
+      // Select price based on whether user completed the paid Rebuild product
+      const priceId = (user as any).hasCompletedRebuild && rebuildPriceId
+        ? rebuildPriceId
+        : standardPriceId;
 
       // Dynamic import avoids bundling Stripe in non-payment code paths
       const Stripe = (await import("stripe")).default;
@@ -3208,6 +3219,150 @@ export async function registerRoutes(
       return res.json({ completed: true, user });
     } catch (err) {
       return res.status(500).json({ message: "Completion error" });
+    }
+  });
+
+  // ─── 7-Day Rebuild ───────────────────────────────────────────────────────────
+  // REBUILD_INSTANCE_COUNT is the single source of truth for "7" — imported from
+  // the content config on the client. Server uses the same constant here.
+  const REBUILD_INSTANCE_COUNT = 7;
+
+  // GET status — returns all instance rows (creates them on first visit)
+  app.get("/api/users/:userId/rebuild", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const instances = await storage.initRebuildInstances(userId, REBUILD_INSTANCE_COUNT);
+      await storage.updateUser(userId, { lastRebuildActivityAt: new Date() } as any);
+
+      return res.json({
+        instances,
+        hasCompletedRebuild: (user as any).hasCompletedRebuild ?? false,
+        lastRebuildActivityAt: (user as any).lastRebuildActivityAt ?? null,
+      });
+    } catch (err) {
+      return res.status(500).json({ message: "Rebuild status error" });
+    }
+  });
+
+  // POST reflect — submit Jai questions for an instance, get Jai response back
+  app.post("/api/users/:userId/rebuild/:n/reflect", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const instanceNumber = parseInt(req.params.n);
+      const { prompts, characterTrack, chapterNumber, stageNumber, day7GoalPlan } = req.body as {
+        prompts: { prompt: string; response: string }[];
+        characterTrack?: "male" | "female" | "neutral";
+        chapterNumber?: number;
+        stageNumber?: number;
+        day7GoalPlan?: Record<string, any>;
+      };
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const instance = await storage.getRebuildInstance(userId, instanceNumber);
+      if (!instance || instance.status === "locked") {
+        return res.status(403).json({ message: "This instance is not yet unlocked." });
+      }
+
+      const TYPE_MAP: Record<number, RebuildInstanceType> = {
+        1: "clarity", 2: "consistency", 3: "mindset",
+        4: "adaptation", 5: "courage", 6: "practice", 7: "integration",
+      };
+
+      // Build prior memory context from earlier instances
+      const allInstances = await storage.getRebuildInstances(userId);
+      const priorMemory: Record<string, any> = {};
+      allInstances
+        .filter((i) => i.instanceNumber < instanceNumber && i.status === "completed")
+        .forEach((i) => Object.assign(priorMemory, i.memoryData ?? {}));
+
+      const jaeResponse = await generateRebuildReflection({
+        userName: user.name || "friend",
+        instanceNumber,
+        instanceType: TYPE_MAP[instanceNumber],
+        prompts,
+        priorMemory,
+        characterTrack,
+        chapterNumber,
+        stageNumber,
+        day7GoalPlan,
+      });
+
+      // Mark in_progress on first reflect call
+      if (instance.status === "unlocked") {
+        await storage.updateRebuildInstance(userId, instanceNumber, { status: "in_progress" });
+      }
+
+      return res.json({ jae: jaeResponse });
+    } catch (err: any) {
+      console.error("[REBUILD] reflect error:", err?.message);
+      return res.status(500).json({ message: "Rebuild reflection error" });
+    }
+  });
+
+  // POST complete — Jai flow done; unlock next instance (or finish rebuild)
+  app.post("/api/users/:userId/rebuild/:n/complete", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const instanceNumber = parseInt(req.params.n);
+      const { memoryData, day7Stages } = req.body as {
+        memoryData?: Record<string, any>;
+        day7Stages?: Record<string, any>;
+      };
+
+      const instance = await storage.getRebuildInstance(userId, instanceNumber);
+      if (!instance) return res.status(404).json({ message: "Instance not found" });
+
+      // Day 7 intermediate stage save: only complete when all 6 stages (0–5) are present
+      if (instanceNumber === 7 && day7Stages) {
+        const allDone = [0, 1, 2, 3, 4, 5].every((n) => (day7Stages as any)[n] === true);
+        if (!allDone) {
+          await storage.updateRebuildInstance(userId, instanceNumber, {
+            memoryData: memoryData ?? instance.memoryData,
+            day7Stages,
+          });
+          return res.json({ completed: false, nextUnlocked: null });
+        }
+      }
+
+      await storage.updateRebuildInstance(userId, instanceNumber, {
+        status: "completed",
+        completedAt: new Date(),
+        memoryData: memoryData ?? instance.memoryData,
+        day7Stages: day7Stages ?? instance.day7Stages,
+      });
+
+      if (instanceNumber < REBUILD_INSTANCE_COUNT) {
+        await storage.updateRebuildInstance(userId, instanceNumber + 1, { status: "unlocked" });
+      } else {
+        // Instance 7 complete = full Rebuild done; set pricing flag
+        await storage.updateUser(userId, { hasCompletedRebuild: true } as any);
+      }
+
+      return res.json({ completed: true, nextUnlocked: instanceNumber < REBUILD_INSTANCE_COUNT ? instanceNumber + 1 : null });
+    } catch (err: any) {
+      console.error("[REBUILD] complete error:", err?.message);
+      return res.status(500).json({ message: "Rebuild completion error" });
+    }
+  });
+
+  // PATCH day5-followup — update follow_up_status in instance 5 memory
+  app.patch("/api/users/:userId/rebuild/5/followup", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { followUpStatus } = req.body as { followUpStatus: "pending" | "confirmed" | "not_done" };
+      const instance = await storage.getRebuildInstance(userId, 5);
+      if (!instance) return res.status(404).json({ message: "Instance 5 not found" });
+      const updated = await storage.updateRebuildInstance(userId, 5, {
+        memoryData: { ...(instance.memoryData as any ?? {}), followUpStatus },
+      });
+      return res.json({ instance: updated });
+    } catch (err) {
+      return res.status(500).json({ message: "Follow-up update error" });
     }
   });
 

@@ -60,6 +60,8 @@ export const users = pgTable("users", {
   notifyAssessmentReminder: boolean("notify_assessment_reminder").notNull().default(true),
   themePreference: text("theme_preference").notNull().default("light"),
   groundingJournalCompleted: boolean("grounding_journal_completed").notNull().default(false),
+  hasCompletedRebuild: boolean("has_completed_rebuild").notNull().default(false),
+  lastRebuildActivityAt: timestamp("last_rebuild_activity_at"),
   lastAssessmentReminderSentAt: timestamp("last_assessment_reminder_sent_at"),
   lastDailyEncouragementSentAt: timestamp("last_daily_encouragement_sent_at"),
   lastWeeklySummaryChatAt: timestamp("last_weekly_summary_chat_at"),
@@ -84,6 +86,24 @@ export const groundingJournalEntries = pgTable("grounding_journal_entries", {
 });
 
 export type GroundingJournalEntry = typeof groundingJournalEntries.$inferSelect;
+
+// ─── 7-Day Rebuild ───────────────────────────────────────────────────────────
+// Each row = one instance (1–7). Status drives unlock gating.
+// memoryData stores per-instance reflection fields (see rebuildContent.ts for shape).
+// day7Stages is only populated for instance 7 (multi-stage, no calendar gate).
+export const rebuildInstances = pgTable("rebuild_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  instanceNumber: integer("instance_number").notNull(),
+  status: text("status").notNull().default("locked"), // locked | unlocked | in_progress | completed
+  memoryData: jsonb("memory_data").notNull().default(sql`'{}'::jsonb`),
+  day7Stages: jsonb("day7_stages").notNull().default(sql`'{}'::jsonb`),
+  lastActivityAt: timestamp("last_activity_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type RebuildInstance = typeof rebuildInstances.$inferSelect;
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,

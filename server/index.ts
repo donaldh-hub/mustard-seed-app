@@ -32,6 +32,24 @@ async function ensureSchema() {
         created_at TIMESTAMP DEFAULT now()
       );
     `);
+    await pool.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS has_completed_rebuild BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS last_rebuild_activity_at TIMESTAMP;
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rebuild_instances (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL,
+        instance_number INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'locked',
+        memory_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        day7_stages JSONB NOT NULL DEFAULT '{}'::jsonb,
+        last_activity_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT now()
+      );
+    `);
     console.log("[schema] auto-migration complete");
   } catch (err) {
     console.error("[schema] auto-migration error (non-fatal):", err);

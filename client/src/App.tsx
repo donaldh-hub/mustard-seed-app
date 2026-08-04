@@ -18,6 +18,10 @@ import CalendarPage from "@/pages/Calendar";
 import Profile from "@/pages/Profile";
 import WeeklyReview from "@/pages/WeeklyReview";
 import GroundingJournal from "@/pages/GroundingJournal";
+import SevenDayRebuild from "@/pages/SevenDayRebuild";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsOfService from "@/pages/TermsOfService";
+import SubscriptionInfo from "@/pages/SubscriptionInfo";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 
@@ -65,6 +69,10 @@ function Router() {
     return <Auth />;
   }
 
+  if (location === "/privacy-policy") return <PrivacyPolicy />;
+  if (location === "/terms-of-service") return <TermsOfService />;
+  if (location === "/subscription-info") return <SubscriptionInfo />;
+
   return (
     <AuthGate>
       <Layout>
@@ -79,6 +87,7 @@ function Router() {
           <Route path="/profile" component={Profile} />
           <Route path="/weekly-review" component={WeeklyReview} />
           <Route path="/journal" component={GroundingJournal} />
+          <Route path="/rebuild" component={SevenDayRebuild} />
           <Route component={NotFound} />
         </Switch>
       </Layout>
