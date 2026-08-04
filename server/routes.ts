@@ -3162,6 +3162,36 @@ export async function registerRoutes(
 
       const dayThemes: Record<number, "RESET" | "REFOCUS" | "REBUILD"> = { 1: "RESET", 2: "REFOCUS", 3: "REBUILD" };
       const previousEntries = await storage.getGroundingJournalEntries(userId);
+
+      // Save opening intention without an AI call
+      if (session === "intention") {
+        const existing = previousEntries.find((e) => e.session === "intention");
+        if (existing) return res.json({ entry: existing, jae: { reflection: "", followUpQuestion: null } });
+        const entry = await storage.createGroundingJournalEntry({
+          userId, dayNumber, session, prompts,
+          jaeReflection: null, jaeFollowUpQuestion: null, userFollowUpResponse: null,
+          keyTheme: null, releasePoint: null, valueNamed: null, possibleFirstSeed: null,
+          isComplete: true,
+        });
+        return res.json({ entry, jae: { reflection: "", followUpQuestion: null } });
+      }
+
+      // Prevent duplicate sessions — return existing entry if already submitted
+      const duplicate = previousEntries.find((e) => e.dayNumber === dayNumber && e.session === session);
+      if (duplicate) {
+        return res.json({
+          entry: duplicate,
+          jae: {
+            reflection: duplicate.jaeReflection ?? "",
+            followUpQuestion: duplicate.jaeFollowUpQuestion ?? null,
+            keyTheme: duplicate.keyTheme ?? null,
+            valueNamed: duplicate.valueNamed ?? null,
+            releasePoint: duplicate.releasePoint ?? null,
+            possibleFirstSeed: duplicate.possibleFirstSeed ?? null,
+          },
+        });
+      }
+
       const prevSummary = previousEntries.map((e) => ({
         dayNumber: e.dayNumber,
         session: e.session,
@@ -3204,7 +3234,13 @@ export async function registerRoutes(
 
   app.patch("/api/users/:userId/grounding-journal/follow-up", async (req, res) => {
     try {
+      const { userId } = req.params;
       const { entryId, followUpResponse } = req.body as { entryId: string; followUpResponse: string };
+      // Verify the entry belongs to this user before updating
+      const entries = await storage.getGroundingJournalEntries(userId);
+      if (!entries.find((e) => e.id === entryId)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
       const updated = await storage.updateGroundingJournalEntry(entryId, { userFollowUpResponse: followUpResponse });
       return res.json({ entry: updated });
     } catch (err) {

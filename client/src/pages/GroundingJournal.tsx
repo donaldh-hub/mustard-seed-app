@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
-import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle } from "lucide-react";
+import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Play } from "lucide-react";
 
 // ── Journal content ──────────────────────────────────────────────────────────
 
@@ -49,6 +49,15 @@ const GROUNDING_STATEMENT_PROMPTS = [
   "One thing you're ready to carry forward:",
 ];
 
+// ── Video URLs — replace with real YouTube unlisted URLs when recorded ───────
+// [FLAGGED] One video per day (plays before morning session) + one for grounding.
+const JOURNAL_VIDEOS: Partial<Record<string, string>> = {
+  "day1-morning":       "PLACEHOLDER_JOURNAL_DAY1_YOUTUBE_URL",
+  "day2-morning":       "PLACEHOLDER_JOURNAL_DAY2_YOUTUBE_URL",
+  "day3-morning":       "PLACEHOLDER_JOURNAL_DAY3_YOUTUBE_URL",
+  "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_YOUTUBE_URL",
+};
+
 // ── Step definitions ─────────────────────────────────────────────────────────
 
 type StepId =
@@ -73,7 +82,17 @@ const STEP_ORDER: StepId[] = [
   "complete",
 ];
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Maps (dayNumber-session) → the STEP_ORDER index to resume at (next prompt step)
+const SESSION_RESUME_STEP: Record<string, number> = {
+  "1-intention":          1,  // → day1-morning
+  "1-morning":            3,  // → day1-evening
+  "1-evening":            5,  // → day2-morning
+  "2-morning":            7,  // → day2-evening
+  "2-evening":            9,  // → day3-morning
+  "3-morning":            11, // → day3-evening
+  "3-evening":            13, // → grounding-statement
+  "3-grounding_statement": 15, // → complete
+};
 
 const SESSION_LABELS: Record<string, string> = {
   morning: "Morning Focus",
@@ -81,6 +100,50 @@ const SESSION_LABELS: Record<string, string> = {
   grounding_statement: "Grounding Statement",
   intention: "Opening Intention",
 };
+
+// ── VideoPlayer ───────────────────────────────────────────────────────────────
+
+function VideoPlayer({ url, onReady }: { url: string; onReady: () => void }) {
+  const isPlaceholder = url.startsWith("PLACEHOLDER");
+
+  if (isPlaceholder) {
+    return (
+      <div className="w-full aspect-video bg-[#1a3a2a] rounded-2xl flex flex-col items-center justify-center gap-4 text-white">
+        <Play className="w-12 h-12 text-[#c8a84b] opacity-80" />
+        <p className="text-sm text-stone-300 text-center px-6">
+          Video coming soon — being recorded now.
+        </p>
+        <Button
+          variant="outline"
+          className="text-white border-white/30 hover:bg-white/10 mt-2"
+          onClick={onReady}
+        >
+          Skip to reflection
+        </Button>
+      </div>
+    );
+  }
+
+  const embedUrl = url.includes("youtube.com/watch")
+    ? url.replace("watch?v=", "embed/")
+    : url.includes("youtu.be/")
+    ? url.replace("youtu.be/", "www.youtube.com/embed/")
+    : url;
+
+  return (
+    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg">
+      <iframe
+        src={embedUrl}
+        className="w-full h-full"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        title="Session video"
+      />
+    </div>
+  );
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GroundingJournal() {
   const userId = useStore((s) => s.userId);
@@ -99,10 +162,55 @@ export default function GroundingJournal() {
   const [followUpText, setFollowUpText] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [intention, setIntention] = useState("");
+  const [videoAcknowledged, setVideoAcknowledged] = useState<Set<string>>(new Set());
+
+  const hasResumed = useRef(false);
 
   const stepId = STEP_ORDER[stepIndex];
+
+  // ── Resume from partial completion ────────────────────────────────────────
+
+  useEffect(() => {
+    if (hasResumed.current || !journalData || journalData.completed) return;
+    hasResumed.current = true;
+
+    const entries: any[] = journalData.entries ?? [];
+    if (entries.length === 0) return;
+
+    // Reconstruct jaeData from saved entries
+    const restoredJae: Record<string, any> = {};
+    entries.forEach((entry) => {
+      let stepKey: string;
+      if (entry.session === "grounding_statement") {
+        stepKey = "grounding-statement";
+      } else if (entry.session === "morning" || entry.session === "evening") {
+        stepKey = `day${entry.dayNumber}-${entry.session}`;
+      } else {
+        return; // intention — no jae step
+      }
+      restoredJae[stepKey] = {
+        reflection: entry.jaeReflection,
+        followUpQuestion: entry.jaeFollowUpQuestion,
+        keyTheme: entry.keyTheme,
+        valueNamed: entry.valueNamed,
+        releasePoint: entry.releasePoint,
+        possibleFirstSeed: entry.possibleFirstSeed,
+      };
+    });
+    setJaeData(restoredJae);
+
+    // Advance to the step after the furthest completed session
+    let maxNextStep = 0;
+    entries.forEach((entry) => {
+      const key = `${entry.dayNumber}-${entry.session}`;
+      const nextStep = SESSION_RESUME_STEP[key] ?? 0;
+      if (nextStep > maxNextStep) maxNextStep = nextStep;
+    });
+    if (maxNextStep > 0) setStepIndex(maxNextStep);
+  }, [journalData]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -137,6 +245,28 @@ export default function GroundingJournal() {
     return "grounding_statement";
   };
 
+  const stepHasVideo = (id: string) => !!JOURNAL_VIDEOS[id];
+  const videoIsReady = (id: string) => videoAcknowledged.has(id);
+
+  // ── Save opening intention then advance ───────────────────────────────────
+
+  const handleIntentionSubmit = async () => {
+    if (!userId || !intention.trim() || saving) return;
+    setSaving(true);
+    try {
+      await api.submitJournalEntry(userId, {
+        dayNumber: 1,
+        session: "intention" as any,
+        prompts: [{ prompt: "Before you begin — write one gentle intention:", response: intention.trim() }],
+      });
+    } catch {
+      // Non-fatal — persist failure doesn't block the user
+    } finally {
+      setSaving(false);
+    }
+    advance();
+  };
+
   // ── Submit a prompt session → get Jae reflection ─────────────────────────
 
   const handleSubmitSession = async () => {
@@ -165,26 +295,37 @@ export default function GroundingJournal() {
     }
   };
 
+  // ── Save optional follow-up response then advance ─────────────────────────
+
   const handleSaveFollowUp = async () => {
+    setFollowUpError(null);
     if (!userId || !currentEntryId || !followUpText.trim()) {
+      setFollowUpText("");
       advance();
       return;
     }
-    await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim()).catch(() => {});
+    try {
+      await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim());
+    } catch {
+      setFollowUpError("Couldn't save your response — tap Continue to proceed anyway.");
+    }
     setFollowUpText("");
     advance();
   };
+
+  // ── Mark journal complete + navigate ──────────────────────────────────────
 
   const handleComplete = async () => {
     if (!userId) return;
     await api.completeGroundingJournal(userId);
     queryClient.invalidateQueries({ queryKey: ["user", userId] });
+    queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
     setLocation("/home");
   };
 
   // ── Progress indicator ────────────────────────────────────────────────────
 
-  const totalPromptSteps = 8; // intro + 3 morning + 3 evening + grounding = 8 prompt steps
+  const totalPromptSteps = 8;
   const promptStepsDone = STEP_ORDER.slice(0, stepIndex).filter(
     (s) => !s.endsWith("-jae") && s !== "complete"
   ).length;
@@ -196,6 +337,7 @@ export default function GroundingJournal() {
     const entries: any[] = journalData.entries ?? [];
     const dayGroups: Record<number, any[]> = {};
     entries.forEach((e) => {
+      if (e.session === "intention") return; // don't surface intention entries
       if (!dayGroups[e.dayNumber]) dayGroups[e.dayNumber] = [];
       dayGroups[e.dayNumber].push(e);
     });
@@ -246,7 +388,8 @@ export default function GroundingJournal() {
                           <p className="text-xs font-semibold text-primary">Jae reflected</p>
                         </div>
                         <p className="text-sm text-foreground leading-relaxed">{entry.jaeReflection}</p>
-                        {entry.possibleFirstSeed && (
+                        {/* Only show first seed on grounding_statement entries */}
+                        {entry.session === "grounding_statement" && entry.possibleFirstSeed && (
                           <div className="mt-2 bg-white rounded-lg p-3 border border-primary/20">
                             <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your First Seed</p>
                             <p className="text-sm font-medium text-foreground">{entry.possibleFirstSeed}</p>
@@ -343,9 +486,10 @@ export default function GroundingJournal() {
 
                 <Button
                   className="w-full rounded-xl h-12"
-                  disabled={!intention.trim()}
-                  onClick={advance}
+                  disabled={!intention.trim() || saving}
+                  onClick={handleIntentionSubmit}
                 >
+                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Begin Day 1 — RESET
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
@@ -377,50 +521,71 @@ export default function GroundingJournal() {
                   </div>
                 )}
 
-                {/* Prompts */}
-                <div className="space-y-5">
-                  {currentPrompts().map((prompt, i) => (
-                    <div key={i} className="space-y-2">
-                      <label className="text-sm font-medium text-foreground leading-snug">{prompt}</label>
-                      <Textarea
-                        placeholder="Take your time..."
-                        value={responses[responseKey(prompt)] ?? ""}
-                        onChange={(e) =>
-                          setResponses((prev) => ({ ...prev, [responseKey(prompt)]: e.target.value }))
-                        }
-                        className="resize-none rounded-xl min-h-[90px]"
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <Button
-                  className="w-full rounded-xl h-12"
-                  disabled={!allAnswered() || saving}
-                  onClick={handleSubmitSession}
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Jae is reflecting...
-                    </>
-                  ) : (
-                    <>
-                      Save & Hear from Jae
+                {/* Video (if applicable and not yet dismissed) */}
+                {stepHasVideo(stepId) && !videoIsReady(stepId) && (
+                  <div className="space-y-4">
+                    <VideoPlayer
+                      url={JOURNAL_VIDEOS[stepId]!}
+                      onReady={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
+                    />
+                    <Button
+                      className="w-full rounded-xl h-12"
+                      onClick={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
+                    >
+                      I'm ready — start the reflection
                       <ChevronRight className="w-4 h-4 ml-1" />
-                    </>
-                  )}
-                </Button>
-                {submitError && (
-                  <div className="flex items-center gap-1.5 text-red-600 text-sm" data-testid="text-journal-submit-error">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{submitError}</span>
+                    </Button>
                   </div>
+                )}
+
+                {/* Prompts (shown after video or if no video) */}
+                {(!stepHasVideo(stepId) || videoIsReady(stepId)) && (
+                  <>
+                    <div className="space-y-5">
+                      {currentPrompts().map((prompt, i) => (
+                        <div key={i} className="space-y-2">
+                          <label className="text-sm font-medium text-foreground leading-snug">{prompt}</label>
+                          <Textarea
+                            placeholder="Take your time..."
+                            value={responses[responseKey(prompt)] ?? ""}
+                            onChange={(e) =>
+                              setResponses((prev) => ({ ...prev, [responseKey(prompt)]: e.target.value }))
+                            }
+                            className="resize-none rounded-xl min-h-[90px]"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      className="w-full rounded-xl h-12"
+                      disabled={!allAnswered() || saving}
+                      onClick={handleSubmitSession}
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Jae is reflecting...
+                        </>
+                      ) : (
+                        <>
+                          Save & Hear from Jae
+                          <ChevronRight className="w-4 h-4 ml-1" />
+                        </>
+                      )}
+                    </Button>
+                    {submitError && (
+                      <div className="flex items-center gap-1.5 text-red-600 text-sm">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{submitError}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
 
-            {/* ── JAE REFLECTION STEP ── */}
+            {/* ── JAE REFLECTION STEP (morning / evening) ── */}
             {stepId.endsWith("-jae") && stepId !== "grounding-statement-jae" && (() => {
               const sourceStep = stepId.replace("-jae", "") as StepId;
               const jae = jaeData[sourceStep];
@@ -455,10 +620,14 @@ export default function GroundingJournal() {
                     />
                   </div>
 
-                  <Button
-                    className="w-full rounded-xl h-12"
-                    onClick={handleSaveFollowUp}
-                  >
+                  {followUpError && (
+                    <div className="flex items-center gap-1.5 text-amber-600 text-sm">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{followUpError}</span>
+                    </div>
+                  )}
+
+                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp}>
                     {isDay3Evening
                       ? "Continue to Final Reflection"
                       : isLastStepOfDay
@@ -479,7 +648,7 @@ export default function GroundingJournal() {
               );
             })()}
 
-            {/* ── GROUNDING STATEMENT JAE (first seed) ── */}
+            {/* ── GROUNDING STATEMENT JAE ── */}
             {stepId === "grounding-statement-jae" && (() => {
               const jae = jaeData["grounding-statement"];
               return (
@@ -505,7 +674,24 @@ export default function GroundingJournal() {
                     )}
                   </div>
 
-                  <Button className="w-full rounded-xl h-12" onClick={advance}>
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Your response (optional)</label>
+                    <Textarea
+                      placeholder="..."
+                      value={followUpText}
+                      onChange={(e) => setFollowUpText(e.target.value)}
+                      className="resize-none rounded-xl min-h-[80px]"
+                    />
+                  </div>
+
+                  {followUpError && (
+                    <div className="flex items-center gap-1.5 text-amber-600 text-sm">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{followUpError}</span>
+                    </div>
+                  )}
+
+                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp}>
                     Continue to the Mustard Seed App
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
