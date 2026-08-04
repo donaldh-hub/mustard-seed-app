@@ -307,7 +307,7 @@ export default function SevenDayRebuild() {
     }
   }
 
-  // ── Day 7: submit a stage ────────────────────────────────────────────────
+  // ── Day 7: submit a stage (get Jai response) ─────────────────────────────
 
   async function handleDay7StageSubmit() {
     if (!userId || saving) return;
@@ -328,23 +328,35 @@ export default function SevenDayRebuild() {
       const newStagesCompleted = { ...day7StagesCompleted, [stage.stageNumber]: true };
       setDay7StagesCompleted(newStagesCompleted);
 
-      // Save stage progress to server incrementally
-      await api.rebuildComplete(userId, 7, {
-        memoryData: newDay7Memory,
-        day7Stages: newStagesCompleted,
-      }).catch(() => {}); // non-fatal — progress saved on next attempt
-
       setJaeReply(jae);
+      // User sees Jai's response, then clicks advance (handleDay7StageAdvance)
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ── Day 7: advance after reading Jai's response ───────────────────────────
+
+  async function handleDay7StageAdvance() {
+    if (!userId || saving) return;
+    setSaving(true);
+    try {
+      // Persist incremental progress (server guards against premature completion)
+      await api.rebuildComplete(userId, 7, {
+        memoryData: day7Memory,
+        day7Stages: day7StagesCompleted,
+      }).catch(() => {});
 
       if (day7StageIndex < DAY7_STAGES.length - 1) {
         setDay7StageIndex((i) => i + 1);
         setJaeReply(null);
       } else {
-        // All 5 stages done — complete
-        await handleComplete(newDay7Memory);
+        await handleComplete(day7Memory);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("Could not save progress. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -779,29 +791,42 @@ export default function SevenDayRebuild() {
                     <p className="text-xs text-muted-foreground">{stage.heartbeat}</p>
                   </div>
 
-                  {jaeReply && <JaeBubble text={jaeReply.stageSynthesis ?? jaeReply.reflection ?? ""} />}
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground leading-snug">{questionText}</label>
-                    <Textarea
-                      placeholder="Take your time — this saves automatically."
-                      value={responses[`stage-${stage.stageNumber}`] ?? ""}
-                      onChange={(e) => setResponses((r) => ({ ...r, [`stage-${stage.stageNumber}`]: e.target.value }))}
-                      className="resize-none rounded-xl min-h-[100px]"
-                    />
-                  </div>
-
-                  {error && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-4 h-4" />{error}</p>}
-
-                  <Button
-                    className="w-full rounded-xl h-12"
-                    disabled={!(responses[`stage-${stage.stageNumber}`] ?? "").trim() || saving}
-                    onClick={() => { setJaeReply(null); handleDay7StageSubmit(); }}
-                  >
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    {day7StageIndex < DAY7_STAGES.length - 1 ? "Save & continue" : "Finish plan"}
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
+                  {!jaeReply ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground leading-snug">{questionText}</label>
+                        <Textarea
+                          placeholder="Take your time..."
+                          value={responses[`stage-${stage.stageNumber}`] ?? ""}
+                          onChange={(e) => setResponses((r) => ({ ...r, [`stage-${stage.stageNumber}`]: e.target.value }))}
+                          className="resize-none rounded-xl min-h-[100px]"
+                        />
+                      </div>
+                      {error && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-4 h-4" />{error}</p>}
+                      <Button
+                        className="w-full rounded-xl h-12"
+                        disabled={!(responses[`stage-${stage.stageNumber}`] ?? "").trim() || saving}
+                        onClick={handleDay7StageSubmit}
+                      >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Save & Hear from Jai <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="space-y-5">
+                      <JaeBubble text={jaeReply.stageSynthesis ?? jaeReply.reflection ?? ""} />
+                      {error && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-4 h-4" />{error}</p>}
+                      <Button
+                        className="w-full rounded-xl h-12"
+                        disabled={saving}
+                        onClick={handleDay7StageAdvance}
+                      >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        {day7StageIndex < DAY7_STAGES.length - 1 ? "Next stage" : "Finish Rebuild"}
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })()}

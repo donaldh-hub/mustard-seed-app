@@ -3317,6 +3317,18 @@ export async function registerRoutes(
       const instance = await storage.getRebuildInstance(userId, instanceNumber);
       if (!instance) return res.status(404).json({ message: "Instance not found" });
 
+      // Day 7 intermediate stage save: only complete when all 6 stages (0–5) are present
+      if (instanceNumber === 7 && day7Stages) {
+        const allDone = [0, 1, 2, 3, 4, 5].every((n) => (day7Stages as any)[n] === true);
+        if (!allDone) {
+          await storage.updateRebuildInstance(userId, instanceNumber, {
+            memoryData: memoryData ?? instance.memoryData,
+            day7Stages,
+          });
+          return res.json({ completed: false, nextUnlocked: null });
+        }
+      }
+
       await storage.updateRebuildInstance(userId, instanceNumber, {
         status: "completed",
         completedAt: new Date(),
