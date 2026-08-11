@@ -3,6 +3,13 @@
 
 export const REBUILD_INSTANCE_COUNT = 7;
 
+// ── Overview video config ────────────────────────────────────────────────────
+// Program-level intro animation shown above the Day 1–7 list on the overview
+// screen. Separate from the per-instance videos below.
+// [FLAGGED] Replace with the real YouTube unlisted URL once the overview
+// animation is delivered.
+export const REBUILD_OVERVIEW_VIDEO_URL = "PLACEHOLDER_OVERVIEW_YOUTUBE_URL";
+
 // ── Gap / welcome-back config ────────────────────────────────────────────────
 // [FLAGGED] Adjust this threshold if product feedback suggests a different window.
 export const WELCOME_BACK_GAP_HOURS = 48;
