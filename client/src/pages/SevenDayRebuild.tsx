@@ -17,6 +17,7 @@ import {
   jordanText,
   WELCOME_BACK_GAP_HOURS,
   SUBSCRIPTION_NUDGE_INSTANCES,
+  REBUILD_OVERVIEW_VIDEO_URL,
   type CharacterTrack,
 } from "@/content/rebuildContent";
 
@@ -59,7 +60,7 @@ function injectMemory(question: string, priorMemory: Record<string, any>): strin
 
 // ─── Video Player ─────────────────────────────────────────────────────────────
 
-function VideoPlayer({ url, onReady }: { url: string; onReady: () => void }) {
+function VideoPlayer({ url, onReady, ctaLabel = "Skip to Jai conversation" }: { url: string; onReady?: () => void; ctaLabel?: string }) {
   const isPlaceholder = url.startsWith("PLACEHOLDER");
 
   if (isPlaceholder) {
@@ -69,13 +70,15 @@ function VideoPlayer({ url, onReady }: { url: string; onReady: () => void }) {
         <p className="text-sm text-stone-300 text-center px-6">
           Video coming soon — slide deck is being recorded.
         </p>
-        <Button
-          variant="outline"
-          className="text-white border-white/30 hover:bg-white/10 mt-2"
-          onClick={onReady}
-        >
-          Skip to Jai conversation
-        </Button>
+        {onReady && (
+          <Button
+            variant="outline"
+            className="text-white border-white/30 hover:bg-white/10 mt-2"
+            onClick={onReady}
+          >
+            {ctaLabel}
+          </Button>
+        )}
       </div>
     );
   }
@@ -445,6 +448,12 @@ export default function SevenDayRebuild() {
               <p className="text-xs font-semibold text-primary uppercase tracking-wider">7-Day Rebuild</p>
               <h1 className="font-serif text-xl font-bold text-foreground">Your Journey</h1>
             </div>
+          </div>
+
+          {/* Program overview animation */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Program Overview</p>
+            <VideoPlayer url={REBUILD_OVERVIEW_VIDEO_URL} />
           </div>
 
           {/* Day 5 follow-up prompt if pending */}
