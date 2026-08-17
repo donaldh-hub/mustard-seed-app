@@ -38,7 +38,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Clarity of Vision & Why",
     title: "Day 1: Clarity of Vision & Why",
     subtitle: "Roots grow before you see them.",
-    videoUrl: "PLACEHOLDER_DAY1_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day1/day1-video.mp4",
     questions: [
       "In one sentence, what is your goal — the real one, not the sanitized version?",
       "Why does this goal matter to you — not the surface reason, the one underneath it?",
@@ -52,7 +52,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Small Steps + Consistency",
     title: "Day 2: Small Steps + Consistency",
     subtitle: "A little water, often, beats a flood once.",
-    videoUrl: "PLACEHOLDER_DAY2_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day2/day2-video.mp4",
     questions: [
       "What is the smallest version of your goal action that you could still do on your worst day?",
       "What does 'just showing up' look like when you have zero motivation?",
@@ -80,7 +80,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Feedback & Adaptation",
     title: "Day 4: Feedback & Adaptation",
     subtitle: "Review what happened. Adjust. Keep moving.",
-    videoUrl: "PLACEHOLDER_DAY4_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day4/day4-video.mp4",
     questions: [
       "What's actually working so far — even in small ways?",
       "What's not working, or what have you been avoiding looking at honestly?",
@@ -94,7 +94,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Courageous Action",
     title: "Day 5: Courageous Action",
     subtitle: "Act before you're ready. Discomfort is the signal, not the stop sign.",
-    videoUrl: "PLACEHOLDER_DAY5_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day5/day5-video.mp4",
     questions: [
       "What is the one action you've been avoiding — the one that, if you did it, would change things?",
       "What is the fear underneath that avoidance? Name it plainly.",
@@ -108,7 +108,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: null,
     title: "Day 6: Bringing It Together",
     subtitle: "Season 2: Jordan's back — new goal, same Heartbeats.",
-    videoUrl: "PLACEHOLDER_DAY6_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day6/day6-video.mp4",
     questions: [
       "In your own words — which Heartbeat showed up in Chapter 1?",
       "Which Heartbeat showed up in Chapter 2?",
@@ -202,7 +202,7 @@ export const DAY7_STAGES: Day7Stage[] = [
 // committed locally under client/public/rebuild-assets/ and served as static
 // files, one mp3 per narration line, in the order Donald generated them.
 
-export const REBUILD_OVERVIEW_VIDEO_URL = "PLACEHOLDER_OVERVIEW_YOUTUBE_URL";
+export const REBUILD_OVERVIEW_VIDEO_URL = "/rebuild-assets/overview/overview-video.mp4";
 export const REBUILD_OVERVIEW_AUDIO_URL = "/rebuild-assets/overview/overview-vo.mp3";
 
 export interface RebuildSlideTiming {
