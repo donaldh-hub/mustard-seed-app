@@ -125,7 +125,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: null,
     title: "Day 7: Bringing It Home",
     subtitle: "No new Heartbeat. Just you, everything you've built, and one plan to make.",
-    videoUrl: "PLACEHOLDER_DAY7_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day7/day7-video.mp4",
     questions: [], // Day 7 uses stage-based questions below
     memoryFields: [
       "goalConfirmedOrUpdated", "finalWhy", "ongoingSmallStep",
@@ -314,6 +314,86 @@ export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
 export const DAY4_STORYBOARD_IMAGES = Array.from({ length: 12 }, (_, i) =>
   `/rebuild-assets/day4/storyboard/${String(i + 1).padStart(2, "0")}.png`
 );
+
+// ── Jai check-in follow-up question bank ─────────────────────────────────────
+// 8 candidate follow-ups per instance, matched to that day's ACTUAL heartbeat
+// and saved memory fields (not the old five-heartbeat-assessment mapping).
+// Jai selects 1-2 per conversation based on what the user actually wrote —
+// never the full list, never a fixed order. Bracketed tokens get filled from
+// real saved memory before Jai ever uses the question; if the underlying
+// data isn't available yet, skip that question rather than showing a blank.
+export const REBUILD_FOLLOWUP_QUESTIONS: Record<number, string[]> = {
+  1: [ // Clarity of Vision & Why
+    "Which part of your why feels truest right now — not the version you'd say out loud to someone else, but the one underneath it?",
+    "If this goal disappeared tomorrow, would the why still matter to you?",
+    "Who else, if anyone, is tied up in this why?",
+    "What would change about how you show up today if you kept this why in view?",
+    "Is there a fear hiding inside this why that you haven't said out loud yet?",
+    "Where did this why already show up for you this past week?",
+    "When you pictured who you'd become by reaching this goal, what surprised you about that answer?",
+    "What would it cost you to keep living as if this goal didn't matter?",
+  ],
+  2: [ // Small Steps + Consistency
+    "What almost talked you out of choosing [non-negotiable minimum] as your minimum?",
+    "Honestly — is [non-negotiable minimum] small enough to survive a genuinely bad day?",
+    "What's the earliest point in your day this could realistically happen?",
+    "What's broken a similar streak for you before?",
+    "Who or what will remind you to do this when motivation drops?",
+    "If you miss a day, what will you do instead of quitting on the whole thing?",
+    "How does this action actually connect back to your why?",
+    "What would seven straight days of this prove to you?",
+  ],
+  3: [ // Mindset over Method
+    "Where has that story shown up in other parts of your life, not just this goal?",
+    "What would you say to a friend who told you that exact story about themselves?",
+    "Is [reframed truth] still honest, or did it swing too far the other way?",
+    "What's the earliest moment you could catch that story starting, next time?",
+    "Who taught you to believe the original version of that story?",
+    "What would it mean about you if [reframed truth] were the real one all along?",
+    "How does this belief connect to the why you named on Day 1?",
+    "What's one piece of evidence from this week that already contradicts the old story?",
+  ],
+  4: [ // Feedback & Adaptation
+    "What did you expect versus what's actually happened so far?",
+    "Where have you been treating a result as a verdict on you instead of information?",
+    "Is [chosen adjustment] a real change, or the same approach with more effort?",
+    "What pattern keeps showing up across what's working and what isn't?",
+    "What would you try differently if failing at it were completely fine?",
+    "Does this adjustment still honor the why you named on Day 1?",
+    "What's one thing that's working, even partially, that you almost overlooked?",
+    "If [chosen adjustment] held for 30 days, what would it build?",
+  ],
+  5: [ // Courageous Action
+    "What's the actual worst case if you do this, and could you survive it?",
+    "What has avoiding [avoided action] already cost you?",
+    "Is this the smallest true step, or are you hiding inside a bigger plan?",
+    "Who's affected if you don't take this step?",
+    "What do you already know that makes this less risky than it feels?",
+    "What would it mean about you if you took this step and it didn't go perfectly?",
+    "How does this connect to the belief you shifted on Day 3?",
+    "What's stopping you from doing this today instead of 'soon'?",
+  ],
+  6: [ // Practice (Jordan's Season 2 story) — no new heartbeat
+    "Which chapter of Jordan's story felt closest to something you're actually living right now?",
+    "What made that Heartbeat easier to spot in Jordan's story than in your own life?",
+    "You named [hardest heartbeat] as the hardest one for you — what does a hard day around that actually look like?",
+    "If you were narrating your own week like Jordan's story, what would this chapter be called?",
+    "Which Heartbeat came easiest to spot for you, and why do you think that one stands out?",
+    "What would it take for [hardest heartbeat] to move even a little this week?",
+    "Where did you see a version of Jordan's turning point show up for you, even in a small way?",
+    "Now that you've spotted all five in someone else's story — which one do you trust yourself with least right now?",
+  ],
+  7: [ // Integration / Bringing It Home
+    "Looking at the whole week, which day's work are you most likely to actually keep using?",
+    "What changed about your why between Day 1 and today — even slightly?",
+    "Is [ongoing small step] still small enough to survive a bad week, or has it crept up?",
+    "What pattern from this week do you most want to protect going forward?",
+    "Which Heartbeat are you proudest of this week, and which one still needs the most attention?",
+    "If nothing else from this week stuck, what's the one thing you'd want to keep?",
+    "What would thirty more days of this same plan actually build?",
+    "Is this still the right goal, or is something else calling to you now?",
+  ],
+};
 
 // ── Day 6 Jordan chapter content ─────────────────────────────────────────────
 export type CharacterTrack = "male" | "female" | "neutral";
