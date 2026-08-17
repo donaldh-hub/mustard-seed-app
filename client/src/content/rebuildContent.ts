@@ -220,11 +220,12 @@ export interface RebuildAudioSync {
   clipCount: number;
   clipUrl: (n: number) => string;
   slides?: RebuildSlideTiming[];
-  // [FLAGGED] Present when the day's own script self-reported that total
-  // narration runs longer than the animation. Default player behavior: the
-  // video holds its last frame once it ends while narration keeps playing to
-  // completion. Confirm with Donald whether to trim narration or extend/loop
-  // the animation instead — this was NOT resolved by Donald as of authoring.
+  // Present when the day's own script self-reported that total narration
+  // runs longer than the animation. Donald's call: extend the animation
+  // (not trim narration). Until he sends a longer re-export, the player's
+  // interim behavior is to hold the video's last frame once it ends while
+  // narration keeps playing to completion, so nothing gets cut short. Swap
+  // in the extended video file and drop this field once it lands.
   timingMismatch?: { narrationSec: number; videoSec: number };
 }
 
