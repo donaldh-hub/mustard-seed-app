@@ -303,12 +303,12 @@ export const DAY6_SLIDES: RebuildSlideTiming[] = [
 // client/public/rebuild-assets/dayN/ before shipping.
 export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
   1: sequentialSync("day1", 12), // [FLAGGED] no timing map for Day 1
-  2: timedSync("day2", 12, DAY2_SLIDES),
-  3: sequentialSync("day3", 13), // has a full narration script, but not a per-slide timing table
-  4: sequentialSync("day4", 9), // [FLAGGED] no timing map for Day 4
+  2: timedSync("day2", 11, DAY2_SLIDES), // Drive folder has 11 unique clips, not the 12 the script self-reported
+  3: sequentialSync("day3", 12), // has a full narration script, but not a per-slide timing table
+  4: sequentialSync("day4", 11), // [FLAGGED] no timing map for Day 4
   5: timedSync("day5", 12, DAY5_SLIDES, { narrationSec: 158, videoSec: 63 }),
   6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 149, videoSec: 72 }),
-  7: sequentialSync("day7", 6), // [FLAGGED] no timing map for Day 7
+  7: sequentialSync("day7", 7), // [FLAGGED] no timing map for Day 7
 };
 
 export const DAY4_STORYBOARD_IMAGES = Array.from({ length: 12 }, (_, i) =>
