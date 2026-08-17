@@ -66,7 +66,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Mindset over Method",
     title: "Day 3: Mindset over Method",
     subtitle: "Your thinking is the first thing that runs.",
-    videoUrl: "PLACEHOLDER_DAY3_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day3/day3-video.mp4",
     questions: [
       "Describe a time you stopped pursuing something — what story did you tell yourself that made stopping feel reasonable?",
       "What is the reframed version of that story — one that's still honest, but opens a door instead of closing one?",
@@ -197,10 +197,8 @@ export const DAY7_STAGES: Day7Stage[] = [
 ];
 
 // ── Real asset wiring (7-Day Rebuild animation + voiceover) ──────────────────
-// Videos are hosted externally (YouTube unlisted) — swap the PLACEHOLDER_*
-// videoUrl values above once Donald sends links. Narration audio clips are
-// committed locally under client/public/rebuild-assets/ and served as static
-// files, one mp3 per narration line, in the order Donald generated them.
+// All 8 videos (Overview + Day 1-7) and every narration clip are committed
+// locally under client/public/rebuild-assets/ and served as static files.
 
 export const REBUILD_OVERVIEW_VIDEO_URL = "/rebuild-assets/overview/overview-video.mp4";
 export const REBUILD_OVERVIEW_AUDIO_URL = "/rebuild-assets/overview/overview-vo.mp3";
