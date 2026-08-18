@@ -248,6 +248,26 @@ function timedSync(
   return { mode: "timed", clipCount, clipUrl: clipUrlFor(day), slides, timingMismatch };
 }
 
+// Day 1 — Clarity of Vision & Why (real clip timings, reconstructed from
+// ElevenLabs generation history and paired by duration match — no downloaded
+// script existed). Video 117s vs narration 84.7s, comfortable margin.
+// No onScreenText captured for this day (audio-only reconstruction, not a
+// storyboard) — left blank rather than guessed.
+export const DAY1_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 7.3, onScreenText: "", narrationText: "Hi — I'm Jai. Welcome to Day 1 of your 7-Day Rebuild. Today, we start where real change always starts: Clarity of Vision and Why." },
+  { slideNumber: 2, startSec: 7, durationSec: 6.0, onScreenText: "", narrationText: "You already showed up twice — the assessment, the grounding journal. That's proof you follow through. Today, we build on that." },
+  { slideNumber: 3, startSec: 13, durationSec: 5.9, onScreenText: "", narrationText: "Here's my promise: by Day 7, you won't just have progress on one goal. You'll know a system for every goal you set." },
+  { slideNumber: 4, startSec: 19, durationSec: 5.9, onScreenText: "", narrationText: "This system runs on five Heartbeats. You'll meet all five this week. Today, we go deep on the first one." },
+  { slideNumber: 5, startSec: 25, durationSec: 6.4, onScreenText: "", narrationText: "Heartbeat 1: Clarity of Vision and Why. People skip it fastest — but it decides if everything else sticks." },
+  { slideNumber: 6, startSec: 32, durationSec: 8.3, onScreenText: "", narrationText: "A seed's roots grow first, underground, before you see a sprout. Your goal works the same way — the invisible work comes before any visible progress." },
+  { slideNumber: 7, startSec: 40, durationSec: 8.2, onScreenText: "", narrationText: "Meet Jordan — two years wanting a home bakery, still stuck between sourdough, cakes, and cookies. A little of each, real progress on none. Sound familiar?" },
+  { slideNumber: 8, startSec: 48, durationSec: 7.1, onScreenText: "", narrationText: "Three questions got Jordan unstuck: What do I actually want? Why does it matter right now? Who do I become if I keep this promise?" },
+  { slideNumber: 9, startSec: 55, durationSec: 8.9, onScreenText: "", narrationText: "One night, Jordan picked: sourdough, Grandma's recipe. Two days later, the first loaf was baked. That's Clarity of Vision and Why — you just watched it happen." },
+  { slideNumber: 10, startSec: 64, durationSec: 4.4, onScreenText: "", narrationText: "Your move: open Mustard Seed, talk to me directly. Just three honest answers." },
+  { slideNumber: 11, startSec: 68, durationSec: 6.8, onScreenText: "", narrationText: "I'll ask you those same three questions. Answer honestly — there's no wrong answer. Your answers become your Day 1 memory." },
+  { slideNumber: 12, startSec: 75, durationSec: 9.5, onScreenText: "", narrationText: "That's Day 1 — a quarter of the cup, because you showed up and told the truth. One Heartbeat down, four to go. Tomorrow: Small Steps and Consistency. Come find me in the app." },
+];
+
 // Day 2 — Small Steps + Consistency (estimated timings; script notes actual
 // clip length is the source of truth if it drifts from these estimates)
 export const DAY2_SLIDES: RebuildSlideTiming[] = [
@@ -265,9 +285,11 @@ export const DAY2_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 12, startSec: 158, durationSec: 17, onScreenText: "The cup is rising. Two Heartbeats connected.", narrationText: "That's Day 2. You just defined the smallest version of your promise — the one you can actually keep. Two Heartbeats connected now. Tomorrow, we talk about what happens in your head on the days this feels hard. Come find me in the app." },
 ];
 
-// Day 5 — Courageous Action (real clip timings). Verified via ffprobe against
-// the actual files (Aug 18 2026): video 158s, narration 158s — exact match.
-// The resend fixed this; no fallback needed, no timingMismatch flag below.
+// Day 5 — Courageous Action. Video is 158s (extended to match this script's
+// own claimed 158s narration total). But the script's total was itself
+// wrong — real measured narration (summing actual clips) is 118.5s. So the
+// video isn't a tight match, it's ~40s longer than needed: not broken
+// (nothing cuts off), just not trimmed tight. Optional cleanup, not urgent.
 export const DAY5_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 6, onScreenText: "Day 5: Courageous Action", narrationText: "Hi, it's Jai. Day 5 — this is the one that actually moves things." },
   { slideNumber: 2, startSec: 6, durationSec: 12, onScreenText: "Feedback + Adaptation → Courageous Action", narrationText: "Feedback tells you what needs to change. Courageous Action is what you actually do with that truth — the moment you act on what you've learned, even when it's uncomfortable." },
@@ -284,11 +306,15 @@ export const DAY5_SLIDES: RebuildSlideTiming[] = [
 ];
 
 // Day 6 — Bringing It Together / Season 2 opener (real clip timings).
-// [FLAGGED] Verified via ffprobe (Aug 18 2026): video is still 72s despite
-// the resend — narration is 149s. The bigger resent file size was a red
-// herring (re-encoded at higher bitrate, not re-cut longer). Still needs the
-// video extended ~77s (or narration trimmed) — this is the one real
-// unresolved timing gap left in the whole set.
+// [FLAGGED] Video is 72s. The 149s figure below was the timing script's own
+// claimed narration total — since corrected against real measured clips:
+// actual narration is 109.7s, so the real shortfall is 37.7s, not 77s. The
+// resent file's bigger size was a red herring (re-encoded at higher bitrate,
+// not re-cut longer). Still needs ~38s added to the video (or narration
+// trimmed) — a repaired file ("Day 6 - SYNCED (extended+VO).mp4") has been
+// built to fix this but hadn't arrived as of this writing; once it lands it
+// replaces both the video AND this separate clip-sequence playback (that
+// file has narration muxed directly in).
 export const DAY6_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 5, onScreenText: "Day 6: Bringing It Together", narrationText: "Hi, it's Jai. Day 6. No new lesson today — I promise." },
   { slideNumber: 2, startSec: 5, durationSec: 10, onScreenText: "Season 1 is done. Jordan kept the promise.", narrationText: "Yesterday, Jordan sold out at that market table. Season 1's complete. You've met all five Heartbeats now — through Jordan's story, and your own." },
@@ -304,14 +330,28 @@ export const DAY6_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 12, startSec: 136, durationSec: 13, onScreenText: "Almost full. Tomorrow: no new Heartbeat. Just you, everything you've built, and one conclusion to reach.", narrationText: "That's the setup for Day 6. Season 2 starts the moment you open the app. Tomorrow, we turn all of this back around on your goal. Come find me in the app." },
 ];
 
+// Day 7 — Bringing It Home (real clip timings, reconstructed from ElevenLabs
+// generation history the same way as Day 1 — no downloaded script existed).
+// Video 97s vs narration 72.5s, comfortable margin. No onScreenText captured
+// for this day (audio-only reconstruction, not a storyboard) — left blank
+// rather than guessed.
+export const DAY7_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 9.4, onScreenText: "", narrationText: "Hi, it's Jai. Day 7 — the last day of the Rebuild. Today's different. No new Heartbeat, no one else's story. Today is entirely about you." },
+  { slideNumber: 2, startSec: 9, durationSec: 9.0, onScreenText: "", narrationText: "Jordan ran this process twice — bread, then guitar. Same five Heartbeats, two different goals, two real wins. Today, we run the exact same process — on yours." },
+  { slideNumber: 3, startSec: 18, durationSec: 16.1, onScreenText: "", narrationText: "Today isn't a video followed by a quick chat. It's a walkthrough — five stops, one for each Heartbeat, applied directly to your goal. Take as long as you actually need. You can close the app and come back — on your phone, on your laptop, wherever you're logged in. Your progress stays right where you left it." },
+  { slideNumber: 4, startSec: 34, durationSec: 7.1, onScreenText: "", narrationText: "Same five, in the same order you learned them. Nothing new to learn today — just applying what you already know, directly to your goal." },
+  { slideNumber: 5, startSec: 42, durationSec: 15.0, onScreenText: "", narrationText: "By the end, you'll have something concrete — one page, in your own words: your goal, your why, your small step, your mindset plan, your feedback loop, and your next courageous action. Something you can actually use starting tomorrow, not just this week." },
+  { slideNumber: 6, startSec: 57, durationSec: 7.8, onScreenText: "", narrationText: "That's the whole Rebuild, coming together. Once your plan's built, we'll talk about what comes next — because a plan only means something if you keep watering it." },
+  { slideNumber: 7, startSec: 64, durationSec: 8.1, onScreenText: "", narrationText: "Whenever you're ready — phone, laptop, doesn't matter — open Mustard Seed and start with Clarity. I'll be right here, however long it takes." },
+];
+
 // Days without a per-slide timing map fall back to sequential clip playback
 // alongside the video's own pacing. Video-vs-narration duration was verified
 // via ffprobe against the actual files (Aug 18 2026) for all 7 days —
 // results noted per day below. Clip counts match what's actually on disk
 // under client/public/rebuild-assets/dayN/.
 export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
-  // Video 117s vs narration 84.5s — video runs 32.5s longer, comfortable margin. No timing map yet.
-  1: sequentialSync("day1", 12),
+  1: timedSync("day1", 12, DAY1_SLIDES), // video 117s vs narration 84.7s, comfortable margin
   2: timedSync("day2", 11, DAY2_SLIDES), // Drive folder has 11 unique clips, not the 12 the script self-reported
   // Video 132s vs narration 105.7s — comfortable margin, no duration problem. Timing map only covers
   // 5 of ~12 narration segments (Bend Don't Break, Jordan Setback, Three Questions, Jordan Reframe,
@@ -322,9 +362,8 @@ export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
   // narration trimmed, same fix pattern as Day 6.
   4: sequentialSync("day4", 11, { narrationSec: 95.1, videoSec: 63 }),
   5: timedSync("day5", 12, DAY5_SLIDES), // video 158s = narration 158s, exact match, confirmed fixed
-  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 149, videoSec: 72 }), // [FLAGGED] confirmed still broken — see comment above DAY6_SLIDES
-  // Video 97s vs narration 72.5s — video runs 24.5s longer, comfortable margin. No timing map yet.
-  7: sequentialSync("day7", 7),
+  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 109.7, videoSec: 72 }), // [FLAGGED] confirmed still broken — see comment above DAY6_SLIDES
+  7: timedSync("day7", 7, DAY7_SLIDES), // video 97s vs narration 72.5s, comfortable margin
 };
 
 export const DAY4_STORYBOARD_IMAGES = Array.from({ length: 12 }, (_, i) =>
