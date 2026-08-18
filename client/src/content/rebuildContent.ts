@@ -24,8 +24,14 @@ export interface RebuildInstanceConfig {
   heartbeat: string | null; // null for instances 6 & 7 (no new teaching)
   title: string;
   subtitle: string;
-  // [FLAGGED] Replace placeholder URLs with real YouTube unlisted URLs per day.
   videoUrl: string;
+  // True only for days whose video file has narration muxed directly into
+  // it (currently Day 4 and Day 6, after their extended/repaired re-exports).
+  // Every other day's video is silent — narration plays from the separate
+  // audioSync clip sequence instead. When true, the player unmutes the
+  // video and does NOT use REBUILD_AUDIO_SYNC for this day, to avoid
+  // double narration.
+  videoHasEmbeddedAudio?: boolean;
   questions: string[];
   // Fields saved to memoryData for this instance (keys only — values come from user)
   memoryFields: string[];
@@ -81,6 +87,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     title: "Day 4: Feedback & Adaptation",
     subtitle: "Review what happened. Adjust. Keep moving.",
     videoUrl: "/rebuild-assets/day4/day4-video.mp4",
+    videoHasEmbeddedAudio: true, // extended/repaired re-export, narration muxed in
     questions: [
       "What's actually working so far — even in small ways?",
       "What's not working, or what have you been avoiding looking at honestly?",
@@ -109,6 +116,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     title: "Day 6: Bringing It Together",
     subtitle: "Season 2: Jordan's back — new goal, same Heartbeats.",
     videoUrl: "/rebuild-assets/day6/day6-video.mp4",
+    videoHasEmbeddedAudio: true, // extended/repaired re-export, narration muxed in
     questions: [
       "In your own words — which Heartbeat showed up in Chapter 1?",
       "Which Heartbeat showed up in Chapter 2?",
@@ -306,15 +314,13 @@ export const DAY5_SLIDES: RebuildSlideTiming[] = [
 ];
 
 // Day 6 — Bringing It Together / Season 2 opener (real clip timings).
-// [FLAGGED] Video is 72s. The 149s figure below was the timing script's own
-// claimed narration total — since corrected against real measured clips:
-// actual narration is 109.7s, so the real shortfall is 37.7s, not 77s. The
-// resent file's bigger size was a red herring (re-encoded at higher bitrate,
-// not re-cut longer). Still needs ~38s added to the video (or narration
-// trimmed) — a repaired file ("Day 6 - SYNCED (extended+VO).mp4") has been
-// built to fix this but hadn't arrived as of this writing; once it lands it
-// replaces both the video AND this separate clip-sequence playback (that
-// file has narration muxed directly in).
+// RESOLVED as of the "Day 6 - SYNCED (extended+VO).mp4" re-export: the
+// original 72s video was 37.7s short of the real 109.7s narration (the
+// timing script's own 149s claim was wrong). The fix concatenated the real
+// narration clips, extended the video, and muxed the two into one file with
+// audio built in — that file now replaces this video entirely (see
+// videoHasEmbeddedAudio on the Day 6 REBUILD_INSTANCES entry). The slide
+// data below is kept for reference; it's no longer used for clip playback.
 export const DAY6_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 5, onScreenText: "Day 6: Bringing It Together", narrationText: "Hi, it's Jai. Day 6. No new lesson today — I promise." },
   { slideNumber: 2, startSec: 5, durationSec: 10, onScreenText: "Season 1 is done. Jordan kept the promise.", narrationText: "Yesterday, Jordan sold out at that market table. Season 1's complete. You've met all five Heartbeats now — through Jordan's story, and your own." },
@@ -357,12 +363,16 @@ export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
   // 5 of ~12 narration segments (Bend Don't Break, Jordan Setback, Three Questions, Jordan Reframe,
   // Closing) — needs the full slide-by-slide breakdown before it can move to timedSync like Day 2/5/6.
   3: sequentialSync("day3", 12),
-  // [FLAGGED] Video 63s vs narration 95.1s — video is 32.1s SHORTER than narration. Real unresolved
-  // gap (found via ffprobe Aug 18 2026, not previously known). Needs the animation extended or the
-  // narration trimmed, same fix pattern as Day 6.
+  // RESOLVED, no longer used by the player: Day 4's video was extended and re-exported
+  // with narration muxed directly in (videoHasEmbeddedAudio: true on its REBUILD_INSTANCES
+  // entry), so this separate clip sequence is now dead — kept only as a historical record of
+  // the original 63s-video-vs-95.1s-narration shortfall that prompted the fix.
   4: sequentialSync("day4", 11, { narrationSec: 95.1, videoSec: 63 }),
-  5: timedSync("day5", 12, DAY5_SLIDES), // video 158s = narration 158s, exact match, confirmed fixed
-  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 109.7, videoSec: 72 }), // [FLAGGED] confirmed still broken — see comment above DAY6_SLIDES
+  5: timedSync("day5", 12, DAY5_SLIDES), // video 158s = narration 118.5s, ~40s untrimmed slack, not broken
+  // RESOLVED, no longer used by the player: same as Day 4 — narration is now muxed directly
+  // into Day 6's video (videoHasEmbeddedAudio: true). Kept as a historical record of the
+  // original 72s-video-vs-109.7s-narration shortfall.
+  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 109.7, videoSec: 72 }),
   7: timedSync("day7", 7, DAY7_SLIDES), // video 97s vs narration 72.5s, comfortable margin
 };
 

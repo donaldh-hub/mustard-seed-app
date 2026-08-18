@@ -72,10 +72,15 @@ function injectMemory(question: string, priorMemory: Record<string, any>): strin
 function VideoPlayer({
   url,
   audioSync,
+  hasEmbeddedAudio,
   onReady,
 }: {
   url: string;
   audioSync?: RebuildAudioSync;
+  // True for the couple of days whose video file has narration muxed
+  // directly in (extended/repaired re-exports) — the video plays with
+  // sound instead of silently alongside a separate clip sequence.
+  hasEmbeddedAudio?: boolean;
   onReady: () => void;
 }) {
   const isPlaceholder = url.startsWith("PLACEHOLDER");
@@ -144,7 +149,7 @@ function VideoPlayer({
       <video
         ref={videoRef}
         src={url}
-        muted
+        muted={!hasEmbeddedAudio}
         playsInline
         controls={started}
         className="w-full h-full object-contain"
@@ -698,7 +703,8 @@ export default function SevenDayRebuild() {
                 <p className="text-sm text-muted-foreground">{currentConfig.subtitle}</p>
                 <VideoPlayer
                   url={currentConfig.videoUrl}
-                  audioSync={REBUILD_AUDIO_SYNC[currentConfig.instanceNumber]}
+                  audioSync={currentConfig.videoHasEmbeddedAudio ? undefined : REBUILD_AUDIO_SYNC[currentConfig.instanceNumber]}
+                  hasEmbeddedAudio={currentConfig.videoHasEmbeddedAudio}
                   onReady={() => setPhase(isPractice ? "day6-character" : isIntegration ? "day7-stages" : "jai")}
                 />
                 <Button
