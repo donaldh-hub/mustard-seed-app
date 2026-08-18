@@ -231,8 +231,12 @@ function clipUrlFor(day: string) {
   return (n: number) => `/rebuild-assets/${day}/clip-${String(n).padStart(2, "0")}.mp3`;
 }
 
-function sequentialSync(day: string, clipCount: number): RebuildAudioSync {
-  return { mode: "sequential", clipCount, clipUrl: clipUrlFor(day) };
+function sequentialSync(
+  day: string,
+  clipCount: number,
+  timingMismatch?: { narrationSec: number; videoSec: number }
+): RebuildAudioSync {
+  return { mode: "sequential", clipCount, clipUrl: clipUrlFor(day), timingMismatch };
 }
 
 function timedSync(
@@ -261,8 +265,9 @@ export const DAY2_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 12, startSec: 158, durationSec: 17, onScreenText: "The cup is rising. Two Heartbeats connected.", narrationText: "That's Day 2. You just defined the smallest version of your promise — the one you can actually keep. Two Heartbeats connected now. Tomorrow, we talk about what happens in your head on the days this feels hard. Come find me in the app." },
 ];
 
-// Day 5 — Courageous Action (real clip timings). [FLAGGED] Narration
-// (2:38) runs 95s longer than the 63s animation — unresolved as of authoring.
+// Day 5 — Courageous Action (real clip timings). Verified via ffprobe against
+// the actual files (Aug 18 2026): video 158s, narration 158s — exact match.
+// The resend fixed this; no fallback needed, no timingMismatch flag below.
 export const DAY5_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 6, onScreenText: "Day 5: Courageous Action", narrationText: "Hi, it's Jai. Day 5 — this is the one that actually moves things." },
   { slideNumber: 2, startSec: 6, durationSec: 12, onScreenText: "Feedback + Adaptation → Courageous Action", narrationText: "Feedback tells you what needs to change. Courageous Action is what you actually do with that truth — the moment you act on what you've learned, even when it's uncomfortable." },
@@ -279,8 +284,11 @@ export const DAY5_SLIDES: RebuildSlideTiming[] = [
 ];
 
 // Day 6 — Bringing It Together / Season 2 opener (real clip timings).
-// [FLAGGED] Narration (2:29) runs 77s longer than the 72s animation —
-// unresolved as of authoring.
+// [FLAGGED] Verified via ffprobe (Aug 18 2026): video is still 72s despite
+// the resend — narration is 149s. The bigger resent file size was a red
+// herring (re-encoded at higher bitrate, not re-cut longer). Still needs the
+// video extended ~77s (or narration trimmed) — this is the one real
+// unresolved timing gap left in the whole set.
 export const DAY6_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 5, onScreenText: "Day 6: Bringing It Together", narrationText: "Hi, it's Jai. Day 6. No new lesson today — I promise." },
   { slideNumber: 2, startSec: 5, durationSec: 10, onScreenText: "Season 1 is done. Jordan kept the promise.", narrationText: "Yesterday, Jordan sold out at that market table. Season 1's complete. You've met all five Heartbeats now — through Jordan's story, and your own." },
@@ -296,18 +304,27 @@ export const DAY6_SLIDES: RebuildSlideTiming[] = [
   { slideNumber: 12, startSec: 136, durationSec: 13, onScreenText: "Almost full. Tomorrow: no new Heartbeat. Just you, everything you've built, and one conclusion to reach.", narrationText: "That's the setup for Day 6. Season 2 starts the moment you open the app. Tomorrow, we turn all of this back around on your goal. Come find me in the app." },
 ];
 
-// Days without a timing map (no slide-by-slide script exists) fall back to
-// sequential clip playback alongside the video's own pacing. Clip counts are
-// provisional — confirm against the actual files landed under
-// client/public/rebuild-assets/dayN/ before shipping.
+// Days without a per-slide timing map fall back to sequential clip playback
+// alongside the video's own pacing. Video-vs-narration duration was verified
+// via ffprobe against the actual files (Aug 18 2026) for all 7 days —
+// results noted per day below. Clip counts match what's actually on disk
+// under client/public/rebuild-assets/dayN/.
 export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
-  1: sequentialSync("day1", 12), // [FLAGGED] no timing map for Day 1
+  // Video 117s vs narration 84.5s — video runs 32.5s longer, comfortable margin. No timing map yet.
+  1: sequentialSync("day1", 12),
   2: timedSync("day2", 11, DAY2_SLIDES), // Drive folder has 11 unique clips, not the 12 the script self-reported
-  3: sequentialSync("day3", 12), // has a full narration script, but not a per-slide timing table
-  4: sequentialSync("day4", 11), // [FLAGGED] no timing map for Day 4
-  5: timedSync("day5", 12, DAY5_SLIDES, { narrationSec: 158, videoSec: 63 }),
-  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 149, videoSec: 72 }),
-  7: sequentialSync("day7", 7), // [FLAGGED] no timing map for Day 7
+  // Video 132s vs narration 105.7s — comfortable margin, no duration problem. Timing map only covers
+  // 5 of ~12 narration segments (Bend Don't Break, Jordan Setback, Three Questions, Jordan Reframe,
+  // Closing) — needs the full slide-by-slide breakdown before it can move to timedSync like Day 2/5/6.
+  3: sequentialSync("day3", 12),
+  // [FLAGGED] Video 63s vs narration 95.1s — video is 32.1s SHORTER than narration. Real unresolved
+  // gap (found via ffprobe Aug 18 2026, not previously known). Needs the animation extended or the
+  // narration trimmed, same fix pattern as Day 6.
+  4: sequentialSync("day4", 11, { narrationSec: 95.1, videoSec: 63 }),
+  5: timedSync("day5", 12, DAY5_SLIDES), // video 158s = narration 158s, exact match, confirmed fixed
+  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 149, videoSec: 72 }), // [FLAGGED] confirmed still broken — see comment above DAY6_SLIDES
+  // Video 97s vs narration 72.5s — video runs 24.5s longer, comfortable margin. No timing map yet.
+  7: sequentialSync("day7", 7),
 };
 
 export const DAY4_STORYBOARD_IMAGES = Array.from({ length: 12 }, (_, i) =>
