@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -12,12 +12,16 @@ import {
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import {
   REBUILD_INSTANCES,
+  REBUILD_AUDIO_SYNC,
+  REBUILD_OVERVIEW_VIDEO_URL,
+  REBUILD_OVERVIEW_AUDIO_URL,
   DAY7_STAGES,
   JORDAN_CHAPTERS,
   jordanText,
   WELCOME_BACK_GAP_HOURS,
   SUBSCRIPTION_NUDGE_INSTANCES,
   type CharacterTrack,
+  type RebuildAudioSync,
 } from "@/content/rebuildContent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,9 +62,69 @@ function injectMemory(question: string, priorMemory: Record<string, any>): strin
 }
 
 // ─── Video Player ─────────────────────────────────────────────────────────────
+// Real animation files are silent — narration lives as separate mp3 clips.
+// "timed" sync fires each clip when the video's playhead crosses its scripted
+// start time; "sequential" (no timing map exists) just chains clips back to
+// back alongside the video's own pacing. If narration outlasts the video
+// (a couple of days self-flag this in their own scripts), the video holds its
+// last frame while remaining clips keep playing to completion.
 
-function VideoPlayer({ url, onReady }: { url: string; onReady: () => void }) {
+function VideoPlayer({
+  url,
+  audioSync,
+  hasEmbeddedAudio,
+  onReady,
+}: {
+  url: string;
+  audioSync?: RebuildAudioSync;
+  // True for the couple of days whose video file has narration muxed
+  // directly in (extended/repaired re-exports) — the video plays with
+  // sound instead of silently alongside a separate clip sequence.
+  hasEmbeddedAudio?: boolean;
+  onReady: () => void;
+}) {
   const isPlaceholder = url.startsWith("PLACEHOLDER");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [started, setStarted] = useState(false);
+  const playedRef = useRef<Set<number>>(new Set());
+
+  function playClip(n: number) {
+    if (!audioSync || !audioRef.current || playedRef.current.has(n)) return;
+    playedRef.current.add(n);
+    audioRef.current.src = audioSync.clipUrl(n);
+    audioRef.current.play().catch(() => {});
+  }
+
+  function handleStart() {
+    setStarted(true);
+    videoRef.current?.play().catch(() => {});
+    if (audioSync) playClip(1);
+  }
+
+  function handleTimeUpdate() {
+    if (!audioSync || audioSync.mode !== "timed" || !audioSync.slides) return;
+    const t = videoRef.current?.currentTime ?? 0;
+    for (const slide of audioSync.slides) {
+      if (t >= slide.startSec && !playedRef.current.has(slide.slideNumber)) {
+        playClip(slide.slideNumber);
+        break;
+      }
+    }
+  }
+
+  function handleAudioEnded() {
+    if (!audioSync) return;
+    const nextClip = playedRef.current.size + 1;
+    if (nextClip > audioSync.clipCount) return;
+    // Sequential mode always chains immediately. Timed mode only chains here
+    // once the video itself has stopped advancing (ended, or narration is
+    // known to outlast it) — otherwise handleTimeUpdate drives the pacing.
+    const videoDone = videoRef.current?.ended ?? false;
+    if (audioSync.mode === "sequential" || videoDone || audioSync.timingMismatch) {
+      playClip(nextClip);
+    }
+  }
 
   if (isPlaceholder) {
     return (
@@ -80,22 +144,71 @@ function VideoPlayer({ url, onReady }: { url: string; onReady: () => void }) {
     );
   }
 
-  // YouTube embed — extract video ID from URL if full URL passed
-  const embedUrl = url.includes("youtube.com/watch")
-    ? url.replace("watch?v=", "embed/")
-    : url.includes("youtu.be/")
-    ? url.replace("youtu.be/", "www.youtube.com/embed/")
-    : url;
+  return (
+    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg relative bg-black">
+      <video
+        ref={videoRef}
+        src={url}
+        muted={!hasEmbeddedAudio}
+        playsInline
+        controls={started}
+        className="w-full h-full object-contain"
+        onTimeUpdate={handleTimeUpdate}
+      />
+      {audioSync && <audio ref={audioRef} onEnded={handleAudioEnded} />}
+      {!started && (
+        <button
+          onClick={handleStart}
+          className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/30 transition-colors text-white"
+          aria-label="Play video"
+        >
+          <span className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+            <Play className="w-8 h-8 ml-1" fill="currentColor" />
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Overview video (single video + single combined narration track) ──────────
+
+function OverviewVideo() {
+  const isPlaceholder = REBUILD_OVERVIEW_VIDEO_URL.startsWith("PLACEHOLDER");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [started, setStarted] = useState(false);
+
+  if (isPlaceholder) {
+    return (
+      <div className="w-full aspect-video bg-[#1a3a2a] rounded-2xl flex flex-col items-center justify-center gap-3 text-white">
+        <Play className="w-10 h-10 text-[#c8a84b] opacity-80" />
+        <p className="text-sm text-stone-300 text-center px-6">Overview video coming soon.</p>
+      </div>
+    );
+  }
+
+  function handleStart() {
+    setStarted(true);
+    videoRef.current?.play().catch(() => {});
+    audioRef.current?.play().catch(() => {});
+  }
 
   return (
-    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg">
-      <iframe
-        src={embedUrl}
-        className="w-full h-full"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        title="Day video"
-      />
+    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg relative bg-black">
+      <video ref={videoRef} src={REBUILD_OVERVIEW_VIDEO_URL} muted playsInline controls={started} className="w-full h-full object-contain" />
+      <audio ref={audioRef} src={REBUILD_OVERVIEW_AUDIO_URL} />
+      {!started && (
+        <button
+          onClick={handleStart}
+          className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/30 transition-colors text-white"
+          aria-label="Play overview video"
+        >
+          <span className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
+            <Play className="w-8 h-8 ml-1" fill="currentColor" />
+          </span>
+        </button>
+      )}
     </div>
   );
 }
@@ -447,6 +560,11 @@ export default function SevenDayRebuild() {
             </div>
           </div>
 
+          {/* Overview video — shown only before the program has been started */}
+          {!instances.some((i) => i.status !== "locked") && (
+            <OverviewVideo />
+          )}
+
           {/* Day 5 follow-up prompt if pending */}
           {(() => {
             const inst5 = instances.find((i) => i.instanceNumber === 5);
@@ -585,6 +703,8 @@ export default function SevenDayRebuild() {
                 <p className="text-sm text-muted-foreground">{currentConfig.subtitle}</p>
                 <VideoPlayer
                   url={currentConfig.videoUrl}
+                  audioSync={currentConfig.videoHasEmbeddedAudio ? undefined : REBUILD_AUDIO_SYNC[currentConfig.instanceNumber]}
+                  hasEmbeddedAudio={currentConfig.videoHasEmbeddedAudio}
                   onReady={() => setPhase(isPractice ? "day6-character" : isIntegration ? "day7-stages" : "jai")}
                 />
                 <Button

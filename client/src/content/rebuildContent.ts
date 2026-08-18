@@ -24,8 +24,14 @@ export interface RebuildInstanceConfig {
   heartbeat: string | null; // null for instances 6 & 7 (no new teaching)
   title: string;
   subtitle: string;
-  // [FLAGGED] Replace placeholder URLs with real YouTube unlisted URLs per day.
   videoUrl: string;
+  // True only for days whose video file has narration muxed directly into
+  // it (currently Day 4 and Day 6, after their extended/repaired re-exports).
+  // Every other day's video is silent — narration plays from the separate
+  // audioSync clip sequence instead. When true, the player unmutes the
+  // video and does NOT use REBUILD_AUDIO_SYNC for this day, to avoid
+  // double narration.
+  videoHasEmbeddedAudio?: boolean;
   questions: string[];
   // Fields saved to memoryData for this instance (keys only — values come from user)
   memoryFields: string[];
@@ -38,7 +44,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Clarity of Vision & Why",
     title: "Day 1: Clarity of Vision & Why",
     subtitle: "Roots grow before you see them.",
-    videoUrl: "PLACEHOLDER_DAY1_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day1/day1-video.mp4",
     questions: [
       "In one sentence, what is your goal — the real one, not the sanitized version?",
       "Why does this goal matter to you — not the surface reason, the one underneath it?",
@@ -52,7 +58,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Small Steps + Consistency",
     title: "Day 2: Small Steps + Consistency",
     subtitle: "A little water, often, beats a flood once.",
-    videoUrl: "PLACEHOLDER_DAY2_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day2/day2-video.mp4",
     questions: [
       "What is the smallest version of your goal action that you could still do on your worst day?",
       "What does 'just showing up' look like when you have zero motivation?",
@@ -66,7 +72,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Mindset over Method",
     title: "Day 3: Mindset over Method",
     subtitle: "Your thinking is the first thing that runs.",
-    videoUrl: "PLACEHOLDER_DAY3_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day3/day3-video.mp4",
     questions: [
       "Describe a time you stopped pursuing something — what story did you tell yourself that made stopping feel reasonable?",
       "What is the reframed version of that story — one that's still honest, but opens a door instead of closing one?",
@@ -80,7 +86,8 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Feedback & Adaptation",
     title: "Day 4: Feedback & Adaptation",
     subtitle: "Review what happened. Adjust. Keep moving.",
-    videoUrl: "PLACEHOLDER_DAY4_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day4/day4-video.mp4",
+    videoHasEmbeddedAudio: true, // extended/repaired re-export, narration muxed in
     questions: [
       "What's actually working so far — even in small ways?",
       "What's not working, or what have you been avoiding looking at honestly?",
@@ -94,7 +101,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: "Courageous Action",
     title: "Day 5: Courageous Action",
     subtitle: "Act before you're ready. Discomfort is the signal, not the stop sign.",
-    videoUrl: "PLACEHOLDER_DAY5_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day5/day5-video.mp4",
     questions: [
       "What is the one action you've been avoiding — the one that, if you did it, would change things?",
       "What is the fear underneath that avoidance? Name it plainly.",
@@ -108,7 +115,8 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: null,
     title: "Day 6: Bringing It Together",
     subtitle: "Season 2: Jordan's back — new goal, same Heartbeats.",
-    videoUrl: "PLACEHOLDER_DAY6_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day6/day6-video.mp4",
+    videoHasEmbeddedAudio: true, // extended/repaired re-export, narration muxed in
     questions: [
       "In your own words — which Heartbeat showed up in Chapter 1?",
       "Which Heartbeat showed up in Chapter 2?",
@@ -125,7 +133,7 @@ export const REBUILD_INSTANCES: RebuildInstanceConfig[] = [
     heartbeat: null,
     title: "Day 7: Bringing It Home",
     subtitle: "No new Heartbeat. Just you, everything you've built, and one plan to make.",
-    videoUrl: "PLACEHOLDER_DAY7_YOUTUBE_URL",
+    videoUrl: "/rebuild-assets/day7/day7-video.mp4",
     questions: [], // Day 7 uses stage-based questions below
     memoryFields: [
       "goalConfirmedOrUpdated", "finalWhy", "ongoingSmallStep",
@@ -195,6 +203,262 @@ export const DAY7_STAGES: Day7Stage[] = [
     priorMemoryRef: "committed24hrStep",
   },
 ];
+
+// ── Real asset wiring (7-Day Rebuild animation + voiceover) ──────────────────
+// All 8 videos (Overview + Day 1-7) and every narration clip are committed
+// locally under client/public/rebuild-assets/ and served as static files.
+
+export const REBUILD_OVERVIEW_VIDEO_URL = "/rebuild-assets/overview/overview-video.mp4";
+export const REBUILD_OVERVIEW_AUDIO_URL = "/rebuild-assets/overview/overview-vo.mp3";
+
+export interface RebuildSlideTiming {
+  slideNumber: number;
+  startSec: number;
+  durationSec: number;
+  // Reference only — this text is already rendered inside the video itself,
+  // it is NOT re-rendered as an on-screen overlay by the player.
+  onScreenText: string;
+  narrationText: string;
+}
+
+export interface RebuildAudioSync {
+  mode: "timed" | "sequential";
+  clipCount: number;
+  clipUrl: (n: number) => string;
+  slides?: RebuildSlideTiming[];
+  // Present when the day's own script self-reported that total narration
+  // runs longer than the animation. Donald's call: extend the animation
+  // (not trim narration). Until he sends a longer re-export, the player's
+  // interim behavior is to hold the video's last frame once it ends while
+  // narration keeps playing to completion, so nothing gets cut short. Swap
+  // in the extended video file and drop this field once it lands.
+  timingMismatch?: { narrationSec: number; videoSec: number };
+}
+
+function clipUrlFor(day: string) {
+  return (n: number) => `/rebuild-assets/${day}/clip-${String(n).padStart(2, "0")}.mp3`;
+}
+
+function sequentialSync(
+  day: string,
+  clipCount: number,
+  timingMismatch?: { narrationSec: number; videoSec: number }
+): RebuildAudioSync {
+  return { mode: "sequential", clipCount, clipUrl: clipUrlFor(day), timingMismatch };
+}
+
+function timedSync(
+  day: string,
+  clipCount: number,
+  slides: RebuildSlideTiming[],
+  timingMismatch?: { narrationSec: number; videoSec: number }
+): RebuildAudioSync {
+  return { mode: "timed", clipCount, clipUrl: clipUrlFor(day), slides, timingMismatch };
+}
+
+// Day 1 — Clarity of Vision & Why (real clip timings, reconstructed from
+// ElevenLabs generation history and paired by duration match — no downloaded
+// script existed). Video 117s vs narration 84.7s, comfortable margin.
+// No onScreenText captured for this day (audio-only reconstruction, not a
+// storyboard) — left blank rather than guessed.
+export const DAY1_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 7.3, onScreenText: "", narrationText: "Hi — I'm Jai. Welcome to Day 1 of your 7-Day Rebuild. Today, we start where real change always starts: Clarity of Vision and Why." },
+  { slideNumber: 2, startSec: 7, durationSec: 6.0, onScreenText: "", narrationText: "You already showed up twice — the assessment, the grounding journal. That's proof you follow through. Today, we build on that." },
+  { slideNumber: 3, startSec: 13, durationSec: 5.9, onScreenText: "", narrationText: "Here's my promise: by Day 7, you won't just have progress on one goal. You'll know a system for every goal you set." },
+  { slideNumber: 4, startSec: 19, durationSec: 5.9, onScreenText: "", narrationText: "This system runs on five Heartbeats. You'll meet all five this week. Today, we go deep on the first one." },
+  { slideNumber: 5, startSec: 25, durationSec: 6.4, onScreenText: "", narrationText: "Heartbeat 1: Clarity of Vision and Why. People skip it fastest — but it decides if everything else sticks." },
+  { slideNumber: 6, startSec: 32, durationSec: 8.3, onScreenText: "", narrationText: "A seed's roots grow first, underground, before you see a sprout. Your goal works the same way — the invisible work comes before any visible progress." },
+  { slideNumber: 7, startSec: 40, durationSec: 8.2, onScreenText: "", narrationText: "Meet Jordan — two years wanting a home bakery, still stuck between sourdough, cakes, and cookies. A little of each, real progress on none. Sound familiar?" },
+  { slideNumber: 8, startSec: 48, durationSec: 7.1, onScreenText: "", narrationText: "Three questions got Jordan unstuck: What do I actually want? Why does it matter right now? Who do I become if I keep this promise?" },
+  { slideNumber: 9, startSec: 55, durationSec: 8.9, onScreenText: "", narrationText: "One night, Jordan picked: sourdough, Grandma's recipe. Two days later, the first loaf was baked. That's Clarity of Vision and Why — you just watched it happen." },
+  { slideNumber: 10, startSec: 64, durationSec: 4.4, onScreenText: "", narrationText: "Your move: open Mustard Seed, talk to me directly. Just three honest answers." },
+  { slideNumber: 11, startSec: 68, durationSec: 6.8, onScreenText: "", narrationText: "I'll ask you those same three questions. Answer honestly — there's no wrong answer. Your answers become your Day 1 memory." },
+  { slideNumber: 12, startSec: 75, durationSec: 9.5, onScreenText: "", narrationText: "That's Day 1 — a quarter of the cup, because you showed up and told the truth. One Heartbeat down, four to go. Tomorrow: Small Steps and Consistency. Come find me in the app." },
+];
+
+// Day 2 — Small Steps + Consistency (estimated timings; script notes actual
+// clip length is the source of truth if it drifts from these estimates)
+export const DAY2_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 3, onScreenText: "Day 2: Small Steps & Consistency", narrationText: "Hi, it's Jai. Welcome back — Day 2." },
+  { slideNumber: 2, startSec: 3, durationSec: 21, onScreenText: "Clarity of Vision & Why → Small Steps + Consistency", narrationText: "Yesterday you found your Clarity of Vision and Why. Clarity tells you where you're going, but it doesn't get you there by itself. A vision without small, repeatable steps just stays a nice idea. Today's Heartbeat is Small Steps and Consistency — this is how your why turns into daily motion." },
+  { slideNumber: 3, startSec: 24, durationSec: 12, onScreenText: "Heartbeat 2: Small Steps + Consistency", narrationText: "Small Steps and Consistency. Not the biggest step you can imagine — the smallest one you'll actually repeat. Less about intensity, more about showing up, over and over." },
+  { slideNumber: 4, startSec: 36, durationSec: 16, onScreenText: "A little water, often, beats a flood, once.", narrationText: "You already know this one — it's built into the app. Every honest small action waters your seed. One giant effort, once, floods the soil and runs right off. A little water, consistently, is what reaches the roots." },
+  { slideNumber: 5, startSec: 52, durationSec: 18, onScreenText: "Motivation is a spark. Consistency is the fire.", narrationText: "Motivation got you here — that's real. But motivation comes and goes. If your plan only works on the days you feel inspired, it won't survive a normal week. Consistency doesn't need motivation. It just needs a step small enough to do anyway." },
+  { slideNumber: 6, startSec: 70, durationSec: 14, onScreenText: "Vague: \"I'll work out when I have time.\" / Clear: \"I walk 15 minutes every morning at 7.\"", narrationText: "One depends on finding time and energy you won't always have. The other is small enough to survive a bad day. That's the whole difference between a goal that fades and one that sticks." },
+  { slideNumber: 7, startSec: 84, durationSec: 19, onScreenText: "1. Smallest version of this goal, today? 2. What does \"just showing up\" look like on my hardest days? 3. My non-negotiable minimum?", narrationText: "Three questions. What's the smallest version of this goal you could do today. What does just showing up look like on your hardest day, not your best one. And what's your non-negotiable minimum — the version you'll do no matter what. That last one matters most." },
+  { slideNumber: 8, startSec: 103, durationSec: 19, onScreenText: "Jordan, one week later. Fired up — and burned out.", narrationText: "Remember Jordan? Fired up after finding the why, Jordan decided to bake twelve loaves the first week and sell them door to door. Every evening in the kitchen, exhausted — by week two, too burned out to bake at all. Three weeks went by without a single loaf." },
+  { slideNumber: 9, startSec: 122, durationSec: 15, onScreenText: "Jordan's fix: One loaf, every Saturday, three neighbors.", narrationText: "When Jordan came back to it, the fix was smaller, not bigger: one loaf, every Saturday morning, sold to the same three neighbors. That, Jordan could actually keep doing. Small isn't small when it stacks." },
+  { slideNumber: 10, startSec: 137, durationSec: 10, onScreenText: "Your move: Tell Jai your non-negotiable minimum.", narrationText: "Here's today's move: open Mustard Seed and tell me your non-negotiable minimum for this goal. One sentence. That's today's water." },
+  { slideNumber: 11, startSec: 147, durationSec: 11, onScreenText: "What happens next: Jai helps you land on one repeatable action.", narrationText: "I'll ask you those same three questions and help you land on one small, repeatable action — the thing you check off most days this week, not just today." },
+  { slideNumber: 12, startSec: 158, durationSec: 17, onScreenText: "The cup is rising. Two Heartbeats connected.", narrationText: "That's Day 2. You just defined the smallest version of your promise — the one you can actually keep. Two Heartbeats connected now. Tomorrow, we talk about what happens in your head on the days this feels hard. Come find me in the app." },
+];
+
+// Day 5 — Courageous Action. Video is 158s (extended to match this script's
+// own claimed 158s narration total). But the script's total was itself
+// wrong — real measured narration (summing actual clips) is 118.5s. So the
+// video isn't a tight match, it's ~40s longer than needed: not broken
+// (nothing cuts off), just not trimmed tight. Optional cleanup, not urgent.
+export const DAY5_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 6, onScreenText: "Day 5: Courageous Action", narrationText: "Hi, it's Jai. Day 5 — this is the one that actually moves things." },
+  { slideNumber: 2, startSec: 6, durationSec: 12, onScreenText: "Feedback + Adaptation → Courageous Action", narrationText: "Feedback tells you what needs to change. Courageous Action is what you actually do with that truth — the moment you act on what you've learned, even when it's uncomfortable." },
+  { slideNumber: 3, startSec: 18, durationSec: 6, onScreenText: "Heartbeat 5: Courageous Action", narrationText: "Courageous Action. Not fearless — courageous. You feel the fear, and you move anyway." },
+  { slideNumber: 4, startSec: 24, durationSec: 12, onScreenText: "Every sprout pushes through something.", narrationText: "Nothing grows without resistance somewhere. The sprout doesn't wait for the soil to soften — it pushes through it. That's what courage actually looks like: moving before it feels easy." },
+  { slideNumber: 5, startSec: 36, durationSec: 15, onScreenText: "Clarity, consistency, mindset, and feedback change nothing by themselves.", narrationText: "All four Heartbeats so far are real. But none of them move anything on their own until you act on what they've taught you. This is the Heartbeat that turns insight into an actual result." },
+  { slideNumber: 6, startSec: 51, durationSec: 7, onScreenText: "Avoidant: \"I'll do the easy 90% and skip the scary part.\" / Courageous: \"I do the one thing I've been avoiding.\"", narrationText: "Most of a goal is comfortable. It's the ten percent you've been avoiding that actually decides the outcome." },
+  { slideNumber: 7, startSec: 58, durationSec: 12, onScreenText: "1. What's the action I've been avoiding? 2. What am I actually afraid will happen? 3. What's one courageous step in the next 24 hours?", narrationText: "What's the action you've been avoiding. What are you actually afraid will happen if you do it. And what's one courageous step you'll take in the next twenty-four hours." },
+  { slideNumber: 8, startSec: 70, durationSec: 21, onScreenText: "Jordan, six weeks later. Knew it. Hadn't done it.", narrationText: "A different customer said the bread was good enough for the Saturday farmers market, not just door to door — Jordan should get a booth. Jordan had known this for weeks. But standing behind a table, calling yourself a real baker in front of strangers — that felt like too much." },
+  { slideNumber: 9, startSec: 91, durationSec: 18, onScreenText: "Season 1 finale: Jordan showed up. Sold out.", narrationText: "Saturday morning, Jordan showed up anyway — hands shaking, sign a little crooked. By noon, every loaf was gone. That's Courageous Action: not the absence of fear, just moving anyway. That's Jordan's whole season — Clarity, Consistency, Mindset, Feedback, and finally, Action." },
+  { slideNumber: 10, startSec: 109, durationSec: 8, onScreenText: "Your move: Tell Jai the action — then go do it.", narrationText: "Today's move is different: tell me the action, and then actually go do it. I'll check back with you." },
+  { slideNumber: 11, startSec: 117, durationSec: 12, onScreenText: "What happens next: Jai names the action with you, then follows up.", narrationText: "I'll help you name the action clearly, and I'll check back in to see how it went — not to catch you, to keep you honest with yourself." },
+  { slideNumber: 12, startSec: 129, durationSec: 29, onScreenText: "Three-quarter cup: this is becoming me. All five Heartbeats are yours now.", narrationText: "That's Day 5. Three-quarter cup is named exactly for this: 'this is becoming me.' Courageous action is how identity actually changes — not just your to-do list. And that's Jordan's story wrapped — Season 1, complete. Day 6, you'll meet Jordan again, with a brand new goal, and you'll get to spot all five Heartbeats for yourself, in someone else's story first. Day 7, we bring it home." },
+];
+
+// Day 6 — Bringing It Together / Season 2 opener (real clip timings).
+// RESOLVED as of the "Day 6 - SYNCED (extended+VO).mp4" re-export: the
+// original 72s video was 37.7s short of the real 109.7s narration (the
+// timing script's own 149s claim was wrong). The fix concatenated the real
+// narration clips, extended the video, and muxed the two into one file with
+// audio built in — that file now replaces this video entirely (see
+// videoHasEmbeddedAudio on the Day 6 REBUILD_INSTANCES entry). The slide
+// data below is kept for reference; it's no longer used for clip playback.
+export const DAY6_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 5, onScreenText: "Day 6: Bringing It Together", narrationText: "Hi, it's Jai. Day 6. No new lesson today — I promise." },
+  { slideNumber: 2, startSec: 5, durationSec: 10, onScreenText: "Season 1 is done. Jordan kept the promise.", narrationText: "Yesterday, Jordan sold out at that market table. Season 1's complete. You've met all five Heartbeats now — through Jordan's story, and your own." },
+  { slideNumber: 3, startSec: 15, durationSec: 14, onScreenText: "One plant. Five parts. All at once.", narrationText: "Look at what you've actually built this week — Clarity, Consistency, Mindset, Feedback, Courageous Action. A plant doesn't grow one part at a time. Neither did you, even if it felt that way." },
+  { slideNumber: 4, startSec: 29, durationSec: 19, onScreenText: "It's easier to see a problem in someone else's life than in your own.", narrationText: "Here's something true about people, not just about this app: you're better at spotting what someone else needs to do than you are at spotting it for yourself. That's not a flaw — it's just how minds work. So today, we start with someone else again." },
+  { slideNumber: 5, startSec: 48, durationSec: 16, onScreenText: "Season 2: Jordan's back. New goal.", narrationText: "Jordan's back — same person you followed all week, new goal this time. Today's move doesn't touch your goal at all. You'll follow Jordan's new story, chapter by chapter, and spot which Heartbeat shows up at each turn." },
+  { slideNumber: 6, startSec: 64, durationSec: 17, onScreenText: "Your call: Picture Jordan as a man, a woman, or keep it neutral.", narrationText: "One thing's different this time: you get to choose. You've been picturing Jordan your own way all week without me asking — now I'm actually asking. A man, a woman, or keep the neutral version you already know. Whatever feels right." },
+  { slideNumber: 7, startSec: 81, durationSec: 10, onScreenText: "One story. Four chapters. Five Heartbeats.", narrationText: "Same format as before: one story, four chapters. The last chapter covers two Heartbeats at once — you'll see why when you get there." },
+  { slideNumber: 8, startSec: 91, durationSec: 15, onScreenText: "Reminder — how it works: \"This person can't decide between three paths, so they take none of them.\"", narrationText: "Quick reminder of how the spotting works: someone can't decide between three paths, so they end up taking none of them. What's missing for them? ... That's Clarity of Vision and Why. Same game, new season." },
+  { slideNumber: 9, startSec: 106, durationSec: 12, onScreenText: "Watch Jordan's new arc.", narrationText: "Same character, new challenge, same five Heartbeats underneath. If Jordan could do it once, with bread, you'll see it's not a fluke when it happens again, with something totally different." },
+  { slideNumber: 10, startSec: 118, durationSec: 10, onScreenText: "Your move: Open Mustard Seed. Choose Jordan's look. Follow along.", narrationText: "Today's move: open Mustard Seed, tell me how you'd like to picture Jordan, and follow the new story with me, one chapter at a time." },
+  { slideNumber: 11, startSec: 128, durationSec: 8, onScreenText: "What happens next: 4 chapters, 1 question about you at the end.", narrationText: "After the four chapters, I've got one more question — this one's actually about you. That one sets up tomorrow." },
+  { slideNumber: 12, startSec: 136, durationSec: 13, onScreenText: "Almost full. Tomorrow: no new Heartbeat. Just you, everything you've built, and one conclusion to reach.", narrationText: "That's the setup for Day 6. Season 2 starts the moment you open the app. Tomorrow, we turn all of this back around on your goal. Come find me in the app." },
+];
+
+// Day 7 — Bringing It Home (real clip timings, reconstructed from ElevenLabs
+// generation history the same way as Day 1 — no downloaded script existed).
+// Video 97s vs narration 72.5s, comfortable margin. No onScreenText captured
+// for this day (audio-only reconstruction, not a storyboard) — left blank
+// rather than guessed.
+export const DAY7_SLIDES: RebuildSlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 9.4, onScreenText: "", narrationText: "Hi, it's Jai. Day 7 — the last day of the Rebuild. Today's different. No new Heartbeat, no one else's story. Today is entirely about you." },
+  { slideNumber: 2, startSec: 9, durationSec: 9.0, onScreenText: "", narrationText: "Jordan ran this process twice — bread, then guitar. Same five Heartbeats, two different goals, two real wins. Today, we run the exact same process — on yours." },
+  { slideNumber: 3, startSec: 18, durationSec: 16.1, onScreenText: "", narrationText: "Today isn't a video followed by a quick chat. It's a walkthrough — five stops, one for each Heartbeat, applied directly to your goal. Take as long as you actually need. You can close the app and come back — on your phone, on your laptop, wherever you're logged in. Your progress stays right where you left it." },
+  { slideNumber: 4, startSec: 34, durationSec: 7.1, onScreenText: "", narrationText: "Same five, in the same order you learned them. Nothing new to learn today — just applying what you already know, directly to your goal." },
+  { slideNumber: 5, startSec: 42, durationSec: 15.0, onScreenText: "", narrationText: "By the end, you'll have something concrete — one page, in your own words: your goal, your why, your small step, your mindset plan, your feedback loop, and your next courageous action. Something you can actually use starting tomorrow, not just this week." },
+  { slideNumber: 6, startSec: 57, durationSec: 7.8, onScreenText: "", narrationText: "That's the whole Rebuild, coming together. Once your plan's built, we'll talk about what comes next — because a plan only means something if you keep watering it." },
+  { slideNumber: 7, startSec: 64, durationSec: 8.1, onScreenText: "", narrationText: "Whenever you're ready — phone, laptop, doesn't matter — open Mustard Seed and start with Clarity. I'll be right here, however long it takes." },
+];
+
+// Days without a per-slide timing map fall back to sequential clip playback
+// alongside the video's own pacing. Video-vs-narration duration was verified
+// via ffprobe against the actual files (Aug 18 2026) for all 7 days —
+// results noted per day below. Clip counts match what's actually on disk
+// under client/public/rebuild-assets/dayN/.
+export const REBUILD_AUDIO_SYNC: Record<number, RebuildAudioSync> = {
+  1: timedSync("day1", 12, DAY1_SLIDES), // video 117s vs narration 84.7s, comfortable margin
+  2: timedSync("day2", 11, DAY2_SLIDES), // Drive folder has 11 unique clips, not the 12 the script self-reported
+  // Video 132s vs narration 105.7s — comfortable margin, no duration problem. Timing map only covers
+  // 5 of ~12 narration segments (Bend Don't Break, Jordan Setback, Three Questions, Jordan Reframe,
+  // Closing) — needs the full slide-by-slide breakdown before it can move to timedSync like Day 2/5/6.
+  3: sequentialSync("day3", 12),
+  // RESOLVED, no longer used by the player: Day 4's video was extended and re-exported
+  // with narration muxed directly in (videoHasEmbeddedAudio: true on its REBUILD_INSTANCES
+  // entry), so this separate clip sequence is now dead — kept only as a historical record of
+  // the original 63s-video-vs-95.1s-narration shortfall that prompted the fix.
+  4: sequentialSync("day4", 11, { narrationSec: 95.1, videoSec: 63 }),
+  5: timedSync("day5", 12, DAY5_SLIDES), // video 158s = narration 118.5s, ~40s untrimmed slack, not broken
+  // RESOLVED, no longer used by the player: same as Day 4 — narration is now muxed directly
+  // into Day 6's video (videoHasEmbeddedAudio: true). Kept as a historical record of the
+  // original 72s-video-vs-109.7s-narration shortfall.
+  6: timedSync("day6", 12, DAY6_SLIDES, { narrationSec: 109.7, videoSec: 72 }),
+  7: timedSync("day7", 7, DAY7_SLIDES), // video 97s vs narration 72.5s, comfortable margin
+};
+
+export const DAY4_STORYBOARD_IMAGES = Array.from({ length: 12 }, (_, i) =>
+  `/rebuild-assets/day4/storyboard/${String(i + 1).padStart(2, "0")}.png`
+);
+
+// ── Jai check-in follow-up question bank ─────────────────────────────────────
+// 8 candidate follow-ups per instance, matched to that day's ACTUAL heartbeat
+// and saved memory fields (not the old five-heartbeat-assessment mapping).
+// Jai selects 1-2 per conversation based on what the user actually wrote —
+// never the full list, never a fixed order. Bracketed tokens get filled from
+// real saved memory before Jai ever uses the question; if the underlying
+// data isn't available yet, skip that question rather than showing a blank.
+export const REBUILD_FOLLOWUP_QUESTIONS: Record<number, string[]> = {
+  1: [ // Clarity of Vision & Why
+    "Which part of your why feels truest right now — not the version you'd say out loud to someone else, but the one underneath it?",
+    "If this goal disappeared tomorrow, would the why still matter to you?",
+    "Who else, if anyone, is tied up in this why?",
+    "What would change about how you show up today if you kept this why in view?",
+    "Is there a fear hiding inside this why that you haven't said out loud yet?",
+    "Where did this why already show up for you this past week?",
+    "When you pictured who you'd become by reaching this goal, what surprised you about that answer?",
+    "What would it cost you to keep living as if this goal didn't matter?",
+  ],
+  2: [ // Small Steps + Consistency
+    "What almost talked you out of choosing [non-negotiable minimum] as your minimum?",
+    "Honestly — is [non-negotiable minimum] small enough to survive a genuinely bad day?",
+    "What's the earliest point in your day this could realistically happen?",
+    "What's broken a similar streak for you before?",
+    "Who or what will remind you to do this when motivation drops?",
+    "If you miss a day, what will you do instead of quitting on the whole thing?",
+    "How does this action actually connect back to your why?",
+    "What would seven straight days of this prove to you?",
+  ],
+  3: [ // Mindset over Method
+    "Where has that story shown up in other parts of your life, not just this goal?",
+    "What would you say to a friend who told you that exact story about themselves?",
+    "Is [reframed truth] still honest, or did it swing too far the other way?",
+    "What's the earliest moment you could catch that story starting, next time?",
+    "Who taught you to believe the original version of that story?",
+    "What would it mean about you if [reframed truth] were the real one all along?",
+    "How does this belief connect to the why you named on Day 1?",
+    "What's one piece of evidence from this week that already contradicts the old story?",
+  ],
+  4: [ // Feedback & Adaptation
+    "What did you expect versus what's actually happened so far?",
+    "Where have you been treating a result as a verdict on you instead of information?",
+    "Is [chosen adjustment] a real change, or the same approach with more effort?",
+    "What pattern keeps showing up across what's working and what isn't?",
+    "What would you try differently if failing at it were completely fine?",
+    "Does this adjustment still honor the why you named on Day 1?",
+    "What's one thing that's working, even partially, that you almost overlooked?",
+    "If [chosen adjustment] held for 30 days, what would it build?",
+  ],
+  5: [ // Courageous Action
+    "What's the actual worst case if you do this, and could you survive it?",
+    "What has avoiding [avoided action] already cost you?",
+    "Is this the smallest true step, or are you hiding inside a bigger plan?",
+    "Who's affected if you don't take this step?",
+    "What do you already know that makes this less risky than it feels?",
+    "What would it mean about you if you took this step and it didn't go perfectly?",
+    "How does this connect to the belief you shifted on Day 3?",
+    "What's stopping you from doing this today instead of 'soon'?",
+  ],
+  6: [ // Practice (Jordan's Season 2 story) — no new heartbeat
+    "Which chapter of Jordan's story felt closest to something you're actually living right now?",
+    "What made that Heartbeat easier to spot in Jordan's story than in your own life?",
+    "You named [hardest heartbeat] as the hardest one for you — what does a hard day around that actually look like?",
+    "If you were narrating your own week like Jordan's story, what would this chapter be called?",
+    "Which Heartbeat came easiest to spot for you, and why do you think that one stands out?",
+    "What would it take for [hardest heartbeat] to move even a little this week?",
+    "Where did you see a version of Jordan's turning point show up for you, even in a small way?",
+    "Now that you've spotted all five in someone else's story — which one do you trust yourself with least right now?",
+  ],
+  7: [ // Integration / Bringing It Home
+    "Looking at the whole week, which day's work are you most likely to actually keep using?",
+    "What changed about your why between Day 1 and today — even slightly?",
+    "Is [ongoing small step] still small enough to survive a bad week, or has it crept up?",
+    "What pattern from this week do you most want to protect going forward?",
+    "Which Heartbeat are you proudest of this week, and which one still needs the most attention?",
+    "If nothing else from this week stuck, what's the one thing you'd want to keep?",
+    "What would thirty more days of this same plan actually build?",
+    "Is this still the right goal, or is something else calling to you now?",
+  ],
+};
 
 // ── Day 6 Jordan chapter content ─────────────────────────────────────────────
 export type CharacterTrack = "male" | "female" | "neutral";
