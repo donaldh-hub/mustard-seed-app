@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Sparkles } from "lucide-react";
 import { SyncedVideoPlayer } from "@/components/SyncedVideoPlayer";
+import { JOURNAL_VIDEOS, JOURNAL_AUDIO_SYNC } from "@/content/journalContent";
 
 // ── Journal content ──────────────────────────────────────────────────────────
 
@@ -49,25 +50,6 @@ const GROUNDING_STATEMENT_PROMPTS = [
   "What you'll keep nurturing:",
   "One thing you're ready to carry forward:",
 ];
-
-// ── Video URLs ────────────────────────────────────────────────────────────────
-// [FLAGGED] One video per day (plays before morning session) + one for grounding.
-// Matches the 7-Day Rebuild's asset pipeline: a local silent animation file
-// (client/public/journal-assets/dayN/dayN-video.mp4) paired with separately
-// recorded narration clips via SyncedVideoPlayer's audioSync, instead of a
-// hosted YouTube embed. Swap each PLACEHOLDER_* value for the real
-// "/journal-assets/..." path once that day's video is recorded — same drop-in
-// convention used by REBUILD_INSTANCES in rebuildContent.ts.
-const JOURNAL_VIDEOS: Partial<Record<string, string>> = {
-  "day1-morning":       "PLACEHOLDER_JOURNAL_DAY1_VIDEO",
-  "day2-morning":       "PLACEHOLDER_JOURNAL_DAY2_VIDEO",
-  "day3-morning":       "PLACEHOLDER_JOURNAL_DAY3_VIDEO",
-  "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_VIDEO",
-};
-
-// Per-day narration sync — filled in once each day's clips are recorded.
-// Until then every video falls back to plain (unsynced) local playback.
-const JOURNAL_AUDIO_SYNC: Partial<Record<string, import("@/components/SyncedVideoPlayer").AudioSync>> = {};
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 
