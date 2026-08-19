@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Play } from "lucide-react";
 
 // ── Journal content ──────────────────────────────────────────────────────────
@@ -267,7 +268,7 @@ export default function GroundingJournal() {
     advance();
   };
 
-  // ── Submit a prompt session → get Jae reflection ─────────────────────────
+  // ── Submit a prompt session → get Jai reflection ─────────────────────────
 
   const handleSubmitSession = async () => {
     if (!userId || saving) return;
@@ -384,10 +385,10 @@ export default function GroundingJournal() {
                     {entry.jaeReflection && (
                       <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 space-y-2">
                         <div className="flex items-center gap-2">
-                          <img src={JaeAvatar} className="w-6 h-6 rounded-full object-cover" alt="Jae" />
-                          <p className="text-xs font-semibold text-primary">Jae reflected</p>
+                          <img src={JaeAvatar} className="w-6 h-6 rounded-full object-cover" alt="Jai" />
+                          <p className="text-xs font-semibold text-primary">Jai reflected</p>
                         </div>
-                        <p className="text-sm text-foreground leading-relaxed">{entry.jaeReflection}</p>
+                        <p className="text-sm text-foreground leading-relaxed">{renderInlineMarkdown(entry.jaeReflection)}</p>
                         {/* Only show first seed on grounding_statement entries */}
                         {entry.session === "grounding_statement" && entry.possibleFirstSeed && (
                           <div className="mt-2 bg-white rounded-lg p-3 border border-primary/20">
@@ -412,7 +413,7 @@ export default function GroundingJournal() {
 
           <div className="text-center py-4">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Journal complete. Jae carries this forward with you.</p>
+            <p className="text-sm text-muted-foreground">Journal complete. Jai carries this forward with you.</p>
           </div>
         </div>
       </div>
@@ -466,7 +467,7 @@ export default function GroundingJournal() {
                   <ul className="text-sm text-muted-foreground space-y-1">
                     <li>• Each morning, set your focus for the day</li>
                     <li>• Each evening, reflect with honesty and grace</li>
-                    <li>• Jae will reflect with you after each session</li>
+                    <li>• Jai will reflect with you after each session</li>
                     <li>• Awareness is progress. Showing up counts.</li>
                   </ul>
                 </div>
@@ -565,11 +566,11 @@ export default function GroundingJournal() {
                       {saving ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Jae is reflecting...
+                          Jai is reflecting...
                         </>
                       ) : (
                         <>
-                          Save & Hear from Jae
+                          Save & Hear from Jai
                           <ChevronRight className="w-4 h-4 ml-1" />
                         </>
                       )}
@@ -596,9 +597,9 @@ export default function GroundingJournal() {
               return (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jae" />
+                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jai" />
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Jae M. Seed</p>
+                      <p className="text-sm font-semibold text-foreground">Jai M. Seed</p>
                       <p className="text-xs text-muted-foreground">Day {day} — {DAY_THEMES[day - 1]}</p>
                     </div>
                   </div>
@@ -638,7 +639,7 @@ export default function GroundingJournal() {
 
                   {isLastStepOfDay && jae?.keyTheme && (
                     <div className="bg-primary/5 rounded-xl px-4 py-3 border border-primary/15">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">What Jae noticed</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">What Jai noticed</p>
                       <p className="text-sm text-foreground">Theme: <span className="font-medium">{jae.keyTheme}</span></p>
                       {jae.valueNamed && <p className="text-sm text-foreground">Value: <span className="font-medium">{jae.valueNamed}</span></p>}
                       {jae.releasePoint && <p className="text-sm text-foreground">Ready to release: <span className="font-medium">{jae.releasePoint}</span></p>}
@@ -654,9 +655,9 @@ export default function GroundingJournal() {
               return (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jae" />
+                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jai" />
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Jae M. Seed</p>
+                      <p className="text-sm font-semibold text-foreground">Jai M. Seed</p>
                       <p className="text-xs text-muted-foreground">Your first seed</p>
                     </div>
                   </div>
@@ -714,7 +715,7 @@ export default function GroundingJournal() {
                 <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm text-left space-y-2">
                   <p className="text-sm font-semibold text-foreground">What's next</p>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Your reflections are saved to your Mustard Seed account. Jae will carry this context into your ongoing journey — your first seed is already forming.
+                    Your reflections are saved to your Mustard Seed account. Jai will carry this context into your ongoing journey — your first seed is already forming.
                   </p>
                 </div>
                 <Button className="w-full rounded-xl h-12" onClick={handleComplete}>

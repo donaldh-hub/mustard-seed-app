@@ -14,6 +14,7 @@ import { syncUserProgressState } from "@/lib/syncProgressState";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import { GoalCompletionCeremony, type GoalCompletionCeremonyPayload } from "@/components/GoalCompletionCeremony";
 import { getLocalDateStr, getUserTimezone } from "@/lib/dateUtils";
+import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 
 function MiniWaterCup({ fillPercent, animating }: { fillPercent: number; animating: boolean }) {
   const clamped = Math.max(0, Math.min(fillPercent, 100));
@@ -50,7 +51,7 @@ const QUICK_GOALS = [
 
 const WELCOME_TEXT = `Welcome. I'm glad you're here.
 
-I'm Jae — your accountability partner. My job is to help you turn small actions into real growth.
+I'm Jai — your accountability partner. My job is to help you turn small actions into real growth.
 
 Around here we plant goals like seeds. Every action you take adds water and helps that seed grow.
 
@@ -83,7 +84,7 @@ const PHASE_LABELS: Record<UploadPhase, string> = {
   UPLOADING_DIRECT: "Uploading...",
   UPLOADING_PROXY: "Uploading...",
   CONFIRMED_STORED: "Photo stored. Analyzing...",
-  ANALYZING: "Jae is reviewing your photo...",
+  ANALYZING: "Jai is reviewing your photo...",
   MEMORY_SAVING: "Saving to journal...",
   COMPLETE_SUCCESS: "Done!",
   FAILED: "",
@@ -516,6 +517,10 @@ export default function Chat() {
         qc.invalidateQueries({ queryKey: ["messages", userId] });
         qc.invalidateQueries({ queryKey: ["entries", userId] });
         qc.invalidateQueries({ queryKey: ["weekly-review-status", userId] });
+        // Non-VA/AR messages still include goal creation (e.g. "save: my goal is...")
+        // and goal-type confirmations, both of which change garden state. Without
+        // this, Home's Goal card stays stale ("No active goal yet") until a hard reload.
+        qc.invalidateQueries({ queryKey: ["garden", userId] });
       }
 
       if (data?.water?.awarded) {
@@ -537,7 +542,7 @@ export default function Chat() {
         }
       }
 
-      // Set inline confirmation / nudge / reflection card for this Jae message
+      // Set inline confirmation / nudge / reflection card for this Jai message
       if (jaeId) {
         const qualification = data?.entryQualification as ReflectionQualification | "verifiedAction" | null | undefined;
         if ((category === "VA" || category === "AR") && data?.goalCompleted) {
@@ -802,10 +807,10 @@ export default function Chat() {
     <div className="h-full flex flex-col bg-background relative">
       <header className="p-4 border-b border-border/40 bg-white/50 backdrop-blur-sm sticky top-0 z-10 flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/30 flex items-center justify-center border border-white shadow-sm overflow-hidden">
-          <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+          <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1">
-          <h1 className="font-serif font-semibold text-lg" data-testid="text-jae-name">Jae M. Seed</h1>
+          <h1 className="font-serif font-semibold text-lg" data-testid="text-jae-name">Jai M. Seed</h1>
           <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-current-stage">
             {assessment ? (
               <>
@@ -844,7 +849,7 @@ export default function Chat() {
             data-testid="card-inactivity-48h"
           >
             <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-              <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+              <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
             </div>
             <div className="relative max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-amber-200">
               <p>Still building this goal? What is the next smallest action?</p>
@@ -866,7 +871,7 @@ export default function Chat() {
           >
             <div className="flex items-end gap-2 justify-start">
               <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-                <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+                <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
               </div>
               <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-border/50 whitespace-pre-wrap" data-testid="text-welcome-message">
                 {WELCOME_TEXT}
@@ -914,7 +919,7 @@ export default function Chat() {
                 className="flex items-end gap-2 justify-start"
               >
                 <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-                  <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+                  <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
                 </div>
                 <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-border/50 whitespace-pre-wrap" data-testid="text-create-own-message">
                   {CREATE_OWN_TEXT}
@@ -931,7 +936,7 @@ export default function Chat() {
             className="flex items-end gap-2 justify-start"
           >
             <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-              <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+              <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
             </div>
             <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed bg-white text-foreground rounded-bl-sm border border-border/50">
               Ready when you are. What's on your mind?
@@ -952,7 +957,7 @@ export default function Chat() {
               >
                 {msg.sender === "jae" && (
                   <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
-                    <img src={JaeAvatar} alt="Jae" className="w-full h-full object-cover" />
+                    <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
                   </div>
                 )}
 
@@ -988,7 +993,7 @@ export default function Chat() {
                     </div>
                   )}
                   <div className="px-4 py-3 whitespace-pre-wrap">
-                    {msg.text}
+                    {renderInlineMarkdown(msg.text)}
                   </div>
                 </div>
 
@@ -999,7 +1004,7 @@ export default function Chat() {
                 )}
               </motion.div>
 
-              {/* Inline reward / nudge cards after each Jae message */}
+              {/* Inline reward / nudge cards after each Jai message */}
               {msg.sender === "jae" && card && card.type !== "dismissed" && (
                 <AnimatePresence>
                   {card.type === "reward" && (
@@ -1069,7 +1074,7 @@ export default function Chat() {
               <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
               <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce" />
             </div>
-            Jae is thinking...
+            Jai is thinking...
           </motion.div>
         )}
       </div>

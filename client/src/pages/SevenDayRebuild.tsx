@@ -10,6 +10,7 @@ import {
   ChevronRight, CheckCircle2, Lock, Play, ArrowLeft, Loader2, AlertCircle,
 } from "lucide-react";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import {
   REBUILD_INSTANCES,
   REBUILD_AUDIO_SYNC,
@@ -220,7 +221,7 @@ function JaeBubble({ text }: { text: string }) {
     <div className="flex gap-3 items-start">
       <img src={JaeAvatar} className="w-9 h-9 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
       <div className="bg-white rounded-2xl rounded-tl-sm p-4 border border-border/40 shadow-sm flex-1">
-        <p className="text-sm text-foreground leading-relaxed">{text}</p>
+        <p className="text-sm text-foreground leading-relaxed">{renderInlineMarkdown(text)}</p>
       </div>
     </div>
   );

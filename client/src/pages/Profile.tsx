@@ -255,7 +255,7 @@ export default function Profile() {
                <div className="mt-1 w-2 h-2 rounded-full bg-primary" />
                <div>
                  <p className="font-medium text-foreground">Big Goal</p>
-                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || garden?.untargeted?.title || user.goals?.[0] || "Not set yet — tell Jae 'Save: my goal is...'"}</p>
+                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || garden?.untargeted?.title || user.goals?.[0] || "Not set yet — tell Jai 'Save: my goal is...'"}</p>
                  {(garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy) && (
                    <p className="text-xs text-muted-foreground/70 italic mt-0.5" data-testid="text-goal-why">"{garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy}"</p>
                  )}
