@@ -1,10 +1,10 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "[post-merge] Installing dependencies..."
-npm install --legacy-peer-deps
+echo "[post-merge] Installing locked dependencies..."
+npm ci --no-audit --no-fund
 
-echo "[post-merge] Pushing database schema..."
-npm run db:push
+echo "[post-merge] Verifying production build..."
+npm run build
 
 echo "[post-merge] Done."
