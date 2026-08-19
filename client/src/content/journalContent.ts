@@ -6,13 +6,12 @@
 import type { AudioSync, SlideTiming } from "@/components/SyncedVideoPlayer";
 
 // [FLAGGED] One video per day (plays before the morning session) + one for
-// the grounding statement. Swap each PLACEHOLDER_* value for the real
-// "/journal-assets/dayN/dayN-video.mp4" path once that day's video lands —
-// audio narration and slide-sync timing are already wired for Day 1 and 2
-// below, so only the video file itself needs to drop in.
+// the grounding statement. Day 3 and the grounding statement are still
+// PLACEHOLDER_* until those videos are recorded — swap for the real
+// "/journal-assets/dayN/dayN-video.mp4" path the same way Day 1 and 2 did.
 export const JOURNAL_VIDEOS: Partial<Record<string, string>> = {
-  "day1-morning":        "PLACEHOLDER_JOURNAL_DAY1_VIDEO",
-  "day2-morning":        "PLACEHOLDER_JOURNAL_DAY2_VIDEO",
+  "day1-morning":        "/journal-assets/day1/day1-video.mp4",
+  "day2-morning":        "/journal-assets/day2/day2-video.mp4",
   "day3-morning":        "PLACEHOLDER_JOURNAL_DAY3_VIDEO",
   "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_VIDEO",
 };
@@ -27,8 +26,8 @@ function timedSync(day: string, clipCount: number, slides: SlideTiming[]): Audio
 
 // Day 1 — RESET (real clip timings, measured with ffprobe against the
 // downloaded ElevenLabs clips — see "Day 1 Reset - Voice Script.md").
-// Actual total narration runtime: 78.4s. Target animation length: 90-110s,
-// so there's comfortable margin once the video lands.
+// Actual total narration runtime: 78.4s. Video runs 94.8s — comfortable
+// margin, nothing gets cut off.
 export const DAY1_SLIDES: SlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 4.7, onScreenText: "Day 1 — Reset", narrationText: "Hi, it's Jai. Welcome to Day 1 of your 3-Day Grounding Journal. Today, we reset." },
   { slideNumber: 2, startSec: 4.7, durationSec: 6.9, onScreenText: "Find your footing. Regain your focus. Rebuild your calm.", narrationText: "Three days to find your footing, regain your focus, and rebuild your calm. This is where your Mustard Seed story starts." },
@@ -46,9 +45,9 @@ export const DAY1_SLIDES: SlideTiming[] = [
 
 // Day 2 — REFOCUS (real clip timings, measured with ffprobe — see
 // "Day 2 Refocus - Voice Script.md"). Actual total narration runtime: 61.0s.
-// Target animation length: 75-95s. Real runtime came in noticeably shorter
-// than the estimate used to storyboard it, same as Day 1 — pacing ran
-// faster than the word-count formula predicted.
+// Video runs 81.0s — comfortable margin. Real runtime came in noticeably
+// shorter than the estimate used to storyboard it, same as Day 1 — pacing
+// ran faster than the word-count formula predicted.
 export const DAY2_SLIDES: SlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 2.5, onScreenText: "Day 2 — Refocus", narrationText: "Hi, it's Jai. Day 2 — Refocus." },
   { slideNumber: 2, startSec: 2.5, durationSec: 4.0, onScreenText: "Yesterday, you paused. Today, you choose.", narrationText: "Yesterday helped you pause. Today is about choosing what truly matters." },
