@@ -13,7 +13,7 @@ import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, 
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
 import { assessments, insertGoalSchema } from "@shared/schema";
-import type { InsertAssessment, Assessment, Goal } from "@shared/schema";
+import type { InsertAssessment, Assessment, Goal, RebuildInstance } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
@@ -784,13 +784,21 @@ export async function registerRoutes(
         { re: /^plant identity:\s*(.+)/i, extract: 1, forceIdentity: true },
         { re: /^set identity goal:\s*(.+)/i, extract: 1, forceIdentity: true },
         { re: /^my goal is\s+(.+)/i, extract: 1 },
+        // Natural language variants
+        { re: /^i want to set (?:a )?goal (?:to |for )?(.+)/i, extract: 1 },
+        { re: /^i(?:'d| would) like to set (?:a )?goal (?:to |for )?(.+)/i, extract: 1 },
+        { re: /^i want to create (?:a )?goal (?:to |for )?(.+)/i, extract: 1 },
+        { re: /^(?:create|add) (?:a )?goal:?\s*(.+)/i, extract: 1 },
+        { re: /^(?:i want to )?plant (?:a )?(?:new )?goal:?\s*(.+)/i, extract: 1 },
+        { re: /^(?:my goal|my new goal) (?:is|will be):?\s*(.+)/i, extract: 1 },
+        { re: /^set (?:a )?goal:?\s*(.+)/i, extract: 1 },
       ];
 
       let goalSaveMatch: { text: string; forceIdentity?: boolean } | null = null;
       for (const p of goalSavePatterns) {
         const m = rawText.match(p.re);
         if (m && m[p.extract]) {
-          goalSaveMatch = { text: m[p.extract].trim(), forceIdentity: !!(p as any).forceIdentity };
+          goalSaveMatch = { text: m[p.extract].trim().replace(/[.!?,]+$/, ""), forceIdentity: !!(p as any).forceIdentity };
           break;
         }
       }
@@ -3150,20 +3158,55 @@ export async function registerRoutes(
 
   // --- 3-Day Grounding Journal ---
 
+  // 24-hour pacing gate: Day N (N>1) stays locked until 24h after Day N-1's
+  // evening entry, so the 3-Day Journal can't be finished in one sitting.
+  const GROUNDING_JOURNAL_UNLOCK_HOURS = 24;
+
+  function computeJournalDayGate(entries: { dayNumber: number; session: string; createdAt: Date | string | null }[]): { lockedDay: 2 | 3 | null; unlocksAt: string | null } {
+    for (const day of [2, 3] as const) {
+      const prevEvening = entries.find((e) => e.dayNumber === day - 1 && e.session === "evening");
+      if (!prevEvening || !prevEvening.createdAt) return { lockedDay: day, unlocksAt: null };
+      const unlocksAtMs = new Date(prevEvening.createdAt).getTime() + GROUNDING_JOURNAL_UNLOCK_HOURS * 60 * 60 * 1000;
+      if (Date.now() < unlocksAtMs) {
+        return { lockedDay: day, unlocksAt: new Date(unlocksAtMs).toISOString() };
+      }
+    }
+    return { lockedDay: null, unlocksAt: null };
+  }
+
   app.get("/api/users/:userId/grounding-journal", async (req, res) => {
     const entries = await storage.getGroundingJournalEntries(req.params.userId);
     const user = await storage.getUser(req.params.userId);
-    return res.json({ entries, completed: user?.groundingJournalCompleted ?? false });
+    const gate = computeJournalDayGate(entries);
+    return res.json({
+      entries,
+      completed: user?.groundingJournalCompleted ?? false,
+      lockedDay: gate.lockedDay,
+      nextDayUnlocksAt: gate.unlocksAt,
+    });
   });
 
   app.post("/api/users/:userId/grounding-journal/entry", async (req, res) => {
     try {
       const userId = req.params.userId;
-      const { dayNumber, session, prompts } = req.body as {
+      const { dayNumber, session, prompts, localDate } = req.body as {
         dayNumber: 1 | 2 | 3;
         session: "intention" | "morning" | "evening" | "grounding_statement";
         prompts: { prompt: string; response: string }[];
+        localDate?: string;
       };
+
+      if (dayNumber > 1) {
+        const existingEntries = await storage.getGroundingJournalEntries(userId);
+        const gate = computeJournalDayGate(existingEntries);
+        if (gate.lockedDay !== null && dayNumber >= gate.lockedDay) {
+          return res.status(403).json({
+            message: "This day isn't unlocked yet. Come back after the 24-hour pacing window.",
+            code: "DAY_LOCKED",
+            unlocksAt: gate.unlocksAt,
+          });
+        }
+      }
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
@@ -3233,6 +3276,23 @@ export async function registerRoutes(
         isComplete: true,
       });
 
+      // Mirror to the entries table so Calendar/Memory Bank shows journal
+      // activity — the journal has its own table, but Calendar only reads
+      // from `entries`.
+      const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
+      const calendarSummary = `Grounding Journal — Day ${dayNumber} ${sessionLabel}${jaeResponse.keyTheme ? `: ${jaeResponse.keyTheme}` : ""}`;
+      try {
+        await storage.createEntry({
+          userId,
+          goalId: null,
+          date: localDate || todayStr(),
+          summary: calendarSummary,
+          mood: "neutral",
+        });
+      } catch (calErr) {
+        console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
+      }
+
       return res.json({ entry, jae: jaeResponse });
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
@@ -3272,19 +3332,42 @@ export async function registerRoutes(
   const REBUILD_INSTANCE_COUNT = 7;
 
   // GET status — returns all instance rows (creates them on first visit)
+  // 24-hour unlock gate: a "locked" instance becomes "unlocked" once its
+  // predecessor has been "completed" for at least REBUILD_UNLOCK_HOURS.
+  // Checked lazily on every GET so no cron/scheduler is needed.
+  const REBUILD_UNLOCK_HOURS = 24;
+
+  async function applyRebuildUnlockGate(userId: string, instances: RebuildInstance[]): Promise<RebuildInstance[]> {
+    const byNumber = new Map(instances.map((i) => [i.instanceNumber, i]));
+    const now = Date.now();
+    for (const instance of instances) {
+      if (instance.status !== "locked") continue;
+      const prev = byNumber.get(instance.instanceNumber - 1);
+      if (!prev || prev.status !== "completed" || !prev.completedAt) continue;
+      const elapsedMs = now - new Date(prev.completedAt).getTime();
+      if (elapsedMs >= REBUILD_UNLOCK_HOURS * 60 * 60 * 1000) {
+        const updated = await storage.updateRebuildInstance(userId, instance.instanceNumber, { status: "unlocked" });
+        if (updated) byNumber.set(instance.instanceNumber, updated);
+      }
+    }
+    return Array.from(byNumber.values()).sort((a, b) => a.instanceNumber - b.instanceNumber);
+  }
+
   app.get("/api/users/:userId/rebuild", async (req, res) => {
     try {
       const { userId } = req.params;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
-      const instances = await storage.initRebuildInstances(userId, REBUILD_INSTANCE_COUNT);
+      let instances = await storage.initRebuildInstances(userId, REBUILD_INSTANCE_COUNT);
+      instances = await applyRebuildUnlockGate(userId, instances);
       await storage.updateUser(userId, { lastRebuildActivityAt: new Date() } as any);
 
       return res.json({
         instances,
         hasCompletedRebuild: (user as any).hasCompletedRebuild ?? false,
         lastRebuildActivityAt: (user as any).lastRebuildActivityAt ?? null,
+        unlockHours: REBUILD_UNLOCK_HOURS,
       });
     } catch (err) {
       return res.status(500).json({ message: "Rebuild status error" });
@@ -3369,7 +3452,7 @@ export async function registerRoutes(
             memoryData: memoryData ?? instance.memoryData,
             day7Stages,
           });
-          return res.json({ completed: false, nextUnlocked: null });
+          return res.json({ completed: false, nextUnlocksAt: null });
         }
       }
 
@@ -3380,14 +3463,19 @@ export async function registerRoutes(
         day7Stages: day7Stages ?? instance.day7Stages,
       });
 
-      if (instanceNumber < REBUILD_INSTANCE_COUNT) {
-        await storage.updateRebuildInstance(userId, instanceNumber + 1, { status: "unlocked" });
-      } else {
+      // Next instance stays "locked" until REBUILD_UNLOCK_HOURS has passed —
+      // enforced lazily by applyRebuildUnlockGate() on the next GET /rebuild.
+      if (instanceNumber === REBUILD_INSTANCE_COUNT) {
         // Instance 7 complete = full Rebuild done; set pricing flag
         await storage.updateUser(userId, { hasCompletedRebuild: true } as any);
       }
 
-      return res.json({ completed: true, nextUnlocked: instanceNumber < REBUILD_INSTANCE_COUNT ? instanceNumber + 1 : null });
+      return res.json({
+        completed: true,
+        nextUnlocksAt: instanceNumber < REBUILD_INSTANCE_COUNT
+          ? new Date(Date.now() + REBUILD_UNLOCK_HOURS * 60 * 60 * 1000).toISOString()
+          : null,
+      });
     } catch (err: any) {
       console.error("[REBUILD] complete error:", err?.message);
       return res.status(500).json({ message: "Rebuild completion error" });

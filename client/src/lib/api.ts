@@ -95,10 +95,10 @@ export const api = {
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST" }),
 
   getGroundingJournal: (userId: string) =>
-    fetchJson<{ entries: any[]; completed: boolean }>(`/users/${userId}/grounding-journal`),
+    fetchJson<{ entries: any[]; completed: boolean; lockedDay: 2 | 3 | null; nextDayUnlocksAt: string | null }>(`/users/${userId}/grounding-journal`),
   submitJournalEntry: (
     userId: string,
-    data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[] }
+    data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[]; localDate?: string }
   ) =>
     fetchJson<{ entry: any; jae: any }>(`/users/${userId}/grounding-journal/entry`, {
       method: "POST",
@@ -128,7 +128,7 @@ export const api = {
     instanceNumber: number,
     data?: { memoryData?: Record<string, any>; day7Stages?: Record<string, any> }
   ) =>
-    fetchJson<{ completed: boolean; nextUnlocked: number | null }>(`/users/${userId}/rebuild/${instanceNumber}/complete`, {
+    fetchJson<{ completed: boolean; nextUnlocksAt: string | null }>(`/users/${userId}/rebuild/${instanceNumber}/complete`, {
       method: "POST",
       body: JSON.stringify(data ?? {}),
     }),

@@ -962,7 +962,7 @@ export default function SevenDayRebuild() {
                 </div>
                 {currentInstanceNum! < REBUILD_INSTANCES.length && (
                   <p className="text-xs text-muted-foreground">
-                    Day {currentInstanceNum! + 1} is now unlocked.
+                    Day {currentInstanceNum! + 1} unlocks in 24 hours.
                   </p>
                 )}
                 <Button className="w-full rounded-xl h-12" onClick={() => { setView("overview"); setCurrentInstanceNum(null); }}>
