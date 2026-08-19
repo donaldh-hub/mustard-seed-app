@@ -36,6 +36,7 @@ export interface IStorage {
   getEntries(userId: string): Promise<Entry[]>;
   getEntriesByGoalId(goalId: string): Promise<Entry[]>;
   createEntry(entry: InsertEntry): Promise<Entry>;
+  updateEntry(id: string, data: Partial<InsertEntry>): Promise<Entry | undefined>;
 
   getActiveGoals(userId: string): Promise<Goal[]>;
   getAllGoals(userId: string): Promise<Goal[]>;
@@ -147,6 +148,11 @@ export class DatabaseStorage implements IStorage {
 
   async createEntry(entry: InsertEntry): Promise<Entry> {
     const [e] = await db.insert(entries).values(entry).returning();
+    return e;
+  }
+
+  async updateEntry(id: string, data: Partial<InsertEntry>): Promise<Entry | undefined> {
+    const [e] = await db.update(entries).set(data).where(eq(entries.id, id)).returning();
     return e;
   }
 

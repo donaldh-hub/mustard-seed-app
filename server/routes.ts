@@ -2815,7 +2815,7 @@ export async function registerRoutes(
         waterAwarded: 0,
       });
 
-      await storage.createEntry({
+      const photoEntry = await storage.createEntry({
         userId,
         date: dateKey,
         summary: caption ? `📷 ${caption}` : "📷 Photo uploaded",
@@ -2898,6 +2898,14 @@ export async function registerRoutes(
       let photoWaterAwarded = false;
       let photoGrowthResult: any = null;
       if (photoAP > 0) {
+        // Reward-granting photo: promote its memory entry to "happy" so the
+        // Growth Dashboard's entry-based water/cup aggregation (garden-summary)
+        // picks it up. It's created "neutral" above so a rejected/unclear photo
+        // still shows on the calendar without counting as a rewarded action.
+        storage.updateEntry(photoEntry.id, { mood: "happy" }).catch((err) => {
+          console.error(`[MEMORY_WRITE_ERROR] photo_entry_mood_update | entryId=${photoEntry.id} | err="${(err as Error).message}"`);
+        });
+
         const matchGoal = targetedGoal || untargetedGoal;
         if (matchGoal) {
           const effectiveAP = user.cBurnActive ? 0 : photoAP;
