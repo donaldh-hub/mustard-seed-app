@@ -121,6 +121,13 @@ export default function Home() {
     refetchInterval: 60000,
   });
 
+  const groundingJournalDone = !!(user as any)?.groundingJournalCompleted;
+  const { data: rebuild } = useQuery({
+    queryKey: ["rebuild", userId],
+    queryFn: () => api.getRebuild(userId!),
+    enabled: !!userId && groundingJournalDone,
+  });
+
   useEffect(() => {
     if (!assessmentLoading && !assessment && userId) {
       setLocation("/assessment");
@@ -238,12 +245,41 @@ export default function Home() {
                 ) : (
                   <>
                     <p className="text-sm font-semibold text-emerald-900">Start Your 3-Day Grounding Journal</p>
-                    <p className="text-xs text-emerald-700/70 mt-0.5">Your first conversation with Jae begins here.</p>
+                    <p className="text-xs text-emerald-700/70 mt-0.5">Your first conversation with Jai begins here.</p>
                   </>
                 )}
               </div>
             </div>
           </motion.div>
+
+          {groundingJournalDone && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 shadow-sm cursor-pointer"
+              onClick={() => setLocation("/rebuild")}
+              data-testid="banner-seven-day-rebuild"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                  <Sprout className="w-4.5 h-4.5 text-indigo-700" />
+                </div>
+                <div className="flex-1">
+                  {rebuild?.hasCompletedRebuild ? (
+                    <>
+                      <p className="text-sm font-semibold text-indigo-900">7-Day Rebuild</p>
+                      <p className="text-xs text-indigo-700/70 mt-0.5">Revisit your plan</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-indigo-900">Continue Your 7-Day Rebuild</p>
+                      <p className="text-xs text-indigo-700/70 mt-0.5">Build your Actionable Goal Plan, one day at a time.</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {showReassessmentBanner && (
             <motion.div
@@ -366,7 +402,7 @@ export default function Home() {
               data-testid="button-work-with-jae"
             >
               <MessageCircle className="w-4 h-4 mr-2" />
-              Work with Jae
+              Work with Jai
             </Button>
           </motion.div>
 

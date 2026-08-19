@@ -347,7 +347,7 @@ export default function CalendarPage() {
               {selectedEntries.length === 0 && selectedPhotos.length === 0 ? (
                 <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border" data-testid="text-no-memories">
                   <p className="text-sm">No memories for this day.</p>
-                  <p className="text-xs mt-1">Chat with Jae to create moments worth remembering.</p>
+                  <p className="text-xs mt-1">Chat with Jai to create moments worth remembering.</p>
                 </div>
               ) : (
                 selectedEntries.filter((e: any) => !isPhotoEntry(e.summary)).map((entry: any) => {
@@ -447,7 +447,7 @@ function PhotoMemoryDetail({
           {analysis && (
             <>
               <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jae's Feedback</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Jai's Feedback</p>
                 <p className="text-sm text-foreground leading-relaxed" data-testid="text-jae-feedback">
                   {analysis.next_prompt}
                 </p>
@@ -492,7 +492,7 @@ function PhotoMemoryDetail({
 
           {!analysis && memory.status === "pending_analysis" && (
             <div className="text-center py-4 text-muted-foreground text-sm">
-              Jae is still reviewing this photo...
+              Jai is still reviewing this photo...
             </div>
           )}
         </div>

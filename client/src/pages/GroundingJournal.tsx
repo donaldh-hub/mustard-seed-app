@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
+import { getLocalDateStr } from "@/lib/dateUtils";
 import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Play } from "lucide-react";
 
 // ── Journal content ──────────────────────────────────────────────────────────
@@ -267,7 +269,7 @@ export default function GroundingJournal() {
     advance();
   };
 
-  // ── Submit a prompt session → get Jae reflection ─────────────────────────
+  // ── Submit a prompt session → get Jai reflection ─────────────────────────
 
   const handleSubmitSession = async () => {
     if (!userId || saving) return;
@@ -283,9 +285,13 @@ export default function GroundingJournal() {
       const day = isGrounding ? 3 : dayOf(stepId as StepId);
       const session = isGrounding ? "grounding_statement" : sessionOf(stepId as StepId);
 
-      const result = await api.submitJournalEntry(userId, { dayNumber: day, session, prompts });
+      const result = await api.submitJournalEntry(userId, { dayNumber: day, session, prompts, localDate: getLocalDateStr() });
       setJaeData((prev) => ({ ...prev, [stepId]: result.jae }));
       setCurrentEntryId(result.entry.id);
+      // Refresh the 24-hour pacing gate now, not just at final completion —
+      // otherwise a user could click straight through Day 2 into Day 3 in
+      // one sitting before the next mount ever re-fetches lockedDay.
+      queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
       advance();
     } catch (err) {
       console.error("[JOURNAL] submit error", err);
@@ -320,7 +326,9 @@ export default function GroundingJournal() {
     await api.completeGroundingJournal(userId);
     queryClient.invalidateQueries({ queryKey: ["user", userId] });
     queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
-    setLocation("/home");
+    // Hand off straight into the 7-Day Rebuild rather than dropping the user
+    // back on Home to notice the banner themselves.
+    setLocation("/rebuild");
   };
 
   // ── Progress indicator ────────────────────────────────────────────────────
@@ -384,10 +392,10 @@ export default function GroundingJournal() {
                     {entry.jaeReflection && (
                       <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 space-y-2">
                         <div className="flex items-center gap-2">
-                          <img src={JaeAvatar} className="w-6 h-6 rounded-full object-cover" alt="Jae" />
-                          <p className="text-xs font-semibold text-primary">Jae reflected</p>
+                          <img src={JaeAvatar} className="w-6 h-6 rounded-full object-cover" alt="Jai" />
+                          <p className="text-xs font-semibold text-primary">Jai reflected</p>
                         </div>
-                        <p className="text-sm text-foreground leading-relaxed">{entry.jaeReflection}</p>
+                        <p className="text-sm text-foreground leading-relaxed">{renderInlineMarkdown(entry.jaeReflection)}</p>
                         {/* Only show first seed on grounding_statement entries */}
                         {entry.session === "grounding_statement" && entry.possibleFirstSeed && (
                           <div className="mt-2 bg-white rounded-lg p-3 border border-primary/20">
@@ -412,8 +420,45 @@ export default function GroundingJournal() {
 
           <div className="text-center py-4">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">Journal complete. Jae carries this forward with you.</p>
+            <p className="text-sm text-muted-foreground">Journal complete. Jai carries this forward with you.</p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Day-locked view (24-hour pacing gate) ──────────────────────────────────
+
+  const currentStepDay = dayOf(stepId);
+  const isDayLocked = journalData?.lockedDay != null && currentStepDay >= journalData.lockedDay;
+
+  if (!journalLoading && isDayLocked) {
+    const unlocksAt = journalData?.nextDayUnlocksAt ? new Date(journalData.nextDayUnlocksAt) : null;
+    return (
+      <div className="h-full overflow-y-auto bg-background">
+        <div className="max-w-lg mx-auto px-5 py-8 pb-24 space-y-6">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setLocation("/home")} className="p-2 rounded-xl hover:bg-muted/50">
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider">3-Day Grounding Journal</p>
+              <h1 className="font-serif text-xl font-bold text-foreground">Day {journalData?.lockedDay} — Not yet</h1>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-6 border border-border/40 shadow-sm text-center space-y-3">
+            <p className="text-sm text-foreground leading-relaxed">
+              This journal moves at a 24-hour pace, one day at a time — that's part of the reset.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {unlocksAt
+                ? `Day ${journalData?.lockedDay} unlocks ${unlocksAt.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" })}.`
+                : `Day ${journalData?.lockedDay} unlocks 24 hours after your last entry.`}
+            </p>
+          </div>
+          <Button className="w-full rounded-xl h-12" onClick={() => setLocation("/home")}>
+            Back to Home
+          </Button>
         </div>
       </div>
     );
@@ -466,7 +511,7 @@ export default function GroundingJournal() {
                   <ul className="text-sm text-muted-foreground space-y-1">
                     <li>• Each morning, set your focus for the day</li>
                     <li>• Each evening, reflect with honesty and grace</li>
-                    <li>• Jae will reflect with you after each session</li>
+                    <li>• Jai will reflect with you after each session</li>
                     <li>• Awareness is progress. Showing up counts.</li>
                   </ul>
                 </div>
@@ -565,11 +610,11 @@ export default function GroundingJournal() {
                       {saving ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Jae is reflecting...
+                          Jai is reflecting...
                         </>
                       ) : (
                         <>
-                          Save & Hear from Jae
+                          Save & Hear from Jai
                           <ChevronRight className="w-4 h-4 ml-1" />
                         </>
                       )}
@@ -596,9 +641,9 @@ export default function GroundingJournal() {
               return (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jae" />
+                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jai" />
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Jae M. Seed</p>
+                      <p className="text-sm font-semibold text-foreground">Jai M. Seed</p>
                       <p className="text-xs text-muted-foreground">Day {day} — {DAY_THEMES[day - 1]}</p>
                     </div>
                   </div>
@@ -638,7 +683,7 @@ export default function GroundingJournal() {
 
                   {isLastStepOfDay && jae?.keyTheme && (
                     <div className="bg-primary/5 rounded-xl px-4 py-3 border border-primary/15">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">What Jae noticed</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">What Jai noticed</p>
                       <p className="text-sm text-foreground">Theme: <span className="font-medium">{jae.keyTheme}</span></p>
                       {jae.valueNamed && <p className="text-sm text-foreground">Value: <span className="font-medium">{jae.valueNamed}</span></p>}
                       {jae.releasePoint && <p className="text-sm text-foreground">Ready to release: <span className="font-medium">{jae.releasePoint}</span></p>}
@@ -654,9 +699,9 @@ export default function GroundingJournal() {
               return (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jae" />
+                    <img src={JaeAvatar} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow" alt="Jai" />
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Jae M. Seed</p>
+                      <p className="text-sm font-semibold text-foreground">Jai M. Seed</p>
                       <p className="text-xs text-muted-foreground">Your first seed</p>
                     </div>
                   </div>
@@ -714,11 +759,11 @@ export default function GroundingJournal() {
                 <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm text-left space-y-2">
                   <p className="text-sm font-semibold text-foreground">What's next</p>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Your reflections are saved to your Mustard Seed account. Jae will carry this context into your ongoing journey — your first seed is already forming.
+                    Your reflections are saved to your Mustard Seed account. Jai will carry this context into your ongoing journey — your first seed is already forming. Up next: the 7-Day Rebuild, where you'll turn this into an Actionable Goal Plan.
                   </p>
                 </div>
                 <Button className="w-full rounded-xl h-12" onClick={handleComplete}>
-                  Enter the Mustard Seed App
+                  Start the 7-Day Rebuild
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>

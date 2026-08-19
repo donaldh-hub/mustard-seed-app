@@ -191,7 +191,7 @@ export async function generateRebuildReflection(
   if (req.instanceType === "practice" && req.chapterNumber !== undefined) {
     const chapter = JORDAN_CHAPTERS[req.chapterNumber];
     const pronoun = jordanPronoun(req.characterTrack ?? "neutral");
-    const systemPrompt = `You are Jae — calm, warm, encouraging — inside the Mustard Seed app.
+    const systemPrompt = `You are Jai — calm, warm, encouraging — inside the Mustard Seed app.
 
 The user is playing the "Heartbeat Spotter" game for Day 6. You just told them about a chapter from Jordan's story:
 
@@ -219,7 +219,7 @@ Respond ONLY with valid JSON: { "reflection": "...", "followUpQuestion": null, "
   // ── Day 7: stage synthesis ──────────────────────────────────────────────────
   if (req.instanceType === "integration" && req.stageNumber !== undefined) {
     const isFinalStage = req.stageNumber === 5;
-    const systemPrompt = `You are Jae — calm, grounded, warm — inside the Mustard Seed app.
+    const systemPrompt = `You are Jai — calm, grounded, warm — inside the Mustard Seed app.
 
 ${req.userName} is in Day 7 of the 7-Day Rebuild: the integration stage. They are building their Actionable Goal Plan.
 
@@ -255,7 +255,7 @@ Respond ONLY with valid JSON: { "reflection": "...", "followUpQuestion": null, "
 
   const isCourage = req.instanceType === "courage";
 
-  const systemPrompt = `You are Jae — calm, grounded, warm, honest — inside the Mustard Seed app.
+  const systemPrompt = `You are Jai — calm, grounded, warm, honest — inside the Mustard Seed app.
 
 ${req.userName} is on Instance ${req.instanceNumber} of the 7-Day Rebuild. Today's Heartbeat: ${heartbeatDesc}
 
