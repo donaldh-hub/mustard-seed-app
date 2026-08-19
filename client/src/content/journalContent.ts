@@ -6,13 +6,13 @@
 import type { AudioSync, SlideTiming } from "@/components/SyncedVideoPlayer";
 
 // [FLAGGED] One video per day (plays before the morning session) + one for
-// the grounding statement. Day 3 and the grounding statement are still
-// PLACEHOLDER_* until those videos are recorded — swap for the real
-// "/journal-assets/dayN/dayN-video.mp4" path the same way Day 1 and 2 did.
+// the grounding statement. The grounding statement's own video is still
+// PLACEHOLDER_* until recorded — Day 3's video (Slide 11) previews the
+// invitation into that step, but isn't the same asset.
 export const JOURNAL_VIDEOS: Partial<Record<string, string>> = {
   "day1-morning":        "/journal-assets/day1/day1-video.mp4",
   "day2-morning":        "/journal-assets/day2/day2-video.mp4",
-  "day3-morning":        "PLACEHOLDER_JOURNAL_DAY3_VIDEO",
+  "day3-morning":        "/journal-assets/day3/day3-video.mp4",
   "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_VIDEO",
 };
 
@@ -63,11 +63,34 @@ export const DAY2_SLIDES: SlideTiming[] = [
   { slideNumber: 12, startSec: 56.4, durationSec: 4.6, onScreenText: "Day 2: Refocus. One more day after this.", narrationText: "Whenever you're ready, open Mustard Seed and start Day 2 with me. One more day after this." },
 ];
 
+// Day 3 — REBUILD (real clip timings, measured with ffprobe — see
+// "Day 3 Rebuild - Voice Script.md"). Actual total narration runtime: 60.6s.
+// Video runs 87.0s — comfortable margin. Day 3 does double duty: it closes
+// the 3-Day Journal (Slide 11 previews the Grounding Statement step) and
+// bridges into the 7-Day Rebuild (Slide 12) — the existing STEP_ORDER /
+// RebuildFunnelCard flow in GroundingJournal.tsx already carries that
+// invitation through, so no separate wiring was needed for it.
+export const DAY3_SLIDES: SlideTiming[] = [
+  { slideNumber: 1, startSec: 0, durationSec: 2.5, onScreenText: "Day 3 — Rebuild", narrationText: "Hi, it's Jai. Day 3 — Rebuild." },
+  { slideNumber: 2, startSec: 2.5, durationSec: 2.4, onScreenText: "Two days down. Today, we bring it together.", narrationText: "Two days down. Today, we bring it together." },
+  { slideNumber: 3, startSec: 4.9, durationSec: 2.0, onScreenText: "Rebuilding doesn't have to be loud.", narrationText: "Rebuilding doesn't have to be loud." },
+  { slideNumber: 4, startSec: 6.9, durationSec: 5.5, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild. Today: Rebuild.", narrationText: "Same rhythm, one last piece: pause, notice, reflect, choose, rebuild. Today, we rebuild." },
+  { slideNumber: 5, startSec: 12.4, durationSec: 4.9, onScreenText: "Sometimes it looks like choosing one value and carrying it through the day.", narrationText: "Sometimes rebuilding looks like choosing one value, and carrying it through the whole day." },
+  { slideNumber: 6, startSec: 17.3, durationSec: 6.7, onScreenText: "What value do I want to carry into today? / How can I stay grounded even when things shift?", narrationText: "This morning, two questions: what value you want to carry into today, and how you'll stay grounded even if things shift." },
+  { slideNumber: 7, startSec: 24.0, durationSec: 4.8, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Same as the last two days — your own words, no wrong answer." },
+  { slideNumber: 8, startSec: 28.8, durationSec: 6.3, onScreenText: "Three days of you, all remembered.", narrationText: "Three days of you, all remembered. What you noticed on Day 1, what you named on Day 2 — it's all still here." },
+  { slideNumber: 9, startSec: 35.1, durationSec: 4.8, onScreenText: "Where did I notice growth, even in small ways? / How can I keep building from this place of calm awareness?", narrationText: "Tonight, I'll ask where you noticed growth, even small, and how you want to keep building from here." },
+  { slideNumber: 10, startSec: 39.8, durationSec: 6.3, onScreenText: "Small is where trust begins. Small is where the seed breaks open.", narrationText: "Small is where trust begins. Small is where consistency starts. Small is where the seed breaks open." },
+  { slideNumber: 11, startSec: 46.1, durationSec: 6.4, onScreenText: "Before we close, name what you learned — in three short reflections.", narrationText: "Before we close, I'll ask you to name what you learned — in three short reflections. That becomes your grounding statement." },
+  { slideNumber: 12, startSec: 52.5, durationSec: 8.1, onScreenText: "Three days of pausing and noticing. The 7-Day Rebuild turns this into rhythm.", narrationText: "Three days of pausing and noticing. Whenever you're ready, the 7-Day Rebuild turns this into rhythm. Come finish Day 3 with me in the app." },
+];
+
 // Days without a per-slide timing map fall back to plain (unsynced) local
 // video playback once their video file lands.
 export const JOURNAL_AUDIO_SYNC: Partial<Record<string, AudioSync>> = {
   "day1-morning": timedSync("day1", 12, DAY1_SLIDES),
   "day2-morning": timedSync("day2", 12, DAY2_SLIDES),
+  "day3-morning": timedSync("day3", 12, DAY3_SLIDES),
 };
 
 // ── Jai check-in follow-up question bank ─────────────────────────────────────
@@ -100,5 +123,15 @@ export const JOURNAL_FOLLOWUP_QUESTIONS: Record<number, string[]> = {
     "If you gave yourself full permission to slow down tomorrow, what would you do differently?",
     "What's one thing today that felt urgent but wasn't actually important?",
     "What would it look like to protect tomorrow's energy before the day starts, not after it's already gone?",
+  ],
+  3: [ // Rebuild
+    "You said the value you wanted to carry today was [morning value answer] — where did you actually see it show up?",
+    "You wrote that staying grounded when things shift meant [morning grounded/shift answer] — did anything test that today?",
+    "You noticed growth in [evening growth answer] — how does that compare to where you started three days ago?",
+    "You said you want to keep building from [evening keep-building answer] — what would keeping that going actually require of you?",
+    "Looking back over all three days, what pattern shows up more than once?",
+    "What surprised you most about doing this three days in a row?",
+    "If you had to name this season in one word, what would it be?",
+    "What's one small thing from these three days you don't want to lose once the week gets busy again?",
   ],
 };

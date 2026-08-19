@@ -65,7 +65,16 @@ function journalFollowUpQuestions(dayNumber: 1 | 2 | 3, morning: string[], eveni
       "What would it look like to protect tomorrow's energy before the day starts, not after it's already gone?",
     ].filter(Boolean);
   }
-  return []; // Day 3 has no curated bank yet — falls back to freeform generation
+  return [
+    morning[0] ? `You said the value you wanted to carry today was "${morning[0]}" — where did you actually see it show up?` : "",
+    morning[1] ? `You wrote that staying grounded when things shift meant "${morning[1]}" — did anything test that today?` : "",
+    evening[0] ? `You noticed growth in "${evening[0]}" — how does that compare to where you started three days ago?` : "",
+    evening[1] ? `You said you want to keep building from "${evening[1]}" — what would keeping that going actually require of you?` : "",
+    "Looking back over all three days, what pattern shows up more than once?",
+    "What surprised you most about doing this three days in a row?",
+    "If you had to name this season in one word, what would it be?",
+    "What's one small thing from these three days you don't want to lose once the week gets busy again?",
+  ].filter(Boolean);
 }
 
 function followUpBlock(dayNumber: 1 | 2 | 3, morning: string[], evening: string[]): string {
