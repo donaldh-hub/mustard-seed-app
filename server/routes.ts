@@ -3201,6 +3201,11 @@ export async function registerRoutes(
         jaeReflection: e.jaeReflection,
       }));
 
+      const todayMorningEntry =
+        session === "evening"
+          ? previousEntries.find((e) => e.dayNumber === dayNumber && e.session === "morning")
+          : undefined;
+
       const jaeResponse = await generateJournalReflection({
         userName: user.name || "friend",
         dayNumber,
@@ -3208,6 +3213,7 @@ export async function registerRoutes(
         session,
         prompts,
         previousEntries: prevSummary,
+        todayMorningPrompts: todayMorningEntry?.prompts as { prompt: string; response: string }[] | undefined,
       });
 
       const entry = await storage.createGroundingJournalEntry({
