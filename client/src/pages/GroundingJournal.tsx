@@ -7,7 +7,8 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
-import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Play } from "lucide-react";
+import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Sparkles } from "lucide-react";
+import { SyncedVideoPlayer } from "@/components/SyncedVideoPlayer";
 
 // ── Journal content ──────────────────────────────────────────────────────────
 
@@ -49,14 +50,24 @@ const GROUNDING_STATEMENT_PROMPTS = [
   "One thing you're ready to carry forward:",
 ];
 
-// ── Video URLs — replace with real YouTube unlisted URLs when recorded ───────
+// ── Video URLs ────────────────────────────────────────────────────────────────
 // [FLAGGED] One video per day (plays before morning session) + one for grounding.
+// Matches the 7-Day Rebuild's asset pipeline: a local silent animation file
+// (client/public/journal-assets/dayN/dayN-video.mp4) paired with separately
+// recorded narration clips via SyncedVideoPlayer's audioSync, instead of a
+// hosted YouTube embed. Swap each PLACEHOLDER_* value for the real
+// "/journal-assets/..." path once that day's video is recorded — same drop-in
+// convention used by REBUILD_INSTANCES in rebuildContent.ts.
 const JOURNAL_VIDEOS: Partial<Record<string, string>> = {
-  "day1-morning":       "PLACEHOLDER_JOURNAL_DAY1_YOUTUBE_URL",
-  "day2-morning":       "PLACEHOLDER_JOURNAL_DAY2_YOUTUBE_URL",
-  "day3-morning":       "PLACEHOLDER_JOURNAL_DAY3_YOUTUBE_URL",
-  "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_YOUTUBE_URL",
+  "day1-morning":       "PLACEHOLDER_JOURNAL_DAY1_VIDEO",
+  "day2-morning":       "PLACEHOLDER_JOURNAL_DAY2_VIDEO",
+  "day3-morning":       "PLACEHOLDER_JOURNAL_DAY3_VIDEO",
+  "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_VIDEO",
 };
+
+// Per-day narration sync — filled in once each day's clips are recorded.
+// Until then every video falls back to plain (unsynced) local playback.
+const JOURNAL_AUDIO_SYNC: Partial<Record<string, import("@/components/SyncedVideoPlayer").AudioSync>> = {};
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 
@@ -101,44 +112,30 @@ const SESSION_LABELS: Record<string, string> = {
   intention: "Opening Intention",
 };
 
-// ── VideoPlayer ───────────────────────────────────────────────────────────────
+// ── Rebuild funnel card ──────────────────────────────────────────────────────
+// The Journal is the free on-ramp; this is the bridge into the deeper,
+// paid-track 7-Day Rebuild — mirrored on the styling the Rebuild itself uses
+// to pitch its own subscription at Day 7, so the two feel like one funnel.
 
-function VideoPlayer({ url, onReady }: { url: string; onReady: () => void }) {
-  const isPlaceholder = url.startsWith("PLACEHOLDER");
-
-  if (isPlaceholder) {
-    return (
-      <div className="w-full aspect-video bg-[#1a3a2a] rounded-2xl flex flex-col items-center justify-center gap-4 text-white">
-        <Play className="w-12 h-12 text-[#c8a84b] opacity-80" />
-        <p className="text-sm text-stone-300 text-center px-6">
-          Video coming soon — being recorded now.
-        </p>
-        <Button
-          variant="outline"
-          className="text-white border-white/30 hover:bg-white/10 mt-2"
-          onClick={onReady}
-        >
-          Skip to reflection
-        </Button>
-      </div>
-    );
-  }
-
-  const embedUrl = url.includes("youtube.com/watch")
-    ? url.replace("watch?v=", "embed/")
-    : url.includes("youtu.be/")
-    ? url.replace("youtu.be/", "www.youtube.com/embed/")
-    : url;
-
+function RebuildFunnelCard({ started, onClick }: { started: boolean; onClick: () => void }) {
   return (
-    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg">
-      <iframe
-        src={embedUrl}
-        className="w-full h-full"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        title="Session video"
-      />
+    <div className="bg-[#1a3a2a] rounded-2xl p-5 text-left space-y-3">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-[#c8a84b]" />
+        <p className="text-xs font-semibold text-[#c8a84b] uppercase tracking-wider">Ready for more?</p>
+      </div>
+      <p className="text-sm text-white/90 leading-relaxed">
+        The 3-Day Journal grounded you. The 7-Day Rebuild turns what you just named into an actual plan —
+        five Heartbeats, with Jai walking beside you the whole way.
+      </p>
+      <Button
+        className="w-full rounded-xl h-12 font-bold"
+        style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)", color: "#1a1a1a" }}
+        onClick={onClick}
+      >
+        {started ? "Continue the 7-Day Rebuild" : "Start the 7-Day Rebuild"}
+        <ChevronRight className="w-4 h-4 ml-1" />
+      </Button>
     </div>
   );
 }
@@ -155,6 +152,17 @@ export default function GroundingJournal() {
     queryFn: () => api.getGroundingJournal(userId!),
     enabled: !!userId,
   });
+
+  // Powers the "into the 7-Day Rebuild" nudge below — the Journal is the free
+  // on-ramp, the Rebuild is the deeper (paid-track) follow-on. Only fetched
+  // once the Journal is actually finished, since that's the only place the
+  // nudge appears.
+  const { data: rebuildData } = useQuery({
+    queryKey: ["rebuild", userId],
+    queryFn: () => api.getRebuild(userId!),
+    enabled: !!userId && !!journalData?.completed,
+  });
+  const rebuildStarted = (rebuildData?.instances ?? []).some((i: any) => i.status !== "locked");
 
   const [stepIndex, setStepIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -315,12 +323,21 @@ export default function GroundingJournal() {
 
   // ── Mark journal complete + navigate ──────────────────────────────────────
 
-  const handleComplete = async () => {
+  const markComplete = async () => {
     if (!userId) return;
     await api.completeGroundingJournal(userId);
     queryClient.invalidateQueries({ queryKey: ["user", userId] });
     queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
+  };
+
+  const handleComplete = async () => {
+    await markComplete();
     setLocation("/home");
+  };
+
+  const handleGoToRebuild = async () => {
+    await markComplete().catch(() => {});
+    setLocation("/rebuild");
   };
 
   // ── Progress indicator ────────────────────────────────────────────────────
@@ -414,6 +431,8 @@ export default function GroundingJournal() {
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">Journal complete. Jae carries this forward with you.</p>
           </div>
+
+          <RebuildFunnelCard started={rebuildStarted} onClick={() => setLocation("/rebuild")} />
         </div>
       </div>
     );
@@ -524,9 +543,12 @@ export default function GroundingJournal() {
                 {/* Video (if applicable and not yet dismissed) */}
                 {stepHasVideo(stepId) && !videoIsReady(stepId) && (
                   <div className="space-y-4">
-                    <VideoPlayer
+                    <SyncedVideoPlayer
                       url={JOURNAL_VIDEOS[stepId]!}
+                      audioSync={JOURNAL_AUDIO_SYNC[stepId]}
                       onReady={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
+                      comingSoonText="Video coming soon — being recorded now."
+                      skipLabel="Skip to reflection"
                     />
                     <Button
                       className="w-full rounded-xl h-12"
@@ -717,10 +739,15 @@ export default function GroundingJournal() {
                     Your reflections are saved to your Mustard Seed account. Jae will carry this context into your ongoing journey — your first seed is already forming.
                   </p>
                 </div>
-                <Button className="w-full rounded-xl h-12" onClick={handleComplete}>
-                  Enter the Mustard Seed App
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
+
+                <RebuildFunnelCard started={rebuildStarted} onClick={handleGoToRebuild} />
+
+                <button
+                  className="w-full text-sm text-muted-foreground hover:text-foreground py-2"
+                  onClick={handleComplete}
+                >
+                  Not yet — enter the Mustard Seed App
+                </button>
               </div>
             )}
 

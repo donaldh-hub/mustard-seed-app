@@ -121,6 +121,16 @@ export default function Home() {
     refetchInterval: 60000,
   });
 
+  // Rebuild banner only matters once someone's finished the free 3-Day Journal —
+  // that's the on-ramp into the deeper 7-Day Rebuild.
+  const { data: rebuildData } = useQuery({
+    queryKey: ["rebuild", userId],
+    queryFn: () => api.getRebuild(userId!),
+    enabled: !!userId && !!(user as any)?.groundingJournalCompleted,
+  });
+  const rebuildStarted = (rebuildData?.instances ?? []).some((i: any) => i.status !== "locked");
+  const rebuildDone = rebuildData?.hasCompletedRebuild ?? false;
+
   useEffect(() => {
     if (!assessmentLoading && !assessment && userId) {
       setLocation("/assessment");
@@ -244,6 +254,31 @@ export default function Home() {
               </div>
             </div>
           </motion.div>
+
+          {(user as any)?.groundingJournalCompleted && !rebuildDone && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl p-4 shadow-sm cursor-pointer"
+              style={{ background: "#1a3a2a" }}
+              onClick={() => setLocation("/rebuild")}
+              data-testid="banner-seven-day-rebuild"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "rgba(200,168,75,0.2)" }}>
+                  <TreeDeciduous className="w-4.5 h-4.5" style={{ color: "#c8a84b" }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-white">
+                    {rebuildStarted ? "Continue the 7-Day Rebuild" : "Ready for the 7-Day Rebuild?"}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.7)" }}>
+                    {rebuildStarted ? "Pick up where you left off." : "Turn what you named in the Journal into an actual plan."}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {showReassessmentBanner && (
             <motion.div
