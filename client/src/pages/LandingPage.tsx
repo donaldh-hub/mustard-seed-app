@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
 import jaiPodcast from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import jaiArmsCrossed from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
+import { REBUILD_INSTANCES } from "@/content/rebuildContent";
 
 const HEARTBEATS = [
   { title: "Clarity of Vision & Why", desc: "Know exactly what you're building and why it matters before you move." },
@@ -134,6 +135,9 @@ export default function LandingPage() {
           <h2 className="text-center text-3xl font-bold text-white md:text-left">
             Growth has structure.
           </h2>
+          <p className="mt-2 text-center text-sm font-medium text-[#e8c76a] md:text-left">
+            These are the Five Heartbeats — the framework everything in Mustard Seed is built on.
+          </p>
           <div className="mt-10 flex flex-col items-center gap-10 md:flex-row md:items-start">
             <ol className="flex-1 space-y-5">
               {HEARTBEATS.map((h, i) => (
@@ -153,6 +157,34 @@ export default function LandingPage() {
               alt="Jai"
               className="hidden w-56 rounded-2xl object-cover md:block"
             />
+          </div>
+        </div>
+      </section>
+
+      {/* 7-DAY REBUILD TEASER */}
+      <section className="bg-white px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
+            <h2 className="text-center text-3xl font-bold text-stone-900 md:text-left">
+              The 7-Day Rebuild
+            </h2>
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-500">
+              Coming Soon
+            </span>
+          </div>
+          <p className="mt-2 max-w-2xl text-center text-sm text-stone-500 md:text-left">
+            One heartbeat a day, applied straight to your goal — with Jai walking you through it.
+          </p>
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {REBUILD_INSTANCES.map((day) => (
+              <div key={day.instanceNumber} className="rounded-2xl border border-stone-200 p-4 opacity-70">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[#8a6f1f]">
+                  Day {day.instanceNumber}
+                </div>
+                <div className="mt-1 font-semibold text-stone-900">{day.heartbeat || day.title.replace(/^Day \d+:\s*/, "")}</div>
+                <div className="mt-1 text-xs text-stone-500">{day.subtitle}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -263,16 +295,16 @@ export default function LandingPage() {
           "You don't pay to try Mustard Seed. You pay to keep growing with it."
         </p>
         <p className="mx-auto mt-4 max-w-xl text-sm text-stone-300">
-          Every free step builds toward something real. When you're ready to keep growing, we'll
-          be here.
+          Whether you've done every free step or none of them, subscribing is always right here
+          when you're ready.
         </p>
         <button
-          onClick={goToSignup}
+          onClick={goToSubscribe}
           data-testid="button-closing-cta"
           className="mt-8 rounded-full px-8 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
           style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
         >
-          Start Free
+          Subscribe Now
         </button>
       </section>
 
