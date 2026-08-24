@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
 import jaiPodcast from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import jaiArmsCrossed from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
+import mustardSeedLogo from "@assets/ChatGPT_Image_Jun_4,_2026,_09_21_58_PM_1787613705475.png";
 import { REBUILD_INSTANCES } from "@/content/rebuildContent";
 
 const HEARTBEATS = [
@@ -12,6 +13,18 @@ const HEARTBEATS = [
   { title: "Courageous Action", desc: "Act even when it's uncomfortable, uncertain, or inconvenient." },
 ];
 
+function MustardSeedMark({ className = "" }: { className?: string }) {
+  return (
+    <span className={`relative inline-block overflow-hidden ${className}`} aria-hidden="true">
+      <img
+        src={mustardSeedLogo}
+        alt=""
+        className="absolute left-[-30%] top-[-8%] h-[160%] w-[160%] max-w-none"
+      />
+    </span>
+  );
+}
+
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const goToSignup = () => setLocation("/auth?view=register");
@@ -21,7 +34,10 @@ export default function LandingPage() {
     <div className="w-full overflow-x-hidden bg-[#f9f6ef] text-stone-900">
       {/* NAV */}
       <nav className="flex items-center justify-between px-6 py-4 bg-[#1a3a2a]">
-        <span className="font-serif text-xl font-bold text-[#f9f6ef]">Mustard Seed</span>
+        <div className="flex items-center gap-3" aria-label="Mustard Seed App">
+          <MustardSeedMark className="h-11 w-11 rounded-full border-2 border-[#c8a84b] bg-[#f9f6ef] shadow-sm" />
+          <span className="font-serif text-xl font-bold text-[#f9f6ef]">Mustard Seed</span>
+        </div>
         <button
           onClick={goToSignup}
           data-testid="button-nav-cta"
@@ -102,11 +118,16 @@ export default function LandingPage() {
       {/* MEET JAI */}
       <section className="bg-white px-6 py-16">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row">
-          <img
-            src={jaiPodcast}
-            alt="Jai, your AI accountability partner"
-            className="w-64 rounded-2xl object-cover shadow-md"
-          />
+          <div className="relative">
+            <img
+              src={jaiPodcast}
+              alt="Jai, your AI accountability partner, holding the Mustard Seed book"
+              className="w-64 rounded-2xl object-cover shadow-md"
+            />
+            <div className="absolute left-1/2 top-[58%] -translate-x-1/2" aria-label="Mustard Seed logo on Jai's book">
+              <MustardSeedMark className="h-11 w-11 rounded-lg border-2 border-[#c8a84b] bg-[#f9f6ef] p-0.5 shadow-lg" />
+            </div>
+          </div>
           <div className="max-w-md text-center md:text-left">
             <h2 className="text-3xl font-bold text-stone-900">
               Not a chatbot. An accountability partner.
@@ -208,6 +229,11 @@ export default function LandingPage() {
           </ol>
 
           <div className="flex-1 rounded-2xl bg-white p-8 text-center shadow-md">
+            <img
+              src={mustardSeedLogo}
+              alt="Mustard Seed App"
+              className="mx-auto h-16 w-16 rounded-xl object-contain"
+            />
             <h3 className="text-xl font-bold text-stone-900">Ready to get grounded?</h3>
             <p className="mt-2 text-sm text-stone-600">
               Three short sessions with Jai. No pressure, just clarity.
@@ -298,10 +324,19 @@ export default function LandingPage() {
           Whether you've done every free step or none of them, subscribing is always right here
           when you're ready.
         </p>
+        <div className="mx-auto mt-8 flex max-w-2xl justify-center sm:justify-end">
+          <div className="rounded-2xl border border-[#c8a84b]/60 bg-[#f9f6ef] p-2 shadow-xl">
+            <img
+              src={mustardSeedLogo}
+              alt="Mustard Seed App"
+              className="h-24 w-24 rounded-xl object-contain"
+            />
+          </div>
+        </div>
         <button
           onClick={goToSubscribe}
           data-testid="button-closing-cta"
-          className="mt-8 rounded-full px-8 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          className="mt-6 rounded-full px-8 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
           style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
         >
           Subscribe Now
@@ -310,7 +345,10 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer className="bg-black px-6 py-10 text-center">
-        <div className="font-serif text-lg font-bold text-white">Mustard Seed</div>
+        <div className="flex items-center justify-center gap-3">
+          <MustardSeedMark className="h-12 w-12 rounded-lg border border-[#c8a84b]/70 bg-[#f9f6ef]" />
+          <div className="font-serif text-lg font-bold text-white">Mustard Seed</div>
+        </div>
         <p className="mt-2 text-sm text-stone-400">Your digital accountability partner.</p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-stone-400">
           <Link href="/privacy-policy" className="hover:text-stone-200 hover:underline" data-testid="link-footer-privacy">
