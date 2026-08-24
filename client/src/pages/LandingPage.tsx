@@ -11,16 +11,10 @@ const HEARTBEATS = [
   { title: "Courageous Action", desc: "Act even when it's uncomfortable, uncertain, or inconvenient." },
 ];
 
-const FUNNEL_STEPS = [
-  { label: "Five Heartbeats Assessment", tag: "Free" },
-  { label: "3-Day Grounding Journal", tag: "Free" },
-  { label: "7-Day Rebuild Program", tag: "Guided" },
-  { label: "Keep Growing", tag: "Ongoing" },
-];
-
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const goToSignup = () => setLocation("/auth?view=register");
+  const goToSubscribe = () => setLocation("/auth?view=register&next=subscribe");
 
   return (
     <div className="w-full overflow-x-hidden bg-[#f9f6ef] text-stone-900">
@@ -55,16 +49,25 @@ export default function LandingPage() {
               Jai walks with you one honest step at a time — no hype, no pressure, just real
               progress toward whatever you're building.
             </p>
-            <button
-              onClick={goToSignup}
-              data-testid="button-hero-cta"
-              className="mt-6 w-full rounded-full px-6 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] sm:w-auto"
-              style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
-            >
-              Start the Free 3-Day Journal
-            </button>
+            <div className="mt-6 flex flex-col items-center gap-3 sm:items-start">
+              <button
+                onClick={goToSignup}
+                data-testid="button-hero-cta"
+                className="w-full rounded-full px-6 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] sm:w-auto"
+                style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
+              >
+                Start the Free 3-Day Journal
+              </button>
+              <button
+                onClick={goToSubscribe}
+                data-testid="button-hero-subscribe"
+                className="w-full rounded-full border-2 border-white/40 px-6 py-3 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:bg-white/10 active:scale-[0.98] sm:w-auto"
+              >
+                Just want to subscribe? Skip ahead
+              </button>
+            </div>
             <p className="mt-2 text-xs text-stone-400">
-              No credit card. No pressure. Just your first honest step.
+              No credit card required to start. Subscribe anytime — the guided steps are optional.
             </p>
           </div>
 
@@ -184,6 +187,13 @@ export default function LandingPage() {
             >
               Start the 3-Day Journal — Free
             </button>
+            <button
+              onClick={goToSubscribe}
+              data-testid="button-journal-skip-subscribe"
+              className="mt-3 w-full rounded-full border-2 border-[#1a3a2a] px-6 py-3 font-bold text-[#1a3a2a] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Or Subscribe Now — No Journal Required
+            </button>
             <p className="mt-3 text-xs text-stone-400">
               On the website, you choose the seed. On the phone, you water it.
             </p>
@@ -191,22 +201,58 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FUNNEL */}
+      {/* OPTIONAL PATHS */}
       <section className="bg-white px-6 py-16">
         <div className="mx-auto max-w-5xl">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            {FUNNEL_STEPS.map((step, i) => (
-              <div key={step.label} className="flex flex-1 flex-col items-center text-center">
-                <div className="flex items-center gap-3 md:hidden">
-                  {i > 0 && <div className="h-px w-6 bg-stone-300" />}
-                </div>
-                <div className="font-semibold text-stone-900">{step.label}</div>
-                <div className="mt-1 text-xs font-medium text-[#8a6f1f]">{step.tag}</div>
-                {i < FUNNEL_STEPS.length - 1 && (
-                  <div className="mt-4 hidden h-px w-full bg-stone-300 md:block" />
-                )}
+          <h2 className="text-center text-2xl font-bold text-stone-900">
+            Every path is optional. Take any of them, in any order.
+          </h2>
+          <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-stone-500">
+            None of these are required before the others. Subscribing doesn't require finishing
+            anything first.
+          </p>
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
+              <div className="font-semibold text-stone-900">Five Heartbeats Assessment</div>
+              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
+              <button
+                onClick={goToSignup}
+                data-testid="button-path-assessment"
+                className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Take the Assessment
+              </button>
+            </div>
+            <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
+              <div className="font-semibold text-stone-900">3-Day Grounding Journal</div>
+              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
+              <button
+                onClick={goToSignup}
+                data-testid="button-path-journal"
+                className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Start the Journal
+              </button>
+            </div>
+            <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center opacity-60">
+              <div className="font-semibold text-stone-900">7-Day Rebuild Program</div>
+              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Coming Soon</div>
+              <div className="mt-4 w-full rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-400">
+                Not Yet Available
               </div>
-            ))}
+            </div>
+            <div className="flex flex-col items-center rounded-2xl border-2 border-[#c8a84b] p-6 text-center">
+              <div className="font-semibold text-stone-900">Subscribe</div>
+              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Ongoing</div>
+              <button
+                onClick={goToSubscribe}
+                data-testid="button-path-subscribe"
+                className="mt-4 w-full rounded-full px-4 py-2 text-sm font-bold text-stone-900 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
+              >
+                Subscribe Now
+              </button>
+            </div>
           </div>
         </div>
       </section>

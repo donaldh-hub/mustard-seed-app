@@ -41,9 +41,11 @@ export default function Auth() {
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
   const googleBtnRef = useRef<HTMLDivElement>(null);
+  const wantsSubscribe = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    wantsSubscribe.current = params.get("next") === "subscribe";
     const token = params.get("reset");
     if (token) {
       setResetToken(token);
@@ -54,6 +56,14 @@ export default function Auth() {
       setView("register");
     }
   }, []);
+
+  const postAuthRedirect = (isOnboarded: boolean) => {
+    if (wantsSubscribe.current) {
+      setLocation("/profile", { replace: true });
+      return;
+    }
+    setLocation(isOnboarded ? "/home" : "/", { replace: true });
+  };
 
   useEffect(() => {
     api.getConfig().then((cfg) => {
@@ -108,11 +118,7 @@ export default function Auth() {
       const user = await api.authGoogle(response.credential);
       setUserId(user.id);
       setAuthStatus("authenticated");
-      if (user.isOnboarded) {
-        setLocation("/home", { replace: true });
-      } else {
-        setLocation("/", { replace: true });
-      }
+      postAuthRedirect(!!user.isOnboarded);
     } catch (err: any) {
       setError(err.message || "Google sign-in failed. Please try again.");
     } finally {
@@ -132,11 +138,7 @@ export default function Auth() {
       const user = await api.authLogin({ email, password });
       setUserId(user.id);
       setAuthStatus("authenticated");
-      if (user.isOnboarded) {
-        setLocation("/home", { replace: true });
-      } else {
-        setLocation("/", { replace: true });
-      }
+      postAuthRedirect(!!user.isOnboarded);
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials.");
     } finally {
@@ -168,7 +170,7 @@ export default function Auth() {
       const user = await api.authRegister({ name: name.trim(), email, password });
       setUserId(user.id);
       setAuthStatus("authenticated");
-      setLocation("/", { replace: true });
+      postAuthRedirect(!!user.isOnboarded);
     } catch (err: any) {
       setError(err.message || "Registration failed. Please try again.");
     } finally {
