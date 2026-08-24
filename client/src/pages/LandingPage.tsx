@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
-import jaiPodcast from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import jaiPodcast from "@assets/jai_book_clean.png";
 import jaiArmsCrossed from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
 import mustardSeedLogo from "@assets/ChatGPT_Image_Jun_4,_2026,_09_21_58_PM_1787613705475.png";
 import { REBUILD_INSTANCES } from "@/content/rebuildContent";
@@ -35,7 +35,7 @@ export default function LandingPage() {
       {/* NAV */}
       <nav className="flex items-center justify-between px-6 py-4 bg-[#1a3a2a]">
         <div className="flex items-center gap-3" aria-label="Mustard Seed App">
-          <MustardSeedMark className="h-11 w-11 rounded-full border-2 border-[#c8a84b] bg-[#f9f6ef] shadow-sm" />
+          <MustardSeedMark className="h-14 w-14 rounded-full border-2 border-[#c8a84b] bg-[#f9f6ef] shadow-sm" />
           <span className="font-serif text-xl font-bold text-[#f9f6ef]">Mustard Seed</span>
         </div>
         <button
@@ -122,10 +122,12 @@ export default function LandingPage() {
             <img
               src={jaiPodcast}
               alt="Jai, your AI accountability partner, holding the Mustard Seed book"
-              className="w-64 rounded-2xl object-cover shadow-md"
+              className="w-72 rounded-2xl object-cover shadow-md"
             />
             <div className="absolute left-1/2 top-[58%] -translate-x-1/2" aria-label="Mustard Seed logo on Jai's book">
-              <MustardSeedMark className="h-11 w-11 rounded-lg border-2 border-[#c8a84b] bg-[#f9f6ef] p-0.5 shadow-lg" />
+              <div className="h-20 w-20 overflow-hidden rounded-xl border-2 border-[#c8a84b] bg-[#f9f6ef] p-1 shadow-xl">
+                <img src={mustardSeedLogo} alt="" className="h-full w-full object-contain" />
+              </div>
             </div>
           </div>
           <div className="max-w-md text-center md:text-left">
@@ -346,7 +348,7 @@ export default function LandingPage() {
       {/* FOOTER */}
       <footer className="bg-black px-6 py-10 text-center">
         <div className="flex items-center justify-center gap-3">
-          <MustardSeedMark className="h-12 w-12 rounded-lg border border-[#c8a84b]/70 bg-[#f9f6ef]" />
+          <MustardSeedMark className="h-14 w-14 rounded-lg border border-[#c8a84b]/70 bg-[#f9f6ef]" />
           <div className="font-serif text-lg font-bold text-white">Mustard Seed</div>
         </div>
         <p className="mt-2 text-sm text-stone-400">Your digital accountability partner.</p>
