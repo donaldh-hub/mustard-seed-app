@@ -209,22 +209,34 @@ export default function LandingPage() {
           </div>
           <div className="max-w-md text-center md:text-left">
             <h2 className="text-3xl font-bold text-stone-900">
-              Not a chatbot. An accountability partner.
+              Hi. I'm Jai — your digital accountability partner.
             </h2>
-            <ul className="mt-6 space-y-4 text-stone-600">
+            <p className="mt-4 leading-relaxed text-stone-600">
+              I'm not here to hype you up. I'm here to remember your goal, ask for real proof
+              you're moving toward it, and walk with you when you slip — no shame, no excuses
+              either.
+            </p>
+            <p className="mt-5 font-semibold text-stone-900">Here's what I stand for:</p>
+            <ul className="mt-3 space-y-4 text-stone-600">
               <li>
-                <span className="font-semibold text-stone-900">Memory-aware coaching</span> — Jai
-                remembers your goals and your history with you.
+                <span className="font-semibold text-stone-900">I remember you.</span> Every goal,
+                every step, every setback — still in view when you come back.
               </li>
               <li>
-                <span className="font-semibold text-stone-900">Goal-neutral by design</span> —
-                fitness, business, faith, relationships, anything you're building.
+                <span className="font-semibold text-stone-900">I ask for proof, not promises.</span>
               </li>
               <li>
-                <span className="font-semibold text-stone-900">Grace without excuses</span> —
-                honest accountability, never shame.
+                <span className="font-semibold text-stone-900">Your score is never shame.</span> It's
+                soil.
               </li>
             </ul>
+            <p className="mt-6 font-semibold text-stone-900">You do the honest work once. I carry it forward.</p>
+            <Link
+              href="/auth?view=register"
+              className="mt-4 inline-block text-sm font-semibold text-[#8a6f1f] underline-offset-4 hover:underline"
+            >
+              Learn more about how this works in the app.
+            </Link>
           </div>
         </div>
       </section>
