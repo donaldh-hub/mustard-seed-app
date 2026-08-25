@@ -106,17 +106,6 @@ export default function LandingPage() {
 
   return (
     <div className="w-full overflow-x-hidden bg-[#f9f6ef] text-stone-900">
-      {/* NAV */}
-        <nav className="flex items-center justify-end px-6 py-4 bg-[#1a3a2a]">
-        <button
-          onClick={goToSignup}
-          data-testid="button-nav-cta"
-          className="rounded-full bg-[#c8a84b] px-5 py-2 text-sm font-bold text-stone-900 transition-transform hover:scale-105 active:scale-95"
-        >
-          Start Free Journal
-        </button>
-      </nav>
-
       {/* HERO */}
       <section
         className="px-6 py-16 md:py-24"
