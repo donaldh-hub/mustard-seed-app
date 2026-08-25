@@ -107,11 +107,7 @@ export default function LandingPage() {
   return (
     <div className="w-full overflow-x-hidden bg-[#f9f6ef] text-stone-900">
       {/* NAV */}
-      <nav className="flex items-center justify-between px-6 py-4 bg-[#1a3a2a]">
-        <div className="flex items-center gap-3" aria-label="Mustard Seed App">
-          <MustardSeedMark className="h-14 w-14 rounded-full border-2 border-[#c8a84b] bg-[#f9f6ef] shadow-sm" />
-          <span className="font-serif text-xl font-bold text-[#f9f6ef]">Mustard Seed</span>
-        </div>
+        <nav className="flex items-center justify-end px-6 py-4 bg-[#1a3a2a]">
         <button
           onClick={goToSignup}
           data-testid="button-nav-cta"
@@ -126,7 +122,17 @@ export default function LandingPage() {
         className="px-6 py-16 md:py-24"
         style={{ background: "linear-gradient(180deg, #1a3a2a 0%, #2d5a3d 100%)" }}
       >
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-10 flex justify-center md:mb-12">
+            <div className="rounded-3xl border-2 border-[#c8a84b] bg-[#f9f6ef] p-3 shadow-2xl">
+              <img
+                src={mustardSeedLogo}
+                alt="Mustard Seed App"
+                className="h-36 w-36 rounded-2xl object-contain md:h-48 md:w-48"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-10 md:flex-row md:items-center md:justify-between">
           <div className="max-w-md text-center md:text-left">
             <span className="inline-block rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#e8c76a]">
               🌱 Digital Accountability Partner
@@ -172,6 +178,7 @@ export default function LandingPage() {
               "I'm not here to hype you up. I'm here to help you grow."
               <div className="mt-1 text-xs font-semibold text-stone-500">— Jai, your coach</div>
             </div>
+          </div>
           </div>
         </div>
       </section>
