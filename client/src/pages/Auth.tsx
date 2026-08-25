@@ -41,11 +41,11 @@ export default function Auth() {
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
   const googleBtnRef = useRef<HTMLDivElement>(null);
-  const wantsSubscribe = useRef(false);
+  const nextIntent = useRef<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    wantsSubscribe.current = params.get("next") === "subscribe";
+    nextIntent.current = params.get("next");
     const token = params.get("reset");
     if (token) {
       setResetToken(token);
@@ -58,8 +58,12 @@ export default function Auth() {
   }, []);
 
   const postAuthRedirect = (isOnboarded: boolean) => {
-    if (wantsSubscribe.current) {
+    if (nextIntent.current === "subscribe") {
       setLocation("/profile", { replace: true });
+      return;
+    }
+    if (nextIntent.current === "rebuild") {
+      setLocation("/rebuild", { replace: true });
       return;
     }
     setLocation(isOnboarded ? "/home" : "/", { replace: true });
