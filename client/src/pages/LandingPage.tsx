@@ -12,10 +12,84 @@ const HEARTBEATS = [
   { title: "Courageous Action", desc: "Act even when it's uncomfortable, uncertain, or inconvenient." },
 ];
 
+function PathsGrid({
+  onAssessment,
+  onJournal,
+  onRebuild,
+  onSubscribe,
+}: {
+  onAssessment: () => void;
+  onJournal: () => void;
+  onRebuild: () => void;
+  onSubscribe: () => void;
+}) {
+  return (
+    <section className="bg-white px-6 py-16">
+      <div className="mx-auto max-w-5xl">
+        <h2 className="text-center text-2xl font-bold text-stone-900">
+          Every path is optional. Take any of them, in any order.
+        </h2>
+        <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-stone-500">
+          None of these are required before the others. Subscribing doesn't require finishing
+          anything first.
+        </p>
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
+            <div className="font-semibold text-stone-900">Five Heartbeats Assessment</div>
+            <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
+            <button
+              onClick={onAssessment}
+              data-testid="button-path-assessment"
+              className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Take the Assessment
+            </button>
+          </div>
+          <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
+            <div className="font-semibold text-stone-900">3-Day Grounding Journal</div>
+            <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
+            <button
+              onClick={onJournal}
+              data-testid="button-path-journal"
+              className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Start the Journal
+            </button>
+          </div>
+          <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
+            <div className="font-semibold text-stone-900">7-Day Rebuild Program</div>
+            <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Guided</div>
+            <button
+              onClick={onRebuild}
+              data-testid="button-path-rebuild"
+              className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Start the Rebuild
+            </button>
+          </div>
+          <div className="flex flex-col items-center rounded-2xl border-2 border-[#c8a84b] p-6 text-center">
+            <div className="font-semibold text-stone-900">Subscribe</div>
+            <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Ongoing</div>
+            <button
+              onClick={onSubscribe}
+              data-testid="button-path-subscribe"
+              className="mt-4 w-full rounded-full px-4 py-2 text-sm font-bold text-stone-900 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
+            >
+              Subscribe Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const goToSignup = () => setLocation("/auth?view=register");
   const goToSubscribe = () => setLocation("/auth?view=register&next=subscribe");
+  const goToRebuild = () => setLocation("/auth?view=register&next=rebuild");
 
   return (
     <div className="w-full overflow-x-hidden bg-[#f9f6ef] text-stone-900">
@@ -99,6 +173,13 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <PathsGrid
+        onAssessment={goToSignup}
+        onJournal={goToSignup}
+        onRebuild={goToRebuild}
+        onSubscribe={goToSubscribe}
+      />
+
       {/* MEET JAI */}
       <section className="bg-white px-6 py-16">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row">
@@ -168,8 +249,8 @@ export default function LandingPage() {
             <h2 className="text-center text-3xl font-bold text-stone-900 md:text-left">
               The 7-Day Rebuild
             </h2>
-            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-500">
-              Coming Soon
+            <span className="rounded-full bg-[#1a3a2a]/10 px-3 py-1 text-xs font-semibold text-[#1a3a2a]">
+              Guided
             </span>
           </div>
           <p className="mt-2 max-w-2xl text-center text-sm text-stone-500 md:text-left">
@@ -177,7 +258,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {REBUILD_INSTANCES.map((day) => (
-              <div key={day.instanceNumber} className="rounded-2xl border border-stone-200 p-4 opacity-70">
+              <div key={day.instanceNumber} className="rounded-2xl border border-stone-200 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-[#8a6f1f]">
                   Day {day.instanceNumber}
                 </div>
@@ -185,6 +266,15 @@ export default function LandingPage() {
                 <div className="mt-1 text-xs text-stone-500">{day.subtitle}</div>
               </div>
             ))}
+          </div>
+          <div className="mt-8 flex justify-center md:justify-start">
+            <button
+              onClick={goToRebuild}
+              data-testid="button-rebuild-cta"
+              className="rounded-full bg-[#1a3a2a] px-6 py-3 font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Start the 7-Day Rebuild
+            </button>
           </div>
         </div>
       </section>
@@ -233,62 +323,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* OPTIONAL PATHS */}
-      <section className="bg-white px-6 py-16">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-center text-2xl font-bold text-stone-900">
-            Every path is optional. Take any of them, in any order.
-          </h2>
-          <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-stone-500">
-            None of these are required before the others. Subscribing doesn't require finishing
-            anything first.
-          </p>
-          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
-              <div className="font-semibold text-stone-900">Five Heartbeats Assessment</div>
-              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
-              <button
-                onClick={goToSignup}
-                data-testid="button-path-assessment"
-                className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                Take the Assessment
-              </button>
-            </div>
-            <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
-              <div className="font-semibold text-stone-900">3-Day Grounding Journal</div>
-              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
-              <button
-                onClick={goToSignup}
-                data-testid="button-path-journal"
-                className="mt-4 w-full rounded-full bg-[#1a3a2a] px-4 py-2 text-sm font-bold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                Start the Journal
-              </button>
-            </div>
-            <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center opacity-60">
-              <div className="font-semibold text-stone-900">7-Day Rebuild Program</div>
-              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Coming Soon</div>
-              <div className="mt-4 w-full rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-400">
-                Not Yet Available
-              </div>
-            </div>
-            <div className="flex flex-col items-center rounded-2xl border-2 border-[#c8a84b] p-6 text-center">
-              <div className="font-semibold text-stone-900">Subscribe</div>
-              <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Ongoing</div>
-              <button
-                onClick={goToSubscribe}
-                data-testid="button-path-subscribe"
-                className="mt-4 w-full rounded-full px-4 py-2 text-sm font-bold text-stone-900 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
-              >
-                Subscribe Now
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* CLOSING QUOTE */}
       <section className="px-6 py-20 text-center" style={{ background: "#1a3a2a" }}>
         <p className="mx-auto max-w-2xl text-2xl font-bold leading-snug text-white sm:text-3xl">
@@ -307,6 +341,13 @@ export default function LandingPage() {
           Subscribe Now
         </button>
       </section>
+
+      <PathsGrid
+        onAssessment={goToSignup}
+        onJournal={goToSignup}
+        onRebuild={goToRebuild}
+        onSubscribe={goToSubscribe}
+      />
 
       {/* FOOTER */}
       <footer className="bg-black px-6 py-10 text-center">
