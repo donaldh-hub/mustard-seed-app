@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
-import jaiPodcast from "@assets/jai_book_clean.png";
+import jaiPodcast from "@assets/ChatGPT_Image_Jun_17,_2026,_08_22_26_PM(2)_1787620780738.png";
 import jaiArmsCrossed from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
 import mustardSeedLogo from "@assets/ChatGPT_Image_Jun_4,_2026,_09_21_58_PM_1787613705475.png";
 import { REBUILD_INSTANCES } from "@/content/rebuildContent";
@@ -201,11 +201,6 @@ export default function LandingPage() {
               alt="Jai, your AI accountability partner, holding the Mustard Seed book"
               className="w-72 rounded-2xl object-cover shadow-md"
             />
-            <div className="absolute left-1/2 top-[58%] -translate-x-1/2" aria-label="Mustard Seed logo on Jai's book">
-              <div className="h-20 w-20 overflow-hidden rounded-xl border-2 border-[#c8a84b] bg-[#f9f6ef] p-1 shadow-xl">
-                <img src={mustardSeedLogo} alt="" className="h-full w-full object-contain" />
-              </div>
-            </div>
           </div>
           <div className="max-w-md text-center md:text-left">
             <h2 className="text-3xl font-bold text-stone-900">
