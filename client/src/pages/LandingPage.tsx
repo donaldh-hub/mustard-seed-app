@@ -363,7 +363,7 @@ export default function LandingPage() {
           Whether you've done every free step or none of them, subscribing is always right here
           when you're ready.
         </p>
-        <div className="mx-auto mt-8 flex max-w-2xl justify-center sm:justify-end">
+        <div className="mx-auto mt-8 flex max-w-2xl justify-center">
           <div className="rounded-2xl border border-[#c8a84b]/60 bg-[#f9f6ef] p-2 shadow-xl">
             <img
               src={mustardSeedLogo}
