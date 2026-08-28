@@ -9,6 +9,7 @@ import {
   type Commitment, type InsertCommitment, commitments,
   type GroundingJournalEntry, groundingJournalEntries,
   type RebuildInstance, rebuildInstances,
+  type SafetyEvent, type InsertSafetyEvent, safetyEvents,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -69,6 +70,11 @@ export interface IStorage {
   getGroundingJournalEntries(userId: string): Promise<GroundingJournalEntry[]>;
   createGroundingJournalEntry(data: Omit<GroundingJournalEntry, "id" | "createdAt">): Promise<GroundingJournalEntry>;
   updateGroundingJournalEntry(id: string, data: Partial<GroundingJournalEntry>): Promise<GroundingJournalEntry | undefined>;
+
+  createSafetyEvent(data: InsertSafetyEvent): Promise<SafetyEvent>;
+  updateSafetyEvent(id: string, data: Partial<SafetyEvent>): Promise<SafetyEvent | undefined>;
+  getRecentSafetyEvents(userId: string, since: Date): Promise<SafetyEvent[]>;
+  getAllSafetyEvents(limit?: number): Promise<SafetyEvent[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -349,6 +355,28 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(rebuildInstances.userId, userId), eq(rebuildInstances.instanceNumber, instanceNumber)))
       .returning();
     return row;
+  }
+
+  // ─── Trust & Safety (Agent 01) ─────────────────────────────────────────────
+
+  async createSafetyEvent(data: InsertSafetyEvent): Promise<SafetyEvent> {
+    const [event] = await db.insert(safetyEvents).values(data).returning();
+    return event;
+  }
+
+  async updateSafetyEvent(id: string, data: Partial<SafetyEvent>): Promise<SafetyEvent | undefined> {
+    const [event] = await db.update(safetyEvents).set(data).where(eq(safetyEvents.id, id)).returning();
+    return event;
+  }
+
+  async getRecentSafetyEvents(userId: string, since: Date): Promise<SafetyEvent[]> {
+    return db.select().from(safetyEvents)
+      .where(and(eq(safetyEvents.userId, userId), gte(safetyEvents.createdAt, since)))
+      .orderBy(desc(safetyEvents.createdAt));
+  }
+
+  async getAllSafetyEvents(limit = 200): Promise<SafetyEvent[]> {
+    return db.select().from(safetyEvents).orderBy(desc(safetyEvents.createdAt)).limit(limit);
   }
 }
 

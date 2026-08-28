@@ -6,6 +6,7 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
+import { evaluateMessage } from "./trustSafety";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -423,6 +424,19 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+
+      // ─── Trust & Safety Agent (Agent 01) — runs first, before any other branch ───
+      const safetyRecentMessages = await storage.getMessages(userId);
+      const safetyResult = await evaluateMessage(
+        userId,
+        rawText,
+        safetyRecentMessages.slice(-8).map((m) => ({ sender: m.sender, text: m.text })),
+        "chat"
+      );
+      if (safetyResult.triggered && safetyResult.responseText) {
+        const safeMsg = await storage.createMessage({ userId, text: safetyResult.responseText, sender: "jae" });
+        return res.json({ userMessage: userMsg, jaeMessage: safeMsg, safetyTriggered: true });
+      }
 
       const name = user.name || "";
       const obstacle = user.struggles?.length ? user.struggles[0] : "";
@@ -3211,6 +3225,16 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
+      // ─── Trust & Safety Agent (Agent 01) — screens journal responses too ───
+      // Persists what the user wrote either way (it's real journal content and
+      // matters for the audit trail) but replaces Jai's reflection with the
+      // locked safe-response script and skips the reflection AI call entirely.
+      const journalText = (prompts || []).map((p) => p.response).filter(Boolean).join("\n");
+      const journalSafety = journalText
+        ? await evaluateMessage(userId, journalText, [], "grounding_journal")
+        : null;
+      const safetyReflection: string | null = journalSafety?.triggered ? journalSafety.responseText : null;
+
       const dayThemes: Record<number, "RESET" | "REFOCUS" | "REBUILD"> = { 1: "RESET", 2: "REFOCUS", 3: "REBUILD" };
       const previousEntries = await storage.getGroundingJournalEntries(userId);
 
@@ -3220,15 +3244,20 @@ export async function registerRoutes(
         if (existing) return res.json({ entry: existing, jae: { reflection: "", followUpQuestion: null } });
         const entry = await storage.createGroundingJournalEntry({
           userId, dayNumber, session, prompts,
-          jaeReflection: null, jaeFollowUpQuestion: null, userFollowUpResponse: null,
+          jaeReflection: safetyReflection, jaeFollowUpQuestion: null, userFollowUpResponse: null,
           keyTheme: null, releasePoint: null, valueNamed: null, possibleFirstSeed: null,
           isComplete: true,
         });
-        return res.json({ entry, jae: { reflection: "", followUpQuestion: null } });
+        return res.json({
+          entry,
+          jae: { reflection: safetyReflection ?? "", followUpQuestion: null },
+          ...(safetyReflection ? { safetyTriggered: true } : {}),
+        });
       }
 
       // Prevent duplicate sessions — return existing entry if already submitted
-      const duplicate = previousEntries.find((e) => e.dayNumber === dayNumber && e.session === session);
+      // (skipped on a safety trigger so it always gets a fresh flag + response)
+      const duplicate = safetyReflection ? undefined : previousEntries.find((e) => e.dayNumber === dayNumber && e.session === session);
       if (duplicate) {
         return res.json({
           entry: duplicate,
@@ -3252,14 +3281,16 @@ export async function registerRoutes(
         jaeReflection: e.jaeReflection,
       }));
 
-      const jaeResponse = await generateJournalReflection({
-        userName: user.name || "friend",
-        dayNumber,
-        dayTheme: dayThemes[dayNumber],
-        session,
-        prompts,
-        previousEntries: prevSummary,
-      });
+      const jaeResponse = safetyReflection
+        ? { reflection: safetyReflection, followUpQuestion: "", keyTheme: "", releasePoint: "", valueNamed: "", possibleFirstSeed: "" }
+        : await generateJournalReflection({
+            userName: user.name || "friend",
+            dayNumber,
+            dayTheme: dayThemes[dayNumber],
+            session,
+            prompts,
+            previousEntries: prevSummary,
+          });
 
       const entry = await storage.createGroundingJournalEntry({
         userId,
@@ -3269,31 +3300,35 @@ export async function registerRoutes(
         jaeReflection: jaeResponse.reflection,
         jaeFollowUpQuestion: jaeResponse.followUpQuestion,
         userFollowUpResponse: null,
-        keyTheme: jaeResponse.keyTheme,
-        releasePoint: jaeResponse.releasePoint,
-        valueNamed: jaeResponse.valueNamed,
-        possibleFirstSeed: jaeResponse.possibleFirstSeed,
+        keyTheme: jaeResponse.keyTheme || null,
+        releasePoint: jaeResponse.releasePoint || null,
+        valueNamed: jaeResponse.valueNamed || null,
+        possibleFirstSeed: jaeResponse.possibleFirstSeed || null,
         isComplete: true,
       });
 
       // Mirror to the entries table so Calendar/Memory Bank shows journal
       // activity — the journal has its own table, but Calendar only reads
-      // from `entries`.
-      const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
-      const calendarSummary = `Grounding Journal — Day ${dayNumber} ${sessionLabel}${jaeResponse.keyTheme ? `: ${jaeResponse.keyTheme}` : ""}`;
-      try {
-        await storage.createEntry({
-          userId,
-          goalId: null,
-          date: localDate || todayStr(),
-          summary: calendarSummary,
-          mood: "neutral",
-        });
-      } catch (calErr) {
-        console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
+      // from `entries`. Skipped on a safety trigger: there's no real theme to
+      // summarize, and this keeps the crisis disclosure out of Calendar/Memory
+      // Bank's normal-activity surface.
+      if (!safetyReflection) {
+        const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
+        const calendarSummary = `Grounding Journal — Day ${dayNumber} ${sessionLabel}${jaeResponse.keyTheme ? `: ${jaeResponse.keyTheme}` : ""}`;
+        try {
+          await storage.createEntry({
+            userId,
+            goalId: null,
+            date: localDate || todayStr(),
+            summary: calendarSummary,
+            mood: "neutral",
+          });
+        } catch (calErr) {
+          console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
+        }
       }
 
-      return res.json({ entry, jae: jaeResponse });
+      return res.json({ entry, jae: jaeResponse, ...(safetyReflection ? { safetyTriggered: true } : {}) });
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
       return res.status(500).json({ message: "Journal entry error" });
@@ -3389,6 +3424,18 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+
+      // ─── Trust & Safety Agent (Agent 01) — screens rebuild reflections too ───
+      const rebuildText = (prompts || []).map((p) => p.response).filter(Boolean).join("\n");
+      if (rebuildText) {
+        const rebuildSafety = await evaluateMessage(userId, rebuildText, [], "rebuild");
+        if (rebuildSafety.triggered && rebuildSafety.responseText) {
+          return res.json({
+            jae: { reflection: rebuildSafety.responseText, followUpQuestion: null },
+            safetyTriggered: true,
+          });
+        }
+      }
 
       const instance = await storage.getRebuildInstance(userId, instanceNumber);
       if (!instance || instance.status === "locked") {

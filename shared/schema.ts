@@ -281,3 +281,39 @@ export const insertAssessmentSchema = createInsertSchema(assessments).omit({
 });
 export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
 export type Assessment = typeof assessments.$inferSelect;
+
+// ─── Trust & Safety (Agent 01) ───────────────────────────────────────────────
+// Crisis-language screening across every Jai/Jio/Jazz turn. Locked response
+// wording lives in server/trustSafety.ts — this table is the audit log.
+export const SAFETY_TRIGGER_CATEGORIES = [
+  "passive_ideation",
+  "active_ideation",
+  "ideation_with_plan_or_means",
+  "hopelessness_finality",
+  "direct_self_harm",
+  "abuse_in_progress",
+  "medical_emergency",
+  "disordered_eating",
+] as const;
+export type SafetyTriggerCategory = typeof SAFETY_TRIGGER_CATEGORIES[number];
+
+export const SAFETY_RESPONSE_TYPES = ["primary", "backtrack_followup"] as const;
+export type SafetyResponseType = typeof SAFETY_RESPONSE_TYPES[number];
+
+export const safetyEvents = pgTable("safety_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  category: text("category").notNull(),
+  responseType: text("response_type").notNull().default("primary"),
+  triggeringMessage: text("triggering_message").notNull(),
+  surface: text("surface").notNull().default("chat"), // chat | grounding_journal | rebuild
+  alertSent: boolean("alert_sent").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSafetyEventSchema = createInsertSchema(safetyEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSafetyEvent = z.infer<typeof insertSafetyEventSchema>;
+export type SafetyEvent = typeof safetyEvents.$inferSelect;
