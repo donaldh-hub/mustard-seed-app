@@ -607,3 +607,53 @@ export const insertABTestVariantSchema = createInsertSchema(abTestVariants).omit
 });
 export type InsertABTestVariant = z.infer<typeof insertABTestVariantSchema>;
 export type ABTestVariant = typeof abTestVariants.$inferSelect;
+
+// ─── Technical & Release Ops Agent (Agent 10) ────────────────────────────────
+// Centralizes bugs/feature requests, gates "production-ready" behind real
+// recorded verification checks, and writes the changelog. HARD CONSTRAINT:
+// no production deploy authority anywhere in this agent — "shipped" means
+// the internal record is marked ready and a changelog entry exists, never
+// that anything was deployed. This repo doesn't use GitHub Issues yet (0
+// open or closed at time of writing), so this table is the primary tracker;
+// GitHub Issue creation is wired in as an optional mirror if GITHUB_TOKEN
+// and GITHUB_REPO_FULL_NAME are ever configured.
+export const RELEASE_ITEM_TYPES = ["bug", "feature"] as const;
+export type ReleaseItemType = typeof RELEASE_ITEM_TYPES[number];
+
+export const RELEASE_ITEM_STATUSES = ["logged", "staged", "verified", "shipped", "rejected"] as const;
+export type ReleaseItemStatus = typeof RELEASE_ITEM_STATUSES[number];
+
+export const releaseItems = pgTable("release_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("logged"),
+  githubIssueNumber: integer("github_issue_number"),
+  verificationChecks: jsonb("verification_checks"),
+  createdAt: timestamp("created_at").defaultNow(),
+  stagedAt: timestamp("staged_at"),
+  verifiedAt: timestamp("verified_at"),
+  shippedAt: timestamp("shipped_at"),
+});
+
+export const insertReleaseItemSchema = createInsertSchema(releaseItems).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertReleaseItem = z.infer<typeof insertReleaseItemSchema>;
+export type ReleaseItem = typeof releaseItems.$inferSelect;
+
+export const changelogEntries = pgTable("changelog_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  summary: text("summary").notNull(),
+  releaseItemId: varchar("release_item_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertChangelogEntrySchema = createInsertSchema(changelogEntries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertChangelogEntry = z.infer<typeof insertChangelogEntrySchema>;
+export type ChangelogEntry = typeof changelogEntries.$inferSelect;

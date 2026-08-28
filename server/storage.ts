@@ -21,6 +21,8 @@ import {
   type CurriculumDraft, type InsertCurriculumDraft, curriculumDrafts,
   type ABTest, type InsertABTest, abTests,
   type ABTestVariant, type InsertABTestVariant, abTestVariants,
+  type ReleaseItem, type InsertReleaseItem, releaseItems,
+  type ChangelogEntry, type InsertChangelogEntry, changelogEntries,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -138,6 +140,13 @@ export interface IStorage {
   getABTestVariant(id: string): Promise<ABTestVariant | undefined>;
   incrementABTestVariant(id: string, field: "impressions" | "conversions"): Promise<ABTestVariant | undefined>;
   retireABTestVariant(id: string): Promise<ABTestVariant | undefined>;
+
+  createReleaseItem(data: InsertReleaseItem): Promise<ReleaseItem>;
+  getReleaseItem(id: string): Promise<ReleaseItem | undefined>;
+  getReleaseItems(status?: string): Promise<ReleaseItem[]>;
+  updateReleaseItem(id: string, data: Partial<ReleaseItem>): Promise<ReleaseItem | undefined>;
+  createChangelogEntry(data: InsertChangelogEntry): Promise<ChangelogEntry>;
+  getChangelogEntries(limit?: number): Promise<ChangelogEntry[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -680,6 +689,39 @@ export class DatabaseStorage implements IStorage {
   async retireABTestVariant(id: string): Promise<ABTestVariant | undefined> {
     const [row] = await db.update(abTestVariants).set({ retired: true }).where(eq(abTestVariants.id, id)).returning();
     return row;
+  }
+
+  // ─── Technical & Release Ops (Agent 10) ────────────────────────────────────
+
+  async createReleaseItem(data: InsertReleaseItem): Promise<ReleaseItem> {
+    const [row] = await db.insert(releaseItems).values(data).returning();
+    return row;
+  }
+
+  async getReleaseItem(id: string): Promise<ReleaseItem | undefined> {
+    const [row] = await db.select().from(releaseItems).where(eq(releaseItems.id, id));
+    return row;
+  }
+
+  async getReleaseItems(status?: string): Promise<ReleaseItem[]> {
+    if (status) {
+      return db.select().from(releaseItems).where(eq(releaseItems.status, status)).orderBy(desc(releaseItems.createdAt));
+    }
+    return db.select().from(releaseItems).orderBy(desc(releaseItems.createdAt));
+  }
+
+  async updateReleaseItem(id: string, data: Partial<ReleaseItem>): Promise<ReleaseItem | undefined> {
+    const [row] = await db.update(releaseItems).set(data).where(eq(releaseItems.id, id)).returning();
+    return row;
+  }
+
+  async createChangelogEntry(data: InsertChangelogEntry): Promise<ChangelogEntry> {
+    const [row] = await db.insert(changelogEntries).values(data).returning();
+    return row;
+  }
+
+  async getChangelogEntries(limit = 100): Promise<ChangelogEntry[]> {
+    return db.select().from(changelogEntries).orderBy(desc(changelogEntries.createdAt)).limit(limit);
   }
 }
 

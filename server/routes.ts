@@ -15,6 +15,7 @@ import { maybeInjectRetentionNudge, generateEngagementLiftReport, getSegmentSnap
 import { computeFunnelSnapshot, computeCohortRetention, runAnomalyCheck, generateWeeklyDigest } from "./analyticsAgent";
 import { draftCurriculumModule, listCurriculumDrafts, reviewCurriculumDraft } from "./curriculumAgent";
 import { proposeTest, approveTest, recordImpression, recordConversion, checkSignificance, concludeTest, listTests, getTestWithVariants } from "./funnelOptimizationAgent";
+import { logItem, listReleaseItems, stageItem, verifyItem, markShipped, rejectItem, getChangelog } from "./releaseOpsAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -4103,6 +4104,94 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[FUNNEL] conclude error:", err);
       return res.status(500).json({ message: "Failed to conclude test" });
+    }
+  });
+
+  // ─── Technical & Release Ops Agent (Agent 10) — founder-only admin surface ─
+  // No production deploy authority anywhere here — staging and verification
+  // only, matching how the founder already works.
+  app.post("/api/admin/release/items", requireAdminKey, async (req, res) => {
+    try {
+      const { type, title, description } = req.body as { type?: "bug" | "feature"; title?: string; description?: string };
+      if (!type || !title) return res.status(400).json({ message: "type and title are required" });
+      const item = await logItem(type, title, description ?? "");
+      return res.json({ item });
+    } catch (err) {
+      console.error("[RELEASE_OPS] log item error:", err);
+      return res.status(500).json({ message: "Failed to log item" });
+    }
+  });
+
+  app.get("/api/admin/release/items", requireAdminKey, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const items = await listReleaseItems(status);
+      return res.json({ items });
+    } catch (err) {
+      console.error("[RELEASE_OPS] list items error:", err);
+      return res.status(500).json({ message: "Failed to load items" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/stage", requireAdminKey, async (req, res) => {
+    try {
+      const item = await stageItem(String(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      return res.json({ item });
+    } catch (err: any) {
+      console.error("[RELEASE_OPS] stage error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to stage item" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/verify", requireAdminKey, async (req, res) => {
+    try {
+      const { checks } = req.body as { checks?: { name: string; passed: boolean; detail?: string }[] };
+      if (!Array.isArray(checks) || checks.length === 0) {
+        return res.status(400).json({ message: "checks (a non-empty array) is required" });
+      }
+      const item = await verifyItem(String(req.params.id), checks);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      return res.json({ item });
+    } catch (err: any) {
+      console.error("[RELEASE_OPS] verify error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to verify item" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/ship", requireAdminKey, async (req, res) => {
+    try {
+      const { changelogSummary } = req.body as { changelogSummary?: string };
+      if (!changelogSummary) return res.status(400).json({ message: "changelogSummary is required" });
+      const result = await markShipped(String(req.params.id), changelogSummary);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[RELEASE_OPS] ship error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to mark item shipped" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/reject", requireAdminKey, async (req, res) => {
+    try {
+      const { reason } = req.body as { reason?: string };
+      const item = await rejectItem(String(req.params.id), reason ?? "");
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      return res.json({ item });
+    } catch (err) {
+      console.error("[RELEASE_OPS] reject error:", err);
+      return res.status(500).json({ message: "Failed to reject item" });
+    }
+  });
+
+  app.get("/api/admin/release/changelog", requireAdminKey, async (req, res) => {
+    try {
+      const parsedLimit = req.query.limit ? parseInt(String(req.query.limit)) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? parsedLimit : undefined;
+      const entries = await getChangelog(limit);
+      return res.json({ entries });
+    } catch (err) {
+      console.error("[RELEASE_OPS] changelog error:", err);
+      return res.status(500).json({ message: "Failed to load changelog" });
     }
   });
 
