@@ -474,3 +474,31 @@ export const insertContentCalendarEntrySchema = createInsertSchema(contentCalend
 });
 export type InsertContentCalendarEntry = z.infer<typeof insertContentCalendarEntrySchema>;
 export type ContentCalendarEntry = typeof contentCalendarEntries.$inferSelect;
+
+// ─── Retention & Engagement Agent (Agent 06) ─────────────────────────────────
+// Streak nudges, "falling behind your own goal" prompts, and win-back
+// messaging from approved templates only — never freeform generation, so
+// tone stays locked without needing a per-message quality check. Any user
+// with a recent Trust & Safety flag is skipped entirely; that's a human
+// follow-up, never an engagement nudge.
+export const RETENTION_NUDGE_TYPES = ["streak_nudge", "falling_behind", "win_back"] as const;
+export type RetentionNudgeType = typeof RETENTION_NUDGE_TYPES[number];
+
+export const RETENTION_SEGMENTS = ["starting", "building", "locked_in", "slipping", "lapsed"] as const;
+export type RetentionSegment = typeof RETENTION_SEGMENTS[number];
+
+export const retentionNudges = pgTable("retention_nudges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  nudgeType: text("nudge_type").notNull(),
+  segment: text("segment").notNull(),
+  messageId: varchar("message_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRetentionNudgeSchema = createInsertSchema(retentionNudges).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertRetentionNudge = z.infer<typeof insertRetentionNudgeSchema>;
+export type RetentionNudge = typeof retentionNudges.$inferSelect;

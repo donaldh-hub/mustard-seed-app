@@ -16,6 +16,7 @@ import {
   type BillingEvent, type InsertBillingEvent, billingEvents,
   type ContentDraft, type InsertContentDraft, contentDrafts,
   type ContentCalendarEntry, type InsertContentCalendarEntry, contentCalendarEntries,
+  type RetentionNudge, type InsertRetentionNudge, retentionNudges,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -109,6 +110,11 @@ export interface IStorage {
   createCalendarEntry(data: InsertContentCalendarEntry): Promise<ContentCalendarEntry>;
   getCalendarEntries(): Promise<ContentCalendarEntry[]>;
   updateCalendarEntry(id: string, data: Partial<ContentCalendarEntry>): Promise<ContentCalendarEntry | undefined>;
+
+  getAllUsers(limit?: number): Promise<User[]>;
+  createRetentionNudge(data: InsertRetentionNudge): Promise<RetentionNudge>;
+  getLastRetentionNudge(userId: string): Promise<RetentionNudge | undefined>;
+  getRetentionNudgesSince(since: Date): Promise<RetentionNudge[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -539,6 +545,29 @@ export class DatabaseStorage implements IStorage {
   async updateCalendarEntry(id: string, data: Partial<ContentCalendarEntry>): Promise<ContentCalendarEntry | undefined> {
     const [row] = await db.update(contentCalendarEntries).set(data).where(eq(contentCalendarEntries.id, id)).returning();
     return row;
+  }
+
+  // ─── Retention & Engagement (Agent 06) ─────────────────────────────────────
+
+  async getAllUsers(limit = 1000): Promise<User[]> {
+    return db.select().from(users).limit(limit);
+  }
+
+  async createRetentionNudge(data: InsertRetentionNudge): Promise<RetentionNudge> {
+    const [row] = await db.insert(retentionNudges).values(data).returning();
+    return row;
+  }
+
+  async getLastRetentionNudge(userId: string): Promise<RetentionNudge | undefined> {
+    const [row] = await db.select().from(retentionNudges)
+      .where(eq(retentionNudges.userId, userId))
+      .orderBy(desc(retentionNudges.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  async getRetentionNudgesSince(since: Date): Promise<RetentionNudge[]> {
+    return db.select().from(retentionNudges).where(gte(retentionNudges.createdAt, since)).orderBy(desc(retentionNudges.createdAt));
   }
 }
 

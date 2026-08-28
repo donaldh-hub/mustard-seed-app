@@ -11,6 +11,7 @@ import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySu
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
 import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, runReconciliation, generateBillingReport } from "./billingAgent";
 import { createContentDraft, listContentDrafts, reviewContentDraft, addCalendarEntry, listCalendarEntries, updateCalendarEntryStatus } from "./contentAgent";
+import { maybeInjectRetentionNudge, generateEngagementLiftReport, getSegmentSnapshot } from "./retentionAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -435,6 +436,7 @@ export async function registerRoutes(
       maybeInjectReassessmentNudge(userId),
       maybeInjectDailyEncouragement(userId),
       maybeInjectWeeklySummaryToChat(userId),
+      maybeInjectRetentionNudge(userId),
     ]);
     const msgs = await storage.getMessages(userId);
     return res.json(msgs);
@@ -3893,6 +3895,29 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CONTENT] calendar update error:", err);
       return res.status(500).json({ message: "Failed to update calendar entry" });
+    }
+  });
+
+  // ─── Retention & Engagement Agent (Agent 06) — founder-only admin surface ─
+  app.get("/api/admin/retention/segments", requireAdminKey, async (_req, res) => {
+    try {
+      const segments = await getSegmentSnapshot();
+      return res.json({ segments });
+    } catch (err) {
+      console.error("[RETENTION] segments error:", err);
+      return res.status(500).json({ message: "Failed to compute segments" });
+    }
+  });
+
+  app.get("/api/admin/retention/lift-report", requireAdminKey, async (req, res) => {
+    try {
+      const parsedDays = req.query.days ? parseInt(String(req.query.days)) : NaN;
+      const windowDays = Number.isFinite(parsedDays) ? parsedDays : undefined;
+      const report = await generateEngagementLiftReport(windowDays);
+      return res.json(report);
+    } catch (err) {
+      console.error("[RETENTION] lift-report error:", err);
+      return res.status(500).json({ message: "Failed to generate lift report" });
     }
   });
 
