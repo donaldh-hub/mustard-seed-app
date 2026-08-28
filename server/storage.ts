@@ -13,6 +13,7 @@ import {
   type StyleGuideVersion, styleGuideVersions,
   type QualityCheck, type InsertQualityCheck, qualityChecks,
   type SupportInquiry, type InsertSupportInquiry, supportInquiries,
+  type BillingEvent, type InsertBillingEvent, billingEvents,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -92,6 +93,11 @@ export interface IStorage {
 
   createSupportInquiry(data: InsertSupportInquiry): Promise<SupportInquiry>;
   getSupportInquiriesSince(since: Date): Promise<SupportInquiry[]>;
+
+  createBillingEvent(data: InsertBillingEvent): Promise<BillingEvent>;
+  getBillingEventsSince(since: Date): Promise<BillingEvent[]>;
+  getRecentBillingEventsForUser(userId: string, type: string, since: Date): Promise<BillingEvent[]>;
+  getUsersBySubscriptionStates(states: string[]): Promise<User[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -462,6 +468,28 @@ export class DatabaseStorage implements IStorage {
 
   async getSupportInquiriesSince(since: Date): Promise<SupportInquiry[]> {
     return db.select().from(supportInquiries).where(gte(supportInquiries.createdAt, since)).orderBy(desc(supportInquiries.createdAt));
+  }
+
+  // ─── Billing & Subscription (Agent 04) ─────────────────────────────────────
+
+  async createBillingEvent(data: InsertBillingEvent): Promise<BillingEvent> {
+    const [row] = await db.insert(billingEvents).values(data).returning();
+    return row;
+  }
+
+  async getBillingEventsSince(since: Date): Promise<BillingEvent[]> {
+    return db.select().from(billingEvents).where(gte(billingEvents.createdAt, since)).orderBy(desc(billingEvents.createdAt));
+  }
+
+  async getRecentBillingEventsForUser(userId: string, type: string, since: Date): Promise<BillingEvent[]> {
+    return db.select().from(billingEvents)
+      .where(and(eq(billingEvents.userId, userId), eq(billingEvents.type, type), gte(billingEvents.createdAt, since)))
+      .orderBy(desc(billingEvents.createdAt));
+  }
+
+  async getUsersBySubscriptionStates(states: string[]): Promise<User[]> {
+    if (states.length === 0) return [];
+    return db.select().from(users).where(inArray(users.subscriptionState, states));
   }
 }
 

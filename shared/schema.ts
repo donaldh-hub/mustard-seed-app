@@ -390,3 +390,32 @@ export const insertSupportInquirySchema = createInsertSchema(supportInquiries).o
 });
 export type InsertSupportInquiry = z.infer<typeof insertSupportInquirySchema>;
 export type SupportInquiry = typeof supportInquiries.$inferSelect;
+
+// ─── Billing & Subscription Agent (Agent 04) ─────────────────────────────────
+// Audit log for the dunning sequence, reconciliation, and the MRR/churn
+// report. This agent never issues refunds, discounts, pricing changes, or
+// manual subscription overrides — those always require the founder's
+// explicit sign-off, per the build's global constraints.
+export const BILLING_EVENT_TYPES = [
+  "payment_failed",
+  "dunning_sent",
+  "payment_recovered",
+  "cancellation_requested",
+  "reconciliation_mismatch",
+] as const;
+export type BillingEventType = typeof BILLING_EVENT_TYPES[number];
+
+export const billingEvents = pgTable("billing_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  detail: jsonb("detail"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
+export type BillingEvent = typeof billingEvents.$inferSelect;

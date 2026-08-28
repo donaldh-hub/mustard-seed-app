@@ -101,6 +101,8 @@ export const api = {
   getStripeConfig: () => fetchJson<{ configured: boolean }>("/stripe/config"),
   createStripeCheckout: (userId: string) =>
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST" }),
+  createStripePortalSession: (userId: string) =>
+    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-portal-session`, { method: "POST" }),
 
   getGroundingJournal: (userId: string) =>
     fetchJson<{ entries: any[]; completed: boolean; lockedDay: 2 | 3 | null; nextDayUnlocksAt: string | null }>(`/users/${userId}/grounding-journal`),

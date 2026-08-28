@@ -66,7 +66,7 @@ export function isPremium(user: User): boolean {
   return subscriptionTier === "premium";
 }
 
-const PREMIUM_STATES: SubscriptionState[] = [
+export const PREMIUM_STATES: SubscriptionState[] = [
   "PREMIUM_TRIAL_ACTIVE",
   "PREMIUM_ACTIVE",
   "PREMIUM_GRACE_PERIOD",

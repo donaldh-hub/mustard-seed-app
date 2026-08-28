@@ -9,6 +9,7 @@ import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuil
 import { evaluateMessage } from "./trustSafety";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
+import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, runReconciliation, generateBillingReport } from "./billingAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -313,6 +314,13 @@ export function registerStripeWebhook(app: Express) {
 
             await storage.updateUser(user.id, transition as any);
             console.log(`[STRIPE] Payment failed for user ${user.id.slice(0, 8)}***`);
+
+            // Billing & Subscription Agent (Phase 4) — dunning sequence.
+            // Additive to the state transition above; never blocks the
+            // webhook ack even if the email send itself fails.
+            await recordAndDunFailedPayment(user.id).catch((err) => {
+              console.error("[BILLING] dunning error:", err);
+            });
             break;
           }
 
@@ -330,6 +338,7 @@ export function registerStripeWebhook(app: Express) {
                 expiresAt: periodEnd,
               });
               await storage.updateUser(user.id, transition as any);
+              await recordCancellationRequested(user.id).catch(() => {});
             } else if (subscription.status === "active" && user.subscriptionState !== "PREMIUM_ACTIVE") {
               const transition = computeStateTransition(user.subscriptionState as any, {
                 platform: "STRIPE",
@@ -337,6 +346,7 @@ export function registerStripeWebhook(app: Express) {
                 expiresAt: periodEnd,
               });
               await storage.updateUser(user.id, transition as any);
+              await recordPaymentRecovered(user.id).catch(() => {});
             }
             break;
           }
@@ -3137,6 +3147,43 @@ export async function registerRoutes(
     }
   });
 
+  // Billing & Subscription Agent (Phase 4) — user-initiated cancellations and
+  // plan management route through Stripe's own hosted Billing Portal.
+  // Stripe executes the cancellation itself; this agent never does.
+  app.post("/api/users/:userId/stripe/create-portal-session", async (req, res) => {
+    const userId = req.params.userId;
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+    if (!stripeKey) {
+      return res.status(503).json({
+        message: "Payment processing is not configured. Please contact support.",
+        configError: true,
+      });
+    }
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found for this user yet." });
+      }
+
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-04-30.basil" } as any);
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: `${baseUrl}/profile`,
+      });
+
+      return res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[STRIPE] create-portal-session error:", err?.message || err);
+      return res.status(500).json({ message: "Could not open the billing portal. Please try again." });
+    }
+  });
+
   // ─── Store Receipt Validation (Apple / Google) ───
   // These endpoints are ready to plug in native app store receipt validation.
   // The native app sends a receipt, the server validates with the store,
@@ -3738,6 +3785,31 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[SUPPORT] weekly-report error:", err);
       return res.status(500).json({ message: "Failed to generate weekly report" });
+    }
+  });
+
+  // ─── Billing & Subscription Agent (Agent 04) — founder-only admin surface ─
+  // Flags/reports only — no refund, discount, price change, or manual
+  // subscription override lives anywhere in this agent.
+  app.post("/api/admin/billing/reconcile", requireAdminKey, async (_req, res) => {
+    try {
+      const result = await runReconciliation();
+      return res.json(result);
+    } catch (err) {
+      console.error("[BILLING] reconcile error:", err);
+      return res.status(500).json({ message: "Reconciliation failed" });
+    }
+  });
+
+  app.get("/api/admin/billing/report", requireAdminKey, async (req, res) => {
+    try {
+      const parsedDays = req.query.days ? parseInt(String(req.query.days)) : NaN;
+      const windowDays = Number.isFinite(parsedDays) ? parsedDays : undefined;
+      const report = await generateBillingReport(windowDays);
+      return res.json(report);
+    } catch (err) {
+      console.error("[BILLING] report error:", err);
+      return res.status(500).json({ message: "Failed to generate billing report" });
     }
   });
 
