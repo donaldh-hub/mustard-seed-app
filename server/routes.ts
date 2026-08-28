@@ -7,6 +7,7 @@ import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage } from "./trustSafety";
+import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -44,6 +45,21 @@ async function assertGoalOwns(req: Request, res: Response, goalId: string): Prom
   if (!goal) { res.status(404).json({ message: "Goal not found" }); return null; }
   if (goal.userId !== req.session?.userId) { res.status(403).json({ message: "Forbidden" }); return null; }
   return goal;
+}
+
+// Gate for founder-only internal endpoints (Trust & Safety / Quality Supervisor
+// audit surfaces). There's no admin role on the users table yet, so this is a
+// lightweight shared-secret stopgap, not real RBAC — a follow-up, not this
+// phase's job to build.
+function requireAdminKey(req: Request, res: Response, next: NextFunction) {
+  const configuredKey = process.env.ADMIN_API_KEY;
+  if (!configuredKey) {
+    return res.status(503).json({ message: "Admin API not configured — set ADMIN_API_KEY to enable." });
+  }
+  if (req.header("x-admin-key") !== configuredKey) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  return next();
 }
 
 function todayStr(): string {
@@ -3619,6 +3635,71 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[RESET] reset error:", err);
       return res.status(500).json({ message: "Reset failed" });
+    }
+  });
+
+  // ─── Jai Quality Supervisor (Agent 02) — founder-only admin surface ───────
+  // Flags drift only; never edits Jai's core prompt or any content directly.
+
+  app.get("/api/admin/quality/style-guide", requireAdminKey, async (_req, res) => {
+    try {
+      const guide = await getActiveStyleGuide();
+      return res.json(guide);
+    } catch (err) {
+      console.error("[QUALITY] style-guide fetch error:", err);
+      return res.status(500).json({ message: "Failed to load style guide" });
+    }
+  });
+
+  app.post("/api/admin/quality/style-guide/approve", requireAdminKey, async (req, res) => {
+    try {
+      const { id } = req.body as { id?: string };
+      const target = id ? { id } : await storage.getLatestStyleGuideDraft();
+      if (!target) return res.status(404).json({ message: "No draft style guide to approve" });
+      const approved = await storage.approveStyleGuide(target.id);
+      return res.json({ approved });
+    } catch (err) {
+      console.error("[QUALITY] style-guide approve error:", err);
+      return res.status(500).json({ message: "Failed to approve style guide" });
+    }
+  });
+
+  app.post("/api/admin/quality/check", requireAdminKey, async (req, res) => {
+    try {
+      const { text, source, sourceRef } = req.body as {
+        text?: string;
+        source?: "jai_sample" | "content_repurposing" | "curriculum";
+        sourceRef?: string;
+      };
+      if (!text || !source) return res.status(400).json({ message: "text and source are required" });
+      const result = await checkContent(text, source, sourceRef);
+      return res.json(result);
+    } catch (err) {
+      console.error("[QUALITY] check error:", err);
+      return res.status(500).json({ message: "Quality check failed" });
+    }
+  });
+
+  app.post("/api/admin/quality/sample", requireAdminKey, async (req, res) => {
+    try {
+      const { poolSize, sampleSize } = req.body as { poolSize?: number; sampleSize?: number };
+      const summary = await runRollingSample(poolSize ?? 200, sampleSize ?? 20);
+      return res.json(summary);
+    } catch (err) {
+      console.error("[QUALITY] sample run error:", err);
+      return res.status(500).json({ message: "Sample run failed" });
+    }
+  });
+
+  app.get("/api/admin/quality/flags", requireAdminKey, async (req, res) => {
+    try {
+      const parsedLimit = req.query.limit ? parseInt(String(req.query.limit)) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? parsedLimit : undefined;
+      const flags = await storage.getOpenQualityFlags(limit);
+      return res.json({ flags });
+    } catch (err) {
+      console.error("[QUALITY] flags fetch error:", err);
+      return res.status(500).json({ message: "Failed to load flags" });
     }
   });
 

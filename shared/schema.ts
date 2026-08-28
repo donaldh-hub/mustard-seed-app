@@ -317,3 +317,48 @@ export const insertSafetyEventSchema = createInsertSchema(safetyEvents).omit({
 });
 export type InsertSafetyEvent = z.infer<typeof insertSafetyEventSchema>;
 export type SafetyEvent = typeof safetyEvents.$inferSelect;
+
+// ─── Jai Quality Supervisor (Agent 02) ───────────────────────────────────────
+// Samples Jai conversation and pre-publish drafts against a style guide that
+// only the founder can promote to "approved". Flags drift with the rule and
+// line quoted — never edits Jai's core prompt or any content directly.
+export const STYLE_GUIDE_STATUSES = ["draft", "approved", "superseded"] as const;
+export type StyleGuideStatus = typeof STYLE_GUIDE_STATUSES[number];
+
+export const styleGuideVersions = pgTable("style_guide_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  content: text("content").notNull(),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+});
+
+export const insertStyleGuideVersionSchema = createInsertSchema(styleGuideVersions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertStyleGuideVersion = z.infer<typeof insertStyleGuideVersionSchema>;
+export type StyleGuideVersion = typeof styleGuideVersions.$inferSelect;
+
+export const QUALITY_CHECK_SOURCES = ["jai_sample", "content_repurposing", "curriculum"] as const;
+export type QualityCheckSource = typeof QUALITY_CHECK_SOURCES[number];
+
+export const qualityChecks = pgTable("quality_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").notNull(), // jai_sample | content_repurposing | curriculum
+  sourceRef: text("source_ref"), // message id for jai_sample; a draft id/slug once Phase 5/8 exist
+  excerpt: text("excerpt").notNull(),
+  passed: boolean("passed").notNull(),
+  ruleBroken: text("rule_broken"),
+  quotedLine: text("quoted_line"),
+  explanation: text("explanation"),
+  checkedAgainstApprovedGuide: boolean("checked_against_approved_guide").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertQualityCheckSchema = createInsertSchema(qualityChecks).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertQualityCheck = z.infer<typeof insertQualityCheckSchema>;
+export type QualityCheck = typeof qualityChecks.$inferSelect;

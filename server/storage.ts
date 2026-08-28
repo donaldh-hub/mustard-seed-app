@@ -10,10 +10,12 @@ import {
   type GroundingJournalEntry, groundingJournalEntries,
   type RebuildInstance, rebuildInstances,
   type SafetyEvent, type InsertSafetyEvent, safetyEvents,
+  type StyleGuideVersion, styleGuideVersions,
+  type QualityCheck, type InsertQualityCheck, qualityChecks,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, desc, asc, and, gte } from "drizzle-orm";
+import { eq, desc, asc, and, gte, inArray } from "drizzle-orm";
 import pg from "pg";
 
 export interface IStorage {
@@ -75,6 +77,17 @@ export interface IStorage {
   updateSafetyEvent(id: string, data: Partial<SafetyEvent>): Promise<SafetyEvent | undefined>;
   getRecentSafetyEvents(userId: string, since: Date): Promise<SafetyEvent[]>;
   getAllSafetyEvents(limit?: number): Promise<SafetyEvent[]>;
+
+  createStyleGuideDraft(content: string): Promise<StyleGuideVersion>;
+  getAnyStyleGuide(): Promise<StyleGuideVersion | undefined>;
+  getApprovedStyleGuide(): Promise<StyleGuideVersion | undefined>;
+  getLatestStyleGuideDraft(): Promise<StyleGuideVersion | undefined>;
+  approveStyleGuide(id: string): Promise<StyleGuideVersion | undefined>;
+
+  createQualityCheck(data: InsertQualityCheck): Promise<QualityCheck>;
+  getSampledMessageIds(source: string, candidateIds: string[]): Promise<Set<string>>;
+  getRecentJaeMessages(limit: number): Promise<Message[]>;
+  getOpenQualityFlags(limit?: number): Promise<QualityCheck[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -377,6 +390,63 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSafetyEvents(limit = 200): Promise<SafetyEvent[]> {
     return db.select().from(safetyEvents).orderBy(desc(safetyEvents.createdAt)).limit(limit);
+  }
+
+  // ─── Jai Quality Supervisor (Agent 02) ─────────────────────────────────────
+
+  async createStyleGuideDraft(content: string): Promise<StyleGuideVersion> {
+    const [row] = await db.insert(styleGuideVersions).values({ content, status: "draft" }).returning();
+    return row;
+  }
+
+  async getAnyStyleGuide(): Promise<StyleGuideVersion | undefined> {
+    const [row] = await db.select().from(styleGuideVersions).orderBy(desc(styleGuideVersions.createdAt)).limit(1);
+    return row;
+  }
+
+  async getApprovedStyleGuide(): Promise<StyleGuideVersion | undefined> {
+    const [row] = await db.select().from(styleGuideVersions)
+      .where(eq(styleGuideVersions.status, "approved"))
+      .orderBy(desc(styleGuideVersions.approvedAt))
+      .limit(1);
+    return row;
+  }
+
+  async getLatestStyleGuideDraft(): Promise<StyleGuideVersion | undefined> {
+    const [row] = await db.select().from(styleGuideVersions)
+      .where(eq(styleGuideVersions.status, "draft"))
+      .orderBy(desc(styleGuideVersions.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  async approveStyleGuide(id: string): Promise<StyleGuideVersion | undefined> {
+    await db.update(styleGuideVersions).set({ status: "superseded" }).where(eq(styleGuideVersions.status, "approved"));
+    const [row] = await db.update(styleGuideVersions)
+      .set({ status: "approved", approvedAt: new Date() })
+      .where(eq(styleGuideVersions.id, id))
+      .returning();
+    return row;
+  }
+
+  async createQualityCheck(data: InsertQualityCheck): Promise<QualityCheck> {
+    const [row] = await db.insert(qualityChecks).values(data).returning();
+    return row;
+  }
+
+  async getSampledMessageIds(source: string, candidateIds: string[]): Promise<Set<string>> {
+    if (candidateIds.length === 0) return new Set();
+    const rows = await db.select({ sourceRef: qualityChecks.sourceRef }).from(qualityChecks)
+      .where(and(eq(qualityChecks.source, source), inArray(qualityChecks.sourceRef, candidateIds)));
+    return new Set(rows.map((r) => r.sourceRef).filter((id): id is string => !!id));
+  }
+
+  async getRecentJaeMessages(limit: number): Promise<Message[]> {
+    return db.select().from(messages).where(eq(messages.sender, "jae")).orderBy(desc(messages.createdAt)).limit(limit);
+  }
+
+  async getOpenQualityFlags(limit = 100): Promise<QualityCheck[]> {
+    return db.select().from(qualityChecks).where(eq(qualityChecks.passed, false)).orderBy(desc(qualityChecks.createdAt)).limit(limit);
   }
 }
 
