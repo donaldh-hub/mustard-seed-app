@@ -8,6 +8,7 @@ import { generateJournalReflection } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage } from "./trustSafety";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
+import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -1958,6 +1959,31 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Support & Onboarding Agent (Agent 03) ────────────────────────────────
+  // Trust & Safety runs first on every inquiry, same as chat — a support
+  // question can carry distress language too, and that always wins.
+  app.post("/api/users/:userId/support/ask", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const text = String(req.body?.text ?? "").trim();
+      if (!text) return res.status(400).json({ message: "Text is required" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const safety = await evaluateMessage(userId, text, [], "chat");
+      if (safety.triggered && safety.responseText) {
+        return res.json({ outcome: "safety", answer: safety.responseText });
+      }
+
+      const result = await classifySupportInquiry(userId, text);
+      return res.json(result);
+    } catch (err) {
+      console.error("[SUPPORT] ask error:", err);
+      return res.status(500).json({ message: "Support request failed" });
+    }
+  });
+
   app.get("/api/users/:userId/entries", async (req, res) => {
     const list = await storage.getEntries(req.params.userId);
     return res.json(list);
@@ -3700,6 +3726,18 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[QUALITY] flags fetch error:", err);
       return res.status(500).json({ message: "Failed to load flags" });
+    }
+  });
+
+  // ─── Support & Onboarding Agent (Agent 03) — founder-only admin surface ──
+  app.get("/api/admin/support/weekly-report", requireAdminKey, async (req, res) => {
+    try {
+      const windowDays = req.query.days ? parseInt(String(req.query.days)) : NaN;
+      const report = await generateWeeklyStuckReport(Number.isFinite(windowDays) ? windowDays : undefined);
+      return res.json(report);
+    } catch (err) {
+      console.error("[SUPPORT] weekly-report error:", err);
+      return res.status(500).json({ message: "Failed to generate weekly report" });
     }
   });
 

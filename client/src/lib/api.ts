@@ -35,6 +35,8 @@ export const api = {
     fetchJson<any>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
   authResetPassword: (token: string, password: string) =>
     fetchJson<any>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+  authChangeEmail: (newEmail: string, password: string) =>
+    fetchJson<{ message: string; user: any }>("/auth/change-email", { method: "POST", body: JSON.stringify({ newEmail, password }) }),
 
   getUser: (id: string) => fetchJson<any>(`/users/${id}`),
   updateUser: (id: string, data: any) => fetchJson<any>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -44,6 +46,12 @@ export const api = {
     fetchJson<{ userMessage: any; jaeMessage: any; water?: { awarded: boolean; fillPercent: number; cupsFilled: number; cupJustFilled: boolean; stageAdvanced: boolean; preResetFillPercent: number } }>(`/users/${userId}/messages`, {
       method: "POST",
       body: JSON.stringify({ text, localDate, userTimezone }),
+    }),
+
+  askSupport: (userId: string, text: string) =>
+    fetchJson<{ outcome: string; answer: string; libraryEntryId?: string | null; escalationReason?: string | null }>(`/users/${userId}/support/ask`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
     }),
 
   sendPhoto: (userId: string, data: { photoUrl: string; caption?: string; localDate?: string; uploadAttemptId?: string }) =>

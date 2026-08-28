@@ -432,4 +432,50 @@ export function registerAuthRoutes(app: Express) {
       return res.status(500).json({ message: "Reset failed. Please try again." });
     }
   });
+
+  // Self-service email change (Support & Onboarding Agent, Agent 03 — "handles
+  // email change directly"). Requires the current password so this can't be
+  // used to take over an account via a hijacked session alone. Does not send
+  // a confirmation email to the new address before switching — that's a real
+  // gap for a follow-up, flagged rather than silently skipped.
+  app.post("/api/auth/change-email", requireAuth, authRateLimit, async (req, res) => {
+    const userId = req.session?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { newEmail, password } = req.body as { newEmail?: string; password?: string };
+
+    if (!newEmail || !password) {
+      return res.status(400).json({ message: "New email and current password are required" });
+    }
+    const emailLower = newEmail.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower)) {
+      return res.status(400).json({ message: "Invalid email address" });
+    }
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      if (!user.passwordHash) {
+        return res.status(400).json({ message: "This account signs in with Google and doesn't use a password-based email change." });
+      }
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ message: "Incorrect password" });
+      }
+
+      const existing = await storage.getUserByEmail(emailLower);
+      if (existing && existing.id !== userId) {
+        return res.status(409).json({ message: "An account with this email already exists" });
+      }
+
+      const updated = await storage.updateUser(userId, { email: emailLower, emailVerified: false } as any);
+      await storage.logAuthEvent(userId, "email_changed", "email");
+
+      const { passwordHash: _ph, ...safeUser } = updated as any;
+      return res.json({ message: "Email updated.", user: safeUser });
+    } catch (err) {
+      console.error("[AUTH] change-email error:", err);
+      return res.status(500).json({ message: "Email change failed. Please try again." });
+    }
+  });
 }

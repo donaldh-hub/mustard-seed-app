@@ -362,3 +362,31 @@ export const insertQualityCheckSchema = createInsertSchema(qualityChecks).omit({
 });
 export type InsertQualityCheck = z.infer<typeof insertQualityCheckSchema>;
 export type QualityCheck = typeof qualityChecks.$inferSelect;
+
+// ─── Support & Onboarding Agent (Agent 03) ───────────────────────────────────
+// Answers onboarding questions from an approved response library only, and
+// routes anything outside it — plus refunds, deletions, and payment disputes
+// — to a human instead of improvising. Every inquiry is logged here so the
+// weekly "where are users getting stuck" report has real data to run on.
+export const SUPPORT_OUTCOMES = ["library", "escalated", "unhandled"] as const;
+export type SupportOutcome = typeof SUPPORT_OUTCOMES[number];
+
+export const SUPPORT_ESCALATION_REASONS = ["refund", "account_deletion", "payment_dispute"] as const;
+export type SupportEscalationReason = typeof SUPPORT_ESCALATION_REASONS[number];
+
+export const supportInquiries = pgTable("support_inquiries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  text: text("text").notNull(),
+  outcome: text("outcome").notNull(), // library | escalated | unhandled
+  libraryEntryId: text("library_entry_id"),
+  escalationReason: text("escalation_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSupportInquirySchema = createInsertSchema(supportInquiries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSupportInquiry = z.infer<typeof insertSupportInquirySchema>;
+export type SupportInquiry = typeof supportInquiries.$inferSelect;

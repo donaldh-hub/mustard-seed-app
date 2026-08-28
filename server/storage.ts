@@ -12,6 +12,7 @@ import {
   type SafetyEvent, type InsertSafetyEvent, safetyEvents,
   type StyleGuideVersion, styleGuideVersions,
   type QualityCheck, type InsertQualityCheck, qualityChecks,
+  type SupportInquiry, type InsertSupportInquiry, supportInquiries,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -88,6 +89,9 @@ export interface IStorage {
   getSampledMessageIds(source: string, candidateIds: string[]): Promise<Set<string>>;
   getRecentJaeMessages(limit: number): Promise<Message[]>;
   getOpenQualityFlags(limit?: number): Promise<QualityCheck[]>;
+
+  createSupportInquiry(data: InsertSupportInquiry): Promise<SupportInquiry>;
+  getSupportInquiriesSince(since: Date): Promise<SupportInquiry[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -447,6 +451,17 @@ export class DatabaseStorage implements IStorage {
 
   async getOpenQualityFlags(limit = 100): Promise<QualityCheck[]> {
     return db.select().from(qualityChecks).where(eq(qualityChecks.passed, false)).orderBy(desc(qualityChecks.createdAt)).limit(limit);
+  }
+
+  // ─── Support & Onboarding (Agent 03) ───────────────────────────────────────
+
+  async createSupportInquiry(data: InsertSupportInquiry): Promise<SupportInquiry> {
+    const [row] = await db.insert(supportInquiries).values(data).returning();
+    return row;
+  }
+
+  async getSupportInquiriesSince(since: Date): Promise<SupportInquiry[]> {
+    return db.select().from(supportInquiries).where(gte(supportInquiries.createdAt, since)).orderBy(desc(supportInquiries.createdAt));
   }
 }
 
