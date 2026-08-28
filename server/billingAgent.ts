@@ -105,6 +105,10 @@ export async function recordPaymentRecovered(userId: string): Promise<void> {
   await recordBillingEvent(userId, "payment_recovered");
 }
 
+export async function recordSubscriptionStarted(userId: string): Promise<void> {
+  await recordBillingEvent(userId, "subscription_started");
+}
+
 export async function recordCancellationRequested(userId: string): Promise<void> {
   await recordBillingEvent(userId, "cancellation_requested");
 }

@@ -402,6 +402,7 @@ export const BILLING_EVENT_TYPES = [
   "payment_recovered",
   "cancellation_requested",
   "reconciliation_mismatch",
+  "subscription_started",
 ] as const;
 export type BillingEventType = typeof BILLING_EVENT_TYPES[number];
 
@@ -502,3 +503,22 @@ export const insertRetentionNudgeSchema = createInsertSchema(retentionNudges).om
 });
 export type InsertRetentionNudge = z.infer<typeof insertRetentionNudgeSchema>;
 export type RetentionNudge = typeof retentionNudges.$inferSelect;
+
+// ─── Analytics & Reporting Agent (Agent 07) ──────────────────────────────────
+// Read-only, always. This agent never takes automated action on anything it
+// finds — every table and function it touches is for reporting and anomaly
+// flagging only.
+export const analyticsAnomalies = pgTable("analytics_anomalies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metric: text("metric").notNull(),
+  detail: jsonb("detail"),
+  alertSent: boolean("alert_sent").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAnalyticsAnomalySchema = createInsertSchema(analyticsAnomalies).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAnalyticsAnomaly = z.infer<typeof insertAnalyticsAnomalySchema>;
+export type AnalyticsAnomaly = typeof analyticsAnomalies.$inferSelect;

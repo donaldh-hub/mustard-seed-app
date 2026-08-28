@@ -17,6 +17,7 @@ import {
   type ContentDraft, type InsertContentDraft, contentDrafts,
   type ContentCalendarEntry, type InsertContentCalendarEntry, contentCalendarEntries,
   type RetentionNudge, type InsertRetentionNudge, retentionNudges,
+  type AnalyticsAnomaly, type InsertAnalyticsAnomaly, analyticsAnomalies,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -115,6 +116,10 @@ export interface IStorage {
   createRetentionNudge(data: InsertRetentionNudge): Promise<RetentionNudge>;
   getLastRetentionNudge(userId: string): Promise<RetentionNudge | undefined>;
   getRetentionNudgesSince(since: Date): Promise<RetentionNudge[]>;
+
+  createAnalyticsAnomaly(data: InsertAnalyticsAnomaly): Promise<AnalyticsAnomaly>;
+  updateAnalyticsAnomaly(id: string, data: Partial<AnalyticsAnomaly>): Promise<AnalyticsAnomaly | undefined>;
+  getAnalyticsAnomaliesSince(since: Date): Promise<AnalyticsAnomaly[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -568,6 +573,22 @@ export class DatabaseStorage implements IStorage {
 
   async getRetentionNudgesSince(since: Date): Promise<RetentionNudge[]> {
     return db.select().from(retentionNudges).where(gte(retentionNudges.createdAt, since)).orderBy(desc(retentionNudges.createdAt));
+  }
+
+  // ─── Analytics & Reporting (Agent 07) ──────────────────────────────────────
+
+  async createAnalyticsAnomaly(data: InsertAnalyticsAnomaly): Promise<AnalyticsAnomaly> {
+    const [row] = await db.insert(analyticsAnomalies).values(data).returning();
+    return row;
+  }
+
+  async updateAnalyticsAnomaly(id: string, data: Partial<AnalyticsAnomaly>): Promise<AnalyticsAnomaly | undefined> {
+    const [row] = await db.update(analyticsAnomalies).set(data).where(eq(analyticsAnomalies.id, id)).returning();
+    return row;
+  }
+
+  async getAnalyticsAnomaliesSince(since: Date): Promise<AnalyticsAnomaly[]> {
+    return db.select().from(analyticsAnomalies).where(gte(analyticsAnomalies.createdAt, since)).orderBy(desc(analyticsAnomalies.createdAt));
   }
 }
 

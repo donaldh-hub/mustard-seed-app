@@ -9,9 +9,10 @@ import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuil
 import { evaluateMessage } from "./trustSafety";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
-import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, runReconciliation, generateBillingReport } from "./billingAgent";
+import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, recordSubscriptionStarted, runReconciliation, generateBillingReport } from "./billingAgent";
 import { createContentDraft, listContentDrafts, reviewContentDraft, addCalendarEntry, listCalendarEntries, updateCalendarEntryStatus } from "./contentAgent";
 import { maybeInjectRetentionNudge, generateEngagementLiftReport, getSegmentSnapshot } from "./retentionAgent";
+import { computeFunnelSnapshot, computeCohortRetention, runAnomalyCheck, generateWeeklyDigest } from "./analyticsAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -278,6 +279,7 @@ export function registerStripeWebhook(app: Express) {
             } as any);
 
             console.log(`[STRIPE] Subscription activated for user ${userId.slice(0, 8)}***`);
+            await recordSubscriptionStarted(userId).catch(() => {});
             break;
           }
 
@@ -3918,6 +3920,48 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[RETENTION] lift-report error:", err);
       return res.status(500).json({ message: "Failed to generate lift report" });
+    }
+  });
+
+  // ─── Analytics & Reporting Agent (Agent 07) — founder-only, read-only ─────
+  app.get("/api/admin/analytics/funnel", requireAdminKey, async (_req, res) => {
+    try {
+      return res.json(await computeFunnelSnapshot());
+    } catch (err) {
+      console.error("[ANALYTICS] funnel error:", err);
+      return res.status(500).json({ message: "Failed to compute funnel snapshot" });
+    }
+  });
+
+  app.get("/api/admin/analytics/cohorts", requireAdminKey, async (req, res) => {
+    try {
+      const parsedMonths = req.query.months ? parseInt(String(req.query.months)) : NaN;
+      const monthsBack = Number.isFinite(parsedMonths) ? parsedMonths : undefined;
+      const cohorts = await computeCohortRetention(monthsBack);
+      return res.json({ cohorts });
+    } catch (err) {
+      console.error("[ANALYTICS] cohorts error:", err);
+      return res.status(500).json({ message: "Failed to compute cohort retention" });
+    }
+  });
+
+  app.post("/api/admin/analytics/check-anomalies", requireAdminKey, async (_req, res) => {
+    try {
+      const results = await runAnomalyCheck();
+      return res.json({ results });
+    } catch (err) {
+      console.error("[ANALYTICS] anomaly check error:", err);
+      return res.status(500).json({ message: "Anomaly check failed" });
+    }
+  });
+
+  app.get("/api/admin/analytics/weekly-digest", requireAdminKey, async (_req, res) => {
+    try {
+      const digest = await generateWeeklyDigest();
+      return res.json(digest);
+    } catch (err) {
+      console.error("[ANALYTICS] weekly-digest error:", err);
+      return res.status(500).json({ message: "Failed to generate weekly digest" });
     }
   });
 
