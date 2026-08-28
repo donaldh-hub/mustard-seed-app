@@ -557,3 +557,53 @@ export const insertCurriculumDraftSchema = createInsertSchema(curriculumDrafts).
 });
 export type InsertCurriculumDraft = z.infer<typeof insertCurriculumDraftSchema>;
 export type CurriculumDraft = typeof curriculumDrafts.$inferSelect;
+
+// ─── Funnel Optimization Agent (Agent 09) ────────────────────────────────────
+// Proposes A/B tests on assessment/journal/subscription-page copy. HARD
+// CONSTRAINT: no test can record real traffic until the founder approves it
+// by ID — enforced in code (server/funnelOptimizationAgent.ts), not just by
+// convention. This agent is genuinely premature for this app pre-launch (no
+// meaningful traffic yet), so it's built and ready but has nothing live to
+// run against until Tier 1 is proven out.
+export const AB_TEST_PAGES = ["assessment", "journal", "subscription"] as const;
+export type ABTestPage = typeof AB_TEST_PAGES[number];
+
+export const AB_TEST_STATUSES = ["proposed", "approved", "concluded_winner", "concluded_inconclusive"] as const;
+export type ABTestStatus = typeof AB_TEST_STATUSES[number];
+
+export const abTests = pgTable("ab_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  page: text("page").notNull(),
+  status: text("status").notNull().default("proposed"),
+  winnerVariantId: varchar("winner_variant_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  concludedAt: timestamp("concluded_at"),
+});
+
+export const insertABTestSchema = createInsertSchema(abTests).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertABTest = z.infer<typeof insertABTestSchema>;
+export type ABTest = typeof abTests.$inferSelect;
+
+export const abTestVariants = pgTable("ab_test_variants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  testId: varchar("test_id").notNull(),
+  name: text("name").notNull(),
+  copy: text("copy").notNull(),
+  isControl: boolean("is_control").notNull().default(false),
+  impressions: integer("impressions").notNull().default(0),
+  conversions: integer("conversions").notNull().default(0),
+  retired: boolean("retired").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertABTestVariantSchema = createInsertSchema(abTestVariants).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertABTestVariant = z.infer<typeof insertABTestVariantSchema>;
+export type ABTestVariant = typeof abTestVariants.$inferSelect;

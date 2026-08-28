@@ -19,10 +19,12 @@ import {
   type RetentionNudge, type InsertRetentionNudge, retentionNudges,
   type AnalyticsAnomaly, type InsertAnalyticsAnomaly, analyticsAnomalies,
   type CurriculumDraft, type InsertCurriculumDraft, curriculumDrafts,
+  type ABTest, type InsertABTest, abTests,
+  type ABTestVariant, type InsertABTestVariant, abTestVariants,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, desc, asc, and, gte, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, gte, inArray, sql as sqlOp } from "drizzle-orm";
 import pg from "pg";
 
 export interface IStorage {
@@ -126,6 +128,16 @@ export interface IStorage {
   getCurriculumDraft(id: string): Promise<CurriculumDraft | undefined>;
   getCurriculumDrafts(status?: string): Promise<CurriculumDraft[]>;
   updateCurriculumDraft(id: string, data: Partial<CurriculumDraft>): Promise<CurriculumDraft | undefined>;
+
+  createABTest(data: InsertABTest): Promise<ABTest>;
+  getABTest(id: string): Promise<ABTest | undefined>;
+  getABTests(): Promise<ABTest[]>;
+  updateABTest(id: string, data: Partial<ABTest>): Promise<ABTest | undefined>;
+  createABTestVariant(data: InsertABTestVariant): Promise<ABTestVariant>;
+  getABTestVariants(testId: string): Promise<ABTestVariant[]>;
+  getABTestVariant(id: string): Promise<ABTestVariant | undefined>;
+  incrementABTestVariant(id: string, field: "impressions" | "conversions"): Promise<ABTestVariant | undefined>;
+  retireABTestVariant(id: string): Promise<ABTestVariant | undefined>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -618,6 +630,55 @@ export class DatabaseStorage implements IStorage {
 
   async updateCurriculumDraft(id: string, data: Partial<CurriculumDraft>): Promise<CurriculumDraft | undefined> {
     const [row] = await db.update(curriculumDrafts).set(data).where(eq(curriculumDrafts.id, id)).returning();
+    return row;
+  }
+
+  // ─── Funnel Optimization (Agent 09) ────────────────────────────────────────
+
+  async createABTest(data: InsertABTest): Promise<ABTest> {
+    const [row] = await db.insert(abTests).values(data).returning();
+    return row;
+  }
+
+  async getABTest(id: string): Promise<ABTest | undefined> {
+    const [row] = await db.select().from(abTests).where(eq(abTests.id, id));
+    return row;
+  }
+
+  async getABTests(): Promise<ABTest[]> {
+    return db.select().from(abTests).orderBy(desc(abTests.createdAt));
+  }
+
+  async updateABTest(id: string, data: Partial<ABTest>): Promise<ABTest | undefined> {
+    const [row] = await db.update(abTests).set(data).where(eq(abTests.id, id)).returning();
+    return row;
+  }
+
+  async createABTestVariant(data: InsertABTestVariant): Promise<ABTestVariant> {
+    const [row] = await db.insert(abTestVariants).values(data).returning();
+    return row;
+  }
+
+  async getABTestVariants(testId: string): Promise<ABTestVariant[]> {
+    return db.select().from(abTestVariants).where(eq(abTestVariants.testId, testId));
+  }
+
+  async getABTestVariant(id: string): Promise<ABTestVariant | undefined> {
+    const [row] = await db.select().from(abTestVariants).where(eq(abTestVariants.id, id));
+    return row;
+  }
+
+  async incrementABTestVariant(id: string, field: "impressions" | "conversions"): Promise<ABTestVariant | undefined> {
+    const column = field === "impressions" ? abTestVariants.impressions : abTestVariants.conversions;
+    const [row] = await db.update(abTestVariants)
+      .set({ [field]: sqlOp`${column} + 1` })
+      .where(eq(abTestVariants.id, id))
+      .returning();
+    return row;
+  }
+
+  async retireABTestVariant(id: string): Promise<ABTestVariant | undefined> {
+    const [row] = await db.update(abTestVariants).set({ retired: true }).where(eq(abTestVariants.id, id)).returning();
     return row;
   }
 }

@@ -14,6 +14,7 @@ import { createContentDraft, listContentDrafts, reviewContentDraft, addCalendarE
 import { maybeInjectRetentionNudge, generateEngagementLiftReport, getSegmentSnapshot } from "./retentionAgent";
 import { computeFunnelSnapshot, computeCohortRetention, runAnomalyCheck, generateWeeklyDigest } from "./analyticsAgent";
 import { draftCurriculumModule, listCurriculumDrafts, reviewCurriculumDraft } from "./curriculumAgent";
+import { proposeTest, approveTest, recordImpression, recordConversion, checkSignificance, concludeTest, listTests, getTestWithVariants } from "./funnelOptimizationAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -4006,6 +4007,102 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[CURRICULUM] review error:", err);
       return res.status(400).json({ message: err?.message || "Review failed" });
+    }
+  });
+
+  // ─── Funnel Optimization Agent (Agent 09) — founder-only admin surface ───
+  // No test records traffic until approved by ID — enforced in
+  // funnelOptimizationAgent.ts, not just here.
+  app.post("/api/admin/funnel/tests", requireAdminKey, async (req, res) => {
+    try {
+      const { name, page, variants } = req.body as {
+        name?: string; page?: "assessment" | "journal" | "subscription";
+        variants?: { name: string; copy: string }[];
+      };
+      if (!name || !page || !Array.isArray(variants)) {
+        return res.status(400).json({ message: "name, page, and variants are required" });
+      }
+      const result = await proposeTest(name, page, variants);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[FUNNEL] propose test error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to propose test" });
+    }
+  });
+
+  app.get("/api/admin/funnel/tests", requireAdminKey, async (_req, res) => {
+    try {
+      const tests = await listTests();
+      return res.json({ tests });
+    } catch (err) {
+      console.error("[FUNNEL] list tests error:", err);
+      return res.status(500).json({ message: "Failed to load tests" });
+    }
+  });
+
+  app.get("/api/admin/funnel/tests/:id", requireAdminKey, async (req, res) => {
+    try {
+      const result = await getTestWithVariants(String(req.params.id));
+      if (!result.test) return res.status(404).json({ message: "Test not found" });
+      return res.json(result);
+    } catch (err) {
+      console.error("[FUNNEL] get test error:", err);
+      return res.status(500).json({ message: "Failed to load test" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/approve", requireAdminKey, async (req, res) => {
+    try {
+      const test = await approveTest(String(req.params.id));
+      if (!test) return res.status(404).json({ message: "Test not found" });
+      return res.json({ test });
+    } catch (err: any) {
+      console.error("[FUNNEL] approve error:", err);
+      return res.status(400).json({ message: err?.message || "Approval failed" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/impression", requireAdminKey, async (req, res) => {
+    try {
+      const { variantId } = req.body as { variantId?: string };
+      if (!variantId) return res.status(400).json({ message: "variantId is required" });
+      await recordImpression(String(req.params.id), variantId);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[FUNNEL] impression error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to record impression" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/conversion", requireAdminKey, async (req, res) => {
+    try {
+      const { variantId } = req.body as { variantId?: string };
+      if (!variantId) return res.status(400).json({ message: "variantId is required" });
+      await recordConversion(String(req.params.id), variantId);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[FUNNEL] conversion error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to record conversion" });
+    }
+  });
+
+  app.get("/api/admin/funnel/tests/:id/significance", requireAdminKey, async (req, res) => {
+    try {
+      const result = await checkSignificance(String(req.params.id));
+      return res.json(result);
+    } catch (err) {
+      console.error("[FUNNEL] significance error:", err);
+      return res.status(500).json({ message: "Failed to check significance" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/conclude", requireAdminKey, async (req, res) => {
+    try {
+      const result = await concludeTest(String(req.params.id));
+      return res.json(result);
+    } catch (err) {
+      console.error("[FUNNEL] conclude error:", err);
+      return res.status(500).json({ message: "Failed to conclude test" });
     }
   });
 
