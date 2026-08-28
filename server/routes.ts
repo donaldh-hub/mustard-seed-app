@@ -10,6 +10,7 @@ import { evaluateMessage } from "./trustSafety";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
 import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, runReconciliation, generateBillingReport } from "./billingAgent";
+import { createContentDraft, listContentDrafts, reviewContentDraft, addCalendarEntry, listCalendarEntries, updateCalendarEntryStatus } from "./contentAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -3810,6 +3811,88 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[BILLING] report error:", err);
       return res.status(500).json({ message: "Failed to generate billing report" });
+    }
+  });
+
+  // ─── Content Repurposing Agent (Agent 05) — founder-only admin surface ───
+  // Every draft is queued only — zero autopublish, no exceptions.
+  app.post("/api/admin/content/generate", requireAdminKey, async (req, res) => {
+    try {
+      const { sourceExcerpt, sourceType } = req.body as {
+        sourceExcerpt?: string;
+        sourceType?: "video_transcript" | "rebuild_script";
+      };
+      if (!sourceExcerpt || !sourceType) {
+        return res.status(400).json({ message: "sourceExcerpt and sourceType are required" });
+      }
+      const draft = await createContentDraft(sourceExcerpt, sourceType);
+      return res.json({ draft });
+    } catch (err) {
+      console.error("[CONTENT] generate error:", err);
+      return res.status(500).json({ message: "Content generation failed" });
+    }
+  });
+
+  app.get("/api/admin/content/drafts", requireAdminKey, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const drafts = await listContentDrafts(status);
+      return res.json({ drafts });
+    } catch (err) {
+      console.error("[CONTENT] list drafts error:", err);
+      return res.status(500).json({ message: "Failed to load drafts" });
+    }
+  });
+
+  app.post("/api/admin/content/drafts/:id/review", requireAdminKey, async (req, res) => {
+    try {
+      const { decision, note } = req.body as { decision?: "approved" | "rejected"; note?: string };
+      if (decision !== "approved" && decision !== "rejected") {
+        return res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
+      }
+      const draft = await reviewContentDraft(String(req.params.id), decision, note);
+      if (!draft) return res.status(404).json({ message: "Draft not found" });
+      return res.json({ draft });
+    } catch (err: any) {
+      console.error("[CONTENT] review error:", err);
+      return res.status(400).json({ message: err?.message || "Review failed" });
+    }
+  });
+
+  app.get("/api/admin/content/calendar", requireAdminKey, async (_req, res) => {
+    try {
+      const entries = await listCalendarEntries();
+      return res.json({ entries });
+    } catch (err) {
+      console.error("[CONTENT] calendar list error:", err);
+      return res.status(500).json({ message: "Failed to load calendar" });
+    }
+  });
+
+  app.post("/api/admin/content/calendar", requireAdminKey, async (req, res) => {
+    try {
+      const { title, notes, plannedDate, contentDraftId } = req.body as {
+        title?: string; notes?: string; plannedDate?: string; contentDraftId?: string;
+      };
+      if (!title) return res.status(400).json({ message: "title is required" });
+      const entry = await addCalendarEntry(title, notes ?? "", plannedDate, contentDraftId);
+      return res.json({ entry });
+    } catch (err) {
+      console.error("[CONTENT] calendar create error:", err);
+      return res.status(500).json({ message: "Failed to create calendar entry" });
+    }
+  });
+
+  app.patch("/api/admin/content/calendar/:id", requireAdminKey, async (req, res) => {
+    try {
+      const { status } = req.body as { status?: "idea" | "drafted" | "approved" };
+      if (!status) return res.status(400).json({ message: "status is required" });
+      const entry = await updateCalendarEntryStatus(String(req.params.id), status);
+      if (!entry) return res.status(404).json({ message: "Calendar entry not found" });
+      return res.json({ entry });
+    } catch (err) {
+      console.error("[CONTENT] calendar update error:", err);
+      return res.status(500).json({ message: "Failed to update calendar entry" });
     }
   });
 

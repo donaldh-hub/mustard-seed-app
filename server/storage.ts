@@ -14,6 +14,8 @@ import {
   type QualityCheck, type InsertQualityCheck, qualityChecks,
   type SupportInquiry, type InsertSupportInquiry, supportInquiries,
   type BillingEvent, type InsertBillingEvent, billingEvents,
+  type ContentDraft, type InsertContentDraft, contentDrafts,
+  type ContentCalendarEntry, type InsertContentCalendarEntry, contentCalendarEntries,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -98,6 +100,15 @@ export interface IStorage {
   getBillingEventsSince(since: Date): Promise<BillingEvent[]>;
   getRecentBillingEventsForUser(userId: string, type: string, since: Date): Promise<BillingEvent[]>;
   getUsersBySubscriptionStates(states: string[]): Promise<User[]>;
+
+  createContentDraft(data: InsertContentDraft): Promise<ContentDraft>;
+  getContentDraft(id: string): Promise<ContentDraft | undefined>;
+  getContentDrafts(status?: string): Promise<ContentDraft[]>;
+  updateContentDraft(id: string, data: Partial<ContentDraft>): Promise<ContentDraft | undefined>;
+
+  createCalendarEntry(data: InsertContentCalendarEntry): Promise<ContentCalendarEntry>;
+  getCalendarEntries(): Promise<ContentCalendarEntry[]>;
+  updateCalendarEntry(id: string, data: Partial<ContentCalendarEntry>): Promise<ContentCalendarEntry | undefined>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -490,6 +501,44 @@ export class DatabaseStorage implements IStorage {
   async getUsersBySubscriptionStates(states: string[]): Promise<User[]> {
     if (states.length === 0) return [];
     return db.select().from(users).where(inArray(users.subscriptionState, states));
+  }
+
+  // ─── Content Repurposing (Agent 05) ────────────────────────────────────────
+
+  async createContentDraft(data: InsertContentDraft): Promise<ContentDraft> {
+    const [row] = await db.insert(contentDrafts).values(data).returning();
+    return row;
+  }
+
+  async getContentDraft(id: string): Promise<ContentDraft | undefined> {
+    const [row] = await db.select().from(contentDrafts).where(eq(contentDrafts.id, id));
+    return row;
+  }
+
+  async getContentDrafts(status?: string): Promise<ContentDraft[]> {
+    if (status) {
+      return db.select().from(contentDrafts).where(eq(contentDrafts.status, status)).orderBy(desc(contentDrafts.createdAt));
+    }
+    return db.select().from(contentDrafts).orderBy(desc(contentDrafts.createdAt));
+  }
+
+  async updateContentDraft(id: string, data: Partial<ContentDraft>): Promise<ContentDraft | undefined> {
+    const [row] = await db.update(contentDrafts).set(data).where(eq(contentDrafts.id, id)).returning();
+    return row;
+  }
+
+  async createCalendarEntry(data: InsertContentCalendarEntry): Promise<ContentCalendarEntry> {
+    const [row] = await db.insert(contentCalendarEntries).values(data).returning();
+    return row;
+  }
+
+  async getCalendarEntries(): Promise<ContentCalendarEntry[]> {
+    return db.select().from(contentCalendarEntries).orderBy(desc(contentCalendarEntries.createdAt));
+  }
+
+  async updateCalendarEntry(id: string, data: Partial<ContentCalendarEntry>): Promise<ContentCalendarEntry | undefined> {
+    const [row] = await db.update(contentCalendarEntries).set(data).where(eq(contentCalendarEntries.id, id)).returning();
+    return row;
   }
 }
 

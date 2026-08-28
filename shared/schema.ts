@@ -419,3 +419,58 @@ export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
 });
 export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
 export type BillingEvent = typeof billingEvents.$inferSelect;
+
+// ─── Content Repurposing Agent (Agent 05) ────────────────────────────────────
+// Turns a transcript into drafted show notes / email nudges / social
+// captions. Every draft routes through Jai Quality Supervisor's pre-publish
+// gate (server/qualitySupervisor.ts) before it can reach the founder's
+// approval queue, and nothing here ever auto-publishes — "approved" just
+// means the founder signed off on the copy; there's no real publish target
+// wired up in this codebase to push it to.
+export const CONTENT_SOURCE_TYPES = ["video_transcript", "rebuild_script"] as const;
+export type ContentSourceType = typeof CONTENT_SOURCE_TYPES[number];
+
+export const CONTENT_DRAFT_STATUSES = ["pending_review", "blocked_needs_revision", "approved", "rejected"] as const;
+export type ContentDraftStatus = typeof CONTENT_DRAFT_STATUSES[number];
+
+export const contentDrafts = pgTable("content_drafts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceType: text("source_type").notNull(),
+  sourceExcerpt: text("source_excerpt").notNull(),
+  showNotes: text("show_notes").notNull(),
+  emailNudges: jsonb("email_nudges").notNull().default(sql`'[]'::jsonb`),
+  socialCaptions: jsonb("social_captions").notNull().default(sql`'[]'::jsonb`),
+  qualityCheckPassed: boolean("quality_check_passed").notNull(),
+  qualityCheckDetail: jsonb("quality_check_detail"),
+  status: text("status").notNull().default("pending_review"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
+export const insertContentDraftSchema = createInsertSchema(contentDrafts).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertContentDraft = z.infer<typeof insertContentDraftSchema>;
+export type ContentDraft = typeof contentDrafts.$inferSelect;
+
+export const CALENDAR_DRAFT_STATUSES = ["idea", "drafted", "approved"] as const;
+export type CalendarDraftStatus = typeof CALENDAR_DRAFT_STATUSES[number];
+
+export const contentCalendarEntries = pgTable("content_calendar_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  notes: text("notes").notNull().default(""),
+  plannedDate: text("planned_date"),
+  status: text("status").notNull().default("idea"),
+  contentDraftId: varchar("content_draft_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContentCalendarEntrySchema = createInsertSchema(contentCalendarEntries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertContentCalendarEntry = z.infer<typeof insertContentCalendarEntrySchema>;
+export type ContentCalendarEntry = typeof contentCalendarEntries.$inferSelect;
