@@ -522,3 +522,38 @@ export const insertAnalyticsAnomalySchema = createInsertSchema(analyticsAnomalie
 });
 export type InsertAnalyticsAnomaly = z.infer<typeof insertAnalyticsAnomalySchema>;
 export type AnalyticsAnomaly = typeof analyticsAnomalies.$inferSelect;
+
+// ─── Curriculum Production Agent (Agent 08) ──────────────────────────────────
+// Drafts a talk track, worksheet questions, a slide outline, and a
+// voiceover-ready script for a Rebuild module — matching Day 1's real,
+// locked structure and pacing. Every draft routes through Jai Quality
+// Supervisor's gate, same as Content Repurposing. Nothing here finalizes on
+// its own: every module is still recorded on camera by the founder, and
+// "approved" only means the script is signed off, never that a video exists.
+export const CURRICULUM_DRAFT_STATUSES = ["pending_review", "blocked_needs_revision", "approved", "rejected"] as const;
+export type CurriculumDraftStatus = typeof CURRICULUM_DRAFT_STATUSES[number];
+
+export const curriculumDrafts = pgTable("curriculum_drafts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  forDay: integer("for_day").notNull(),
+  heartbeatFocus: text("heartbeat_focus"),
+  title: text("title").notNull(),
+  subtitle: text("subtitle").notNull().default(""),
+  talkTrack: text("talk_track").notNull(),
+  worksheetQuestions: jsonb("worksheet_questions").notNull().default(sql`'[]'::jsonb`),
+  slideOutline: jsonb("slide_outline").notNull().default(sql`'[]'::jsonb`),
+  voiceoverScript: text("voiceover_script").notNull(),
+  qualityCheckPassed: boolean("quality_check_passed").notNull(),
+  qualityCheckDetail: jsonb("quality_check_detail"),
+  status: text("status").notNull().default("pending_review"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
+export const insertCurriculumDraftSchema = createInsertSchema(curriculumDrafts).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCurriculumDraft = z.infer<typeof insertCurriculumDraftSchema>;
+export type CurriculumDraft = typeof curriculumDrafts.$inferSelect;

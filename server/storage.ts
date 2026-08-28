@@ -18,6 +18,7 @@ import {
   type ContentCalendarEntry, type InsertContentCalendarEntry, contentCalendarEntries,
   type RetentionNudge, type InsertRetentionNudge, retentionNudges,
   type AnalyticsAnomaly, type InsertAnalyticsAnomaly, analyticsAnomalies,
+  type CurriculumDraft, type InsertCurriculumDraft, curriculumDrafts,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -120,6 +121,11 @@ export interface IStorage {
   createAnalyticsAnomaly(data: InsertAnalyticsAnomaly): Promise<AnalyticsAnomaly>;
   updateAnalyticsAnomaly(id: string, data: Partial<AnalyticsAnomaly>): Promise<AnalyticsAnomaly | undefined>;
   getAnalyticsAnomaliesSince(since: Date): Promise<AnalyticsAnomaly[]>;
+
+  createCurriculumDraft(data: InsertCurriculumDraft): Promise<CurriculumDraft>;
+  getCurriculumDraft(id: string): Promise<CurriculumDraft | undefined>;
+  getCurriculumDrafts(status?: string): Promise<CurriculumDraft[]>;
+  updateCurriculumDraft(id: string, data: Partial<CurriculumDraft>): Promise<CurriculumDraft | undefined>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -589,6 +595,30 @@ export class DatabaseStorage implements IStorage {
 
   async getAnalyticsAnomaliesSince(since: Date): Promise<AnalyticsAnomaly[]> {
     return db.select().from(analyticsAnomalies).where(gte(analyticsAnomalies.createdAt, since)).orderBy(desc(analyticsAnomalies.createdAt));
+  }
+
+  // ─── Curriculum Production (Agent 08) ──────────────────────────────────────
+
+  async createCurriculumDraft(data: InsertCurriculumDraft): Promise<CurriculumDraft> {
+    const [row] = await db.insert(curriculumDrafts).values(data).returning();
+    return row;
+  }
+
+  async getCurriculumDraft(id: string): Promise<CurriculumDraft | undefined> {
+    const [row] = await db.select().from(curriculumDrafts).where(eq(curriculumDrafts.id, id));
+    return row;
+  }
+
+  async getCurriculumDrafts(status?: string): Promise<CurriculumDraft[]> {
+    if (status) {
+      return db.select().from(curriculumDrafts).where(eq(curriculumDrafts.status, status)).orderBy(desc(curriculumDrafts.createdAt));
+    }
+    return db.select().from(curriculumDrafts).orderBy(desc(curriculumDrafts.createdAt));
+  }
+
+  async updateCurriculumDraft(id: string, data: Partial<CurriculumDraft>): Promise<CurriculumDraft | undefined> {
+    const [row] = await db.update(curriculumDrafts).set(data).where(eq(curriculumDrafts.id, id)).returning();
+    return row;
   }
 }
 

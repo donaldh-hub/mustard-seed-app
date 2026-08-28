@@ -13,6 +13,7 @@ import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRe
 import { createContentDraft, listContentDrafts, reviewContentDraft, addCalendarEntry, listCalendarEntries, updateCalendarEntryStatus } from "./contentAgent";
 import { maybeInjectRetentionNudge, generateEngagementLiftReport, getSegmentSnapshot } from "./retentionAgent";
 import { computeFunnelSnapshot, computeCohortRetention, runAnomalyCheck, generateWeeklyDigest } from "./analyticsAgent";
+import { draftCurriculumModule, listCurriculumDrafts, reviewCurriculumDraft } from "./curriculumAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -3962,6 +3963,49 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[ANALYTICS] weekly-digest error:", err);
       return res.status(500).json({ message: "Failed to generate weekly digest" });
+    }
+  });
+
+  // ─── Curriculum Production Agent (Agent 08) — founder-only admin surface ─
+  // Nothing finalizes on its own; every module is still recorded on camera
+  // by the founder.
+  app.post("/api/admin/curriculum/draft", requireAdminKey, async (req, res) => {
+    try {
+      const { forDay, heartbeatFocus, brief } = req.body as { forDay?: number; heartbeatFocus?: string; brief?: string };
+      if (!forDay || !heartbeatFocus) {
+        return res.status(400).json({ message: "forDay and heartbeatFocus are required" });
+      }
+      const draft = await draftCurriculumModule(forDay, heartbeatFocus, brief ?? "");
+      return res.json({ draft });
+    } catch (err) {
+      console.error("[CURRICULUM] draft error:", err);
+      return res.status(500).json({ message: "Curriculum draft generation failed" });
+    }
+  });
+
+  app.get("/api/admin/curriculum/drafts", requireAdminKey, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const drafts = await listCurriculumDrafts(status);
+      return res.json({ drafts });
+    } catch (err) {
+      console.error("[CURRICULUM] list drafts error:", err);
+      return res.status(500).json({ message: "Failed to load drafts" });
+    }
+  });
+
+  app.post("/api/admin/curriculum/drafts/:id/review", requireAdminKey, async (req, res) => {
+    try {
+      const { decision, note } = req.body as { decision?: "approved" | "rejected"; note?: string };
+      if (decision !== "approved" && decision !== "rejected") {
+        return res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
+      }
+      const draft = await reviewCurriculumDraft(String(req.params.id), decision, note);
+      if (!draft) return res.status(404).json({ message: "Draft not found" });
+      return res.json({ draft });
+    } catch (err: any) {
+      console.error("[CURRICULUM] review error:", err);
+      return res.status(400).json({ message: err?.message || "Review failed" });
     }
   });
 
