@@ -88,6 +88,7 @@ export interface IStorage {
   updateSafetyEvent(id: string, data: Partial<SafetyEvent>): Promise<SafetyEvent | undefined>;
   getRecentSafetyEvents(userId: string, since: Date): Promise<SafetyEvent[]>;
   getAllSafetyEvents(limit?: number): Promise<SafetyEvent[]>;
+  getSafetyEventsSince(since: Date): Promise<SafetyEvent[]>;
 
   createStyleGuideDraft(content: string): Promise<StyleGuideVersion>;
   getAnyStyleGuide(): Promise<StyleGuideVersion | undefined>;
@@ -449,6 +450,10 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSafetyEvents(limit = 200): Promise<SafetyEvent[]> {
     return db.select().from(safetyEvents).orderBy(desc(safetyEvents.createdAt)).limit(limit);
+  }
+
+  async getSafetyEventsSince(since: Date): Promise<SafetyEvent[]> {
+    return db.select().from(safetyEvents).where(gte(safetyEvents.createdAt, since)).orderBy(desc(safetyEvents.createdAt));
   }
 
   // ─── Jai Quality Supervisor (Agent 02) ─────────────────────────────────────

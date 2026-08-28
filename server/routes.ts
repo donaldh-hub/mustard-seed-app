@@ -16,6 +16,7 @@ import { computeFunnelSnapshot, computeCohortRetention, runAnomalyCheck, generat
 import { draftCurriculumModule, listCurriculumDrafts, reviewCurriculumDraft } from "./curriculumAgent";
 import { proposeTest, approveTest, recordImpression, recordConversion, checkSignificance, concludeTest, listTests, getTestWithVariants } from "./funnelOptimizationAgent";
 import { logItem, listReleaseItems, stageItem, verifyItem, markShipped, rejectItem, getChangelog } from "./releaseOpsAgent";
+import { getMasterQueue, routeIncomingTask, checkForConflicts } from "./chiefOfStaffAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -4192,6 +4193,41 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[RELEASE_OPS] changelog error:", err);
       return res.status(500).json({ message: "Failed to load changelog" });
+    }
+  });
+
+  // ─── Mustard Seed Chief of Staff Agent (Agent 11) — founder-only admin surface ─
+  // Routing and prioritization only — grants no agent new authority, and
+  // never resolves a conflict itself.
+  app.get("/api/admin/chief-of-staff/queue", requireAdminKey, async (_req, res) => {
+    try {
+      const queue = await getMasterQueue();
+      return res.json(queue);
+    } catch (err) {
+      console.error("[CHIEF_OF_STAFF] queue error:", err);
+      return res.status(500).json({ message: "Failed to load master queue" });
+    }
+  });
+
+  app.post("/api/admin/chief-of-staff/route", requireAdminKey, async (req, res) => {
+    try {
+      const { description } = req.body as { description?: string };
+      if (!description) return res.status(400).json({ message: "description is required" });
+      const result = await routeIncomingTask(description);
+      return res.json(result);
+    } catch (err) {
+      console.error("[CHIEF_OF_STAFF] route error:", err);
+      return res.status(500).json({ message: "Routing failed" });
+    }
+  });
+
+  app.get("/api/admin/chief-of-staff/conflicts", requireAdminKey, async (_req, res) => {
+    try {
+      const flags = await checkForConflicts();
+      return res.json({ flags });
+    } catch (err) {
+      console.error("[CHIEF_OF_STAFF] conflicts error:", err);
+      return res.status(500).json({ message: "Conflict check failed" });
     }
   });
 
