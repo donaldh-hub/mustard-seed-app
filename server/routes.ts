@@ -6,6 +6,17 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
+import { evaluateMessage } from "./trustSafety";
+import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
+import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
+import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, recordSubscriptionStarted, runReconciliation, generateBillingReport } from "./billingAgent";
+import { createContentDraft, listContentDrafts, reviewContentDraft, addCalendarEntry, listCalendarEntries, updateCalendarEntryStatus } from "./contentAgent";
+import { maybeInjectRetentionNudge, generateEngagementLiftReport, getSegmentSnapshot } from "./retentionAgent";
+import { computeFunnelSnapshot, computeCohortRetention, runAnomalyCheck, generateWeeklyDigest } from "./analyticsAgent";
+import { draftCurriculumModule, listCurriculumDrafts, reviewCurriculumDraft } from "./curriculumAgent";
+import { proposeTest, approveTest, recordImpression, recordConversion, checkSignificance, concludeTest, listTests, getTestWithVariants } from "./funnelOptimizationAgent";
+import { logItem, listReleaseItems, stageItem, verifyItem, markShipped, rejectItem, getChangelog } from "./releaseOpsAgent";
+import { getMasterQueue, routeIncomingTask, checkForConflicts } from "./chiefOfStaffAgent";
 import { buildContinuityContext } from "./continuityContext";
 import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
@@ -43,6 +54,21 @@ async function assertGoalOwns(req: Request, res: Response, goalId: string): Prom
   if (!goal) { res.status(404).json({ message: "Goal not found" }); return null; }
   if (goal.userId !== req.session?.userId) { res.status(403).json({ message: "Forbidden" }); return null; }
   return goal;
+}
+
+// Gate for founder-only internal endpoints (Trust & Safety / Quality Supervisor
+// audit surfaces). There's no admin role on the users table yet, so this is a
+// lightweight shared-secret stopgap, not real RBAC — a follow-up, not this
+// phase's job to build.
+function requireAdminKey(req: Request, res: Response, next: NextFunction) {
+  const configuredKey = process.env.ADMIN_API_KEY;
+  if (!configuredKey) {
+    return res.status(503).json({ message: "Admin API not configured — set ADMIN_API_KEY to enable." });
+  }
+  if (req.header("x-admin-key") !== configuredKey) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  return next();
 }
 
 function todayStr(): string {
@@ -257,6 +283,7 @@ export function registerStripeWebhook(app: Express) {
             } as any);
 
             console.log(`[STRIPE] Subscription activated for user ${userId.slice(0, 8)}***`);
+            await recordSubscriptionStarted(userId).catch(() => {});
             break;
           }
 
@@ -295,6 +322,13 @@ export function registerStripeWebhook(app: Express) {
 
             await storage.updateUser(user.id, transition as any);
             console.log(`[STRIPE] Payment failed for user ${user.id.slice(0, 8)}***`);
+
+            // Billing & Subscription Agent (Phase 4) — dunning sequence.
+            // Additive to the state transition above; never blocks the
+            // webhook ack even if the email send itself fails.
+            await recordAndDunFailedPayment(user.id).catch((err) => {
+              console.error("[BILLING] dunning error:", err);
+            });
             break;
           }
 
@@ -312,6 +346,7 @@ export function registerStripeWebhook(app: Express) {
                 expiresAt: periodEnd,
               });
               await storage.updateUser(user.id, transition as any);
+              await recordCancellationRequested(user.id).catch(() => {});
             } else if (subscription.status === "active" && user.subscriptionState !== "PREMIUM_ACTIVE") {
               const transition = computeStateTransition(user.subscriptionState as any, {
                 platform: "STRIPE",
@@ -319,6 +354,7 @@ export function registerStripeWebhook(app: Express) {
                 expiresAt: periodEnd,
               });
               await storage.updateUser(user.id, transition as any);
+              await recordPaymentRecovered(user.id).catch(() => {});
             }
             break;
           }
@@ -406,6 +442,7 @@ export async function registerRoutes(
       maybeInjectReassessmentNudge(userId),
       maybeInjectDailyEncouragement(userId),
       maybeInjectWeeklySummaryToChat(userId),
+      maybeInjectRetentionNudge(userId),
     ]);
     const msgs = await storage.getMessages(userId);
     return res.json(msgs);
@@ -423,6 +460,19 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+
+      // ─── Trust & Safety Agent (Agent 01) — runs first, before any other branch ───
+      const safetyRecentMessages = await storage.getMessages(userId);
+      const safetyResult = await evaluateMessage(
+        userId,
+        rawText,
+        safetyRecentMessages.slice(-8).map((m) => ({ sender: m.sender, text: m.text })),
+        "chat"
+      );
+      if (safetyResult.triggered && safetyResult.responseText) {
+        const safeMsg = await storage.createMessage({ userId, text: safetyResult.responseText, sender: "jae" });
+        return res.json({ userMessage: userMsg, jaeMessage: safeMsg, safetyTriggered: true });
+      }
 
       const name = user.name || "";
       const obstacle = user.struggles?.length ? user.struggles[0] : "";
@@ -1928,6 +1978,31 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Support & Onboarding Agent (Agent 03) ────────────────────────────────
+  // Trust & Safety runs first on every inquiry, same as chat — a support
+  // question can carry distress language too, and that always wins.
+  app.post("/api/users/:userId/support/ask", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const text = String(req.body?.text ?? "").trim();
+      if (!text) return res.status(400).json({ message: "Text is required" });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const safety = await evaluateMessage(userId, text, [], "chat");
+      if (safety.triggered && safety.responseText) {
+        return res.json({ outcome: "safety", answer: safety.responseText });
+      }
+
+      const result = await classifySupportInquiry(userId, text);
+      return res.json(result);
+    } catch (err) {
+      console.error("[SUPPORT] ask error:", err);
+      return res.status(500).json({ message: "Support request failed" });
+    }
+  });
+
   app.get("/api/users/:userId/entries", async (req, res) => {
     const list = await storage.getEntries(req.params.userId);
     return res.json(list);
@@ -3081,6 +3156,43 @@ export async function registerRoutes(
     }
   });
 
+  // Billing & Subscription Agent (Phase 4) — user-initiated cancellations and
+  // plan management route through Stripe's own hosted Billing Portal.
+  // Stripe executes the cancellation itself; this agent never does.
+  app.post("/api/users/:userId/stripe/create-portal-session", async (req, res) => {
+    const userId = req.params.userId;
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+    if (!stripeKey) {
+      return res.status(503).json({
+        message: "Payment processing is not configured. Please contact support.",
+        configError: true,
+      });
+    }
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found for this user yet." });
+      }
+
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-04-30.basil" } as any);
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: `${baseUrl}/profile`,
+      });
+
+      return res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[STRIPE] create-portal-session error:", err?.message || err);
+      return res.status(500).json({ message: "Could not open the billing portal. Please try again." });
+    }
+  });
+
   // ─── Store Receipt Validation (Apple / Google) ───
   // These endpoints are ready to plug in native app store receipt validation.
   // The native app sends a receipt, the server validates with the store,
@@ -3211,6 +3323,16 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
+      // ─── Trust & Safety Agent (Agent 01) — screens journal responses too ───
+      // Persists what the user wrote either way (it's real journal content and
+      // matters for the audit trail) but replaces Jai's reflection with the
+      // locked safe-response script and skips the reflection AI call entirely.
+      const journalText = (prompts || []).map((p) => p.response).filter(Boolean).join("\n");
+      const journalSafety = journalText
+        ? await evaluateMessage(userId, journalText, [], "grounding_journal")
+        : null;
+      const safetyReflection: string | null = journalSafety?.triggered ? journalSafety.responseText : null;
+
       const dayThemes: Record<number, "RESET" | "REFOCUS" | "REBUILD"> = { 1: "RESET", 2: "REFOCUS", 3: "REBUILD" };
       const previousEntries = await storage.getGroundingJournalEntries(userId);
 
@@ -3220,15 +3342,20 @@ export async function registerRoutes(
         if (existing) return res.json({ entry: existing, jae: { reflection: "", followUpQuestion: null } });
         const entry = await storage.createGroundingJournalEntry({
           userId, dayNumber, session, prompts,
-          jaeReflection: null, jaeFollowUpQuestion: null, userFollowUpResponse: null,
+          jaeReflection: safetyReflection, jaeFollowUpQuestion: null, userFollowUpResponse: null,
           keyTheme: null, releasePoint: null, valueNamed: null, possibleFirstSeed: null,
           isComplete: true,
         });
-        return res.json({ entry, jae: { reflection: "", followUpQuestion: null } });
+        return res.json({
+          entry,
+          jae: { reflection: safetyReflection ?? "", followUpQuestion: null },
+          ...(safetyReflection ? { safetyTriggered: true } : {}),
+        });
       }
 
       // Prevent duplicate sessions — return existing entry if already submitted
-      const duplicate = previousEntries.find((e) => e.dayNumber === dayNumber && e.session === session);
+      // (skipped on a safety trigger so it always gets a fresh flag + response)
+      const duplicate = safetyReflection ? undefined : previousEntries.find((e) => e.dayNumber === dayNumber && e.session === session);
       if (duplicate) {
         return res.json({
           entry: duplicate,
@@ -3252,14 +3379,16 @@ export async function registerRoutes(
         jaeReflection: e.jaeReflection,
       }));
 
-      const jaeResponse = await generateJournalReflection({
-        userName: user.name || "friend",
-        dayNumber,
-        dayTheme: dayThemes[dayNumber],
-        session,
-        prompts,
-        previousEntries: prevSummary,
-      });
+      const jaeResponse = safetyReflection
+        ? { reflection: safetyReflection, followUpQuestion: "", keyTheme: "", releasePoint: "", valueNamed: "", possibleFirstSeed: "" }
+        : await generateJournalReflection({
+            userName: user.name || "friend",
+            dayNumber,
+            dayTheme: dayThemes[dayNumber],
+            session,
+            prompts,
+            previousEntries: prevSummary,
+          });
 
       const entry = await storage.createGroundingJournalEntry({
         userId,
@@ -3269,31 +3398,35 @@ export async function registerRoutes(
         jaeReflection: jaeResponse.reflection,
         jaeFollowUpQuestion: jaeResponse.followUpQuestion,
         userFollowUpResponse: null,
-        keyTheme: jaeResponse.keyTheme,
-        releasePoint: jaeResponse.releasePoint,
-        valueNamed: jaeResponse.valueNamed,
-        possibleFirstSeed: jaeResponse.possibleFirstSeed,
+        keyTheme: jaeResponse.keyTheme || null,
+        releasePoint: jaeResponse.releasePoint || null,
+        valueNamed: jaeResponse.valueNamed || null,
+        possibleFirstSeed: jaeResponse.possibleFirstSeed || null,
         isComplete: true,
       });
 
       // Mirror to the entries table so Calendar/Memory Bank shows journal
       // activity — the journal has its own table, but Calendar only reads
-      // from `entries`.
-      const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
-      const calendarSummary = `Grounding Journal — Day ${dayNumber} ${sessionLabel}${jaeResponse.keyTheme ? `: ${jaeResponse.keyTheme}` : ""}`;
-      try {
-        await storage.createEntry({
-          userId,
-          goalId: null,
-          date: localDate || todayStr(),
-          summary: calendarSummary,
-          mood: "neutral",
-        });
-      } catch (calErr) {
-        console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
+      // from `entries`. Skipped on a safety trigger: there's no real theme to
+      // summarize, and this keeps the crisis disclosure out of Calendar/Memory
+      // Bank's normal-activity surface.
+      if (!safetyReflection) {
+        const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
+        const calendarSummary = `Grounding Journal — Day ${dayNumber} ${sessionLabel}${jaeResponse.keyTheme ? `: ${jaeResponse.keyTheme}` : ""}`;
+        try {
+          await storage.createEntry({
+            userId,
+            goalId: null,
+            date: localDate || todayStr(),
+            summary: calendarSummary,
+            mood: "neutral",
+          });
+        } catch (calErr) {
+          console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
+        }
       }
 
-      return res.json({ entry, jae: jaeResponse });
+      return res.json({ entry, jae: jaeResponse, ...(safetyReflection ? { safetyTriggered: true } : {}) });
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
       return res.status(500).json({ message: "Journal entry error" });
@@ -3389,6 +3522,18 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+
+      // ─── Trust & Safety Agent (Agent 01) — screens rebuild reflections too ───
+      const rebuildText = (prompts || []).map((p) => p.response).filter(Boolean).join("\n");
+      if (rebuildText) {
+        const rebuildSafety = await evaluateMessage(userId, rebuildText, [], "rebuild");
+        if (rebuildSafety.triggered && rebuildSafety.responseText) {
+          return res.json({
+            jae: { reflection: rebuildSafety.responseText, followUpQuestion: null },
+            safetyTriggered: true,
+          });
+        }
+      }
 
       const instance = await storage.getRebuildInstance(userId, instanceNumber);
       if (!instance || instance.status === "locked") {
@@ -3572,6 +3717,517 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[RESET] reset error:", err);
       return res.status(500).json({ message: "Reset failed" });
+    }
+  });
+
+  // ─── Jai Quality Supervisor (Agent 02) — founder-only admin surface ───────
+  // Flags drift only; never edits Jai's core prompt or any content directly.
+
+  app.get("/api/admin/quality/style-guide", requireAdminKey, async (_req, res) => {
+    try {
+      const guide = await getActiveStyleGuide();
+      return res.json(guide);
+    } catch (err) {
+      console.error("[QUALITY] style-guide fetch error:", err);
+      return res.status(500).json({ message: "Failed to load style guide" });
+    }
+  });
+
+  app.post("/api/admin/quality/style-guide/approve", requireAdminKey, async (req, res) => {
+    try {
+      const { id } = req.body as { id?: string };
+      const target = id ? { id } : await storage.getLatestStyleGuideDraft();
+      if (!target) return res.status(404).json({ message: "No draft style guide to approve" });
+      const approved = await storage.approveStyleGuide(target.id);
+      return res.json({ approved });
+    } catch (err) {
+      console.error("[QUALITY] style-guide approve error:", err);
+      return res.status(500).json({ message: "Failed to approve style guide" });
+    }
+  });
+
+  app.post("/api/admin/quality/check", requireAdminKey, async (req, res) => {
+    try {
+      const { text, source, sourceRef } = req.body as {
+        text?: string;
+        source?: "jai_sample" | "content_repurposing" | "curriculum";
+        sourceRef?: string;
+      };
+      if (!text || !source) return res.status(400).json({ message: "text and source are required" });
+      const result = await checkContent(text, source, sourceRef);
+      return res.json(result);
+    } catch (err) {
+      console.error("[QUALITY] check error:", err);
+      return res.status(500).json({ message: "Quality check failed" });
+    }
+  });
+
+  app.post("/api/admin/quality/sample", requireAdminKey, async (req, res) => {
+    try {
+      const { poolSize, sampleSize } = req.body as { poolSize?: number; sampleSize?: number };
+      const summary = await runRollingSample(poolSize ?? 200, sampleSize ?? 20);
+      return res.json(summary);
+    } catch (err) {
+      console.error("[QUALITY] sample run error:", err);
+      return res.status(500).json({ message: "Sample run failed" });
+    }
+  });
+
+  app.get("/api/admin/quality/flags", requireAdminKey, async (req, res) => {
+    try {
+      const parsedLimit = req.query.limit ? parseInt(String(req.query.limit)) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? parsedLimit : undefined;
+      const flags = await storage.getOpenQualityFlags(limit);
+      return res.json({ flags });
+    } catch (err) {
+      console.error("[QUALITY] flags fetch error:", err);
+      return res.status(500).json({ message: "Failed to load flags" });
+    }
+  });
+
+  // ─── Support & Onboarding Agent (Agent 03) — founder-only admin surface ──
+  app.get("/api/admin/support/weekly-report", requireAdminKey, async (req, res) => {
+    try {
+      const windowDays = req.query.days ? parseInt(String(req.query.days)) : NaN;
+      const report = await generateWeeklyStuckReport(Number.isFinite(windowDays) ? windowDays : undefined);
+      return res.json(report);
+    } catch (err) {
+      console.error("[SUPPORT] weekly-report error:", err);
+      return res.status(500).json({ message: "Failed to generate weekly report" });
+    }
+  });
+
+  // ─── Billing & Subscription Agent (Agent 04) — founder-only admin surface ─
+  // Flags/reports only — no refund, discount, price change, or manual
+  // subscription override lives anywhere in this agent.
+  app.post("/api/admin/billing/reconcile", requireAdminKey, async (_req, res) => {
+    try {
+      const result = await runReconciliation();
+      return res.json(result);
+    } catch (err) {
+      console.error("[BILLING] reconcile error:", err);
+      return res.status(500).json({ message: "Reconciliation failed" });
+    }
+  });
+
+  app.get("/api/admin/billing/report", requireAdminKey, async (req, res) => {
+    try {
+      const parsedDays = req.query.days ? parseInt(String(req.query.days)) : NaN;
+      const windowDays = Number.isFinite(parsedDays) ? parsedDays : undefined;
+      const report = await generateBillingReport(windowDays);
+      return res.json(report);
+    } catch (err) {
+      console.error("[BILLING] report error:", err);
+      return res.status(500).json({ message: "Failed to generate billing report" });
+    }
+  });
+
+  // ─── Content Repurposing Agent (Agent 05) — founder-only admin surface ───
+  // Every draft is queued only — zero autopublish, no exceptions.
+  app.post("/api/admin/content/generate", requireAdminKey, async (req, res) => {
+    try {
+      const { sourceExcerpt, sourceType } = req.body as {
+        sourceExcerpt?: string;
+        sourceType?: "video_transcript" | "rebuild_script";
+      };
+      if (!sourceExcerpt || !sourceType) {
+        return res.status(400).json({ message: "sourceExcerpt and sourceType are required" });
+      }
+      const draft = await createContentDraft(sourceExcerpt, sourceType);
+      return res.json({ draft });
+    } catch (err) {
+      console.error("[CONTENT] generate error:", err);
+      return res.status(500).json({ message: "Content generation failed" });
+    }
+  });
+
+  app.get("/api/admin/content/drafts", requireAdminKey, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const drafts = await listContentDrafts(status);
+      return res.json({ drafts });
+    } catch (err) {
+      console.error("[CONTENT] list drafts error:", err);
+      return res.status(500).json({ message: "Failed to load drafts" });
+    }
+  });
+
+  app.post("/api/admin/content/drafts/:id/review", requireAdminKey, async (req, res) => {
+    try {
+      const { decision, note } = req.body as { decision?: "approved" | "rejected"; note?: string };
+      if (decision !== "approved" && decision !== "rejected") {
+        return res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
+      }
+      const draft = await reviewContentDraft(String(req.params.id), decision, note);
+      if (!draft) return res.status(404).json({ message: "Draft not found" });
+      return res.json({ draft });
+    } catch (err: any) {
+      console.error("[CONTENT] review error:", err);
+      return res.status(400).json({ message: err?.message || "Review failed" });
+    }
+  });
+
+  app.get("/api/admin/content/calendar", requireAdminKey, async (_req, res) => {
+    try {
+      const entries = await listCalendarEntries();
+      return res.json({ entries });
+    } catch (err) {
+      console.error("[CONTENT] calendar list error:", err);
+      return res.status(500).json({ message: "Failed to load calendar" });
+    }
+  });
+
+  app.post("/api/admin/content/calendar", requireAdminKey, async (req, res) => {
+    try {
+      const { title, notes, plannedDate, contentDraftId } = req.body as {
+        title?: string; notes?: string; plannedDate?: string; contentDraftId?: string;
+      };
+      if (!title) return res.status(400).json({ message: "title is required" });
+      const entry = await addCalendarEntry(title, notes ?? "", plannedDate, contentDraftId);
+      return res.json({ entry });
+    } catch (err) {
+      console.error("[CONTENT] calendar create error:", err);
+      return res.status(500).json({ message: "Failed to create calendar entry" });
+    }
+  });
+
+  app.patch("/api/admin/content/calendar/:id", requireAdminKey, async (req, res) => {
+    try {
+      const { status } = req.body as { status?: "idea" | "drafted" | "approved" };
+      if (!status) return res.status(400).json({ message: "status is required" });
+      const entry = await updateCalendarEntryStatus(String(req.params.id), status);
+      if (!entry) return res.status(404).json({ message: "Calendar entry not found" });
+      return res.json({ entry });
+    } catch (err) {
+      console.error("[CONTENT] calendar update error:", err);
+      return res.status(500).json({ message: "Failed to update calendar entry" });
+    }
+  });
+
+  // ─── Retention & Engagement Agent (Agent 06) — founder-only admin surface ─
+  app.get("/api/admin/retention/segments", requireAdminKey, async (_req, res) => {
+    try {
+      const segments = await getSegmentSnapshot();
+      return res.json({ segments });
+    } catch (err) {
+      console.error("[RETENTION] segments error:", err);
+      return res.status(500).json({ message: "Failed to compute segments" });
+    }
+  });
+
+  app.get("/api/admin/retention/lift-report", requireAdminKey, async (req, res) => {
+    try {
+      const parsedDays = req.query.days ? parseInt(String(req.query.days)) : NaN;
+      const windowDays = Number.isFinite(parsedDays) ? parsedDays : undefined;
+      const report = await generateEngagementLiftReport(windowDays);
+      return res.json(report);
+    } catch (err) {
+      console.error("[RETENTION] lift-report error:", err);
+      return res.status(500).json({ message: "Failed to generate lift report" });
+    }
+  });
+
+  // ─── Analytics & Reporting Agent (Agent 07) — founder-only, read-only ─────
+  app.get("/api/admin/analytics/funnel", requireAdminKey, async (_req, res) => {
+    try {
+      return res.json(await computeFunnelSnapshot());
+    } catch (err) {
+      console.error("[ANALYTICS] funnel error:", err);
+      return res.status(500).json({ message: "Failed to compute funnel snapshot" });
+    }
+  });
+
+  app.get("/api/admin/analytics/cohorts", requireAdminKey, async (req, res) => {
+    try {
+      const parsedMonths = req.query.months ? parseInt(String(req.query.months)) : NaN;
+      const monthsBack = Number.isFinite(parsedMonths) ? parsedMonths : undefined;
+      const cohorts = await computeCohortRetention(monthsBack);
+      return res.json({ cohorts });
+    } catch (err) {
+      console.error("[ANALYTICS] cohorts error:", err);
+      return res.status(500).json({ message: "Failed to compute cohort retention" });
+    }
+  });
+
+  app.post("/api/admin/analytics/check-anomalies", requireAdminKey, async (_req, res) => {
+    try {
+      const results = await runAnomalyCheck();
+      return res.json({ results });
+    } catch (err) {
+      console.error("[ANALYTICS] anomaly check error:", err);
+      return res.status(500).json({ message: "Anomaly check failed" });
+    }
+  });
+
+  app.get("/api/admin/analytics/weekly-digest", requireAdminKey, async (_req, res) => {
+    try {
+      const digest = await generateWeeklyDigest();
+      return res.json(digest);
+    } catch (err) {
+      console.error("[ANALYTICS] weekly-digest error:", err);
+      return res.status(500).json({ message: "Failed to generate weekly digest" });
+    }
+  });
+
+  // ─── Curriculum Production Agent (Agent 08) — founder-only admin surface ─
+  // Nothing finalizes on its own; every module is still recorded on camera
+  // by the founder.
+  app.post("/api/admin/curriculum/draft", requireAdminKey, async (req, res) => {
+    try {
+      const { forDay, heartbeatFocus, brief } = req.body as { forDay?: number; heartbeatFocus?: string; brief?: string };
+      if (!forDay || !heartbeatFocus) {
+        return res.status(400).json({ message: "forDay and heartbeatFocus are required" });
+      }
+      const draft = await draftCurriculumModule(forDay, heartbeatFocus, brief ?? "");
+      return res.json({ draft });
+    } catch (err) {
+      console.error("[CURRICULUM] draft error:", err);
+      return res.status(500).json({ message: "Curriculum draft generation failed" });
+    }
+  });
+
+  app.get("/api/admin/curriculum/drafts", requireAdminKey, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const drafts = await listCurriculumDrafts(status);
+      return res.json({ drafts });
+    } catch (err) {
+      console.error("[CURRICULUM] list drafts error:", err);
+      return res.status(500).json({ message: "Failed to load drafts" });
+    }
+  });
+
+  app.post("/api/admin/curriculum/drafts/:id/review", requireAdminKey, async (req, res) => {
+    try {
+      const { decision, note } = req.body as { decision?: "approved" | "rejected"; note?: string };
+      if (decision !== "approved" && decision !== "rejected") {
+        return res.status(400).json({ message: "decision must be 'approved' or 'rejected'" });
+      }
+      const draft = await reviewCurriculumDraft(String(req.params.id), decision, note);
+      if (!draft) return res.status(404).json({ message: "Draft not found" });
+      return res.json({ draft });
+    } catch (err: any) {
+      console.error("[CURRICULUM] review error:", err);
+      return res.status(400).json({ message: err?.message || "Review failed" });
+    }
+  });
+
+  // ─── Funnel Optimization Agent (Agent 09) — founder-only admin surface ───
+  // No test records traffic until approved by ID — enforced in
+  // funnelOptimizationAgent.ts, not just here.
+  app.post("/api/admin/funnel/tests", requireAdminKey, async (req, res) => {
+    try {
+      const { name, page, variants } = req.body as {
+        name?: string; page?: "assessment" | "journal" | "subscription";
+        variants?: { name: string; copy: string }[];
+      };
+      if (!name || !page || !Array.isArray(variants)) {
+        return res.status(400).json({ message: "name, page, and variants are required" });
+      }
+      const result = await proposeTest(name, page, variants);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[FUNNEL] propose test error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to propose test" });
+    }
+  });
+
+  app.get("/api/admin/funnel/tests", requireAdminKey, async (_req, res) => {
+    try {
+      const tests = await listTests();
+      return res.json({ tests });
+    } catch (err) {
+      console.error("[FUNNEL] list tests error:", err);
+      return res.status(500).json({ message: "Failed to load tests" });
+    }
+  });
+
+  app.get("/api/admin/funnel/tests/:id", requireAdminKey, async (req, res) => {
+    try {
+      const result = await getTestWithVariants(String(req.params.id));
+      if (!result.test) return res.status(404).json({ message: "Test not found" });
+      return res.json(result);
+    } catch (err) {
+      console.error("[FUNNEL] get test error:", err);
+      return res.status(500).json({ message: "Failed to load test" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/approve", requireAdminKey, async (req, res) => {
+    try {
+      const test = await approveTest(String(req.params.id));
+      if (!test) return res.status(404).json({ message: "Test not found" });
+      return res.json({ test });
+    } catch (err: any) {
+      console.error("[FUNNEL] approve error:", err);
+      return res.status(400).json({ message: err?.message || "Approval failed" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/impression", requireAdminKey, async (req, res) => {
+    try {
+      const { variantId } = req.body as { variantId?: string };
+      if (!variantId) return res.status(400).json({ message: "variantId is required" });
+      await recordImpression(String(req.params.id), variantId);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[FUNNEL] impression error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to record impression" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/conversion", requireAdminKey, async (req, res) => {
+    try {
+      const { variantId } = req.body as { variantId?: string };
+      if (!variantId) return res.status(400).json({ message: "variantId is required" });
+      await recordConversion(String(req.params.id), variantId);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[FUNNEL] conversion error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to record conversion" });
+    }
+  });
+
+  app.get("/api/admin/funnel/tests/:id/significance", requireAdminKey, async (req, res) => {
+    try {
+      const result = await checkSignificance(String(req.params.id));
+      return res.json(result);
+    } catch (err) {
+      console.error("[FUNNEL] significance error:", err);
+      return res.status(500).json({ message: "Failed to check significance" });
+    }
+  });
+
+  app.post("/api/admin/funnel/tests/:id/conclude", requireAdminKey, async (req, res) => {
+    try {
+      const result = await concludeTest(String(req.params.id));
+      return res.json(result);
+    } catch (err) {
+      console.error("[FUNNEL] conclude error:", err);
+      return res.status(500).json({ message: "Failed to conclude test" });
+    }
+  });
+
+  // ─── Technical & Release Ops Agent (Agent 10) — founder-only admin surface ─
+  // No production deploy authority anywhere here — staging and verification
+  // only, matching how the founder already works.
+  app.post("/api/admin/release/items", requireAdminKey, async (req, res) => {
+    try {
+      const { type, title, description } = req.body as { type?: "bug" | "feature"; title?: string; description?: string };
+      if (!type || !title) return res.status(400).json({ message: "type and title are required" });
+      const item = await logItem(type, title, description ?? "");
+      return res.json({ item });
+    } catch (err) {
+      console.error("[RELEASE_OPS] log item error:", err);
+      return res.status(500).json({ message: "Failed to log item" });
+    }
+  });
+
+  app.get("/api/admin/release/items", requireAdminKey, async (req, res) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const items = await listReleaseItems(status);
+      return res.json({ items });
+    } catch (err) {
+      console.error("[RELEASE_OPS] list items error:", err);
+      return res.status(500).json({ message: "Failed to load items" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/stage", requireAdminKey, async (req, res) => {
+    try {
+      const item = await stageItem(String(req.params.id));
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      return res.json({ item });
+    } catch (err: any) {
+      console.error("[RELEASE_OPS] stage error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to stage item" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/verify", requireAdminKey, async (req, res) => {
+    try {
+      const { checks } = req.body as { checks?: { name: string; passed: boolean; detail?: string }[] };
+      if (!Array.isArray(checks) || checks.length === 0) {
+        return res.status(400).json({ message: "checks (a non-empty array) is required" });
+      }
+      const item = await verifyItem(String(req.params.id), checks);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      return res.json({ item });
+    } catch (err: any) {
+      console.error("[RELEASE_OPS] verify error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to verify item" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/ship", requireAdminKey, async (req, res) => {
+    try {
+      const { changelogSummary } = req.body as { changelogSummary?: string };
+      if (!changelogSummary) return res.status(400).json({ message: "changelogSummary is required" });
+      const result = await markShipped(String(req.params.id), changelogSummary);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[RELEASE_OPS] ship error:", err);
+      return res.status(400).json({ message: err?.message || "Failed to mark item shipped" });
+    }
+  });
+
+  app.post("/api/admin/release/items/:id/reject", requireAdminKey, async (req, res) => {
+    try {
+      const { reason } = req.body as { reason?: string };
+      const item = await rejectItem(String(req.params.id), reason ?? "");
+      if (!item) return res.status(404).json({ message: "Item not found" });
+      return res.json({ item });
+    } catch (err) {
+      console.error("[RELEASE_OPS] reject error:", err);
+      return res.status(500).json({ message: "Failed to reject item" });
+    }
+  });
+
+  app.get("/api/admin/release/changelog", requireAdminKey, async (req, res) => {
+    try {
+      const parsedLimit = req.query.limit ? parseInt(String(req.query.limit)) : NaN;
+      const limit = Number.isFinite(parsedLimit) ? parsedLimit : undefined;
+      const entries = await getChangelog(limit);
+      return res.json({ entries });
+    } catch (err) {
+      console.error("[RELEASE_OPS] changelog error:", err);
+      return res.status(500).json({ message: "Failed to load changelog" });
+    }
+  });
+
+  // ─── Mustard Seed Chief of Staff Agent (Agent 11) — founder-only admin surface ─
+  // Routing and prioritization only — grants no agent new authority, and
+  // never resolves a conflict itself.
+  app.get("/api/admin/chief-of-staff/queue", requireAdminKey, async (_req, res) => {
+    try {
+      const queue = await getMasterQueue();
+      return res.json(queue);
+    } catch (err) {
+      console.error("[CHIEF_OF_STAFF] queue error:", err);
+      return res.status(500).json({ message: "Failed to load master queue" });
+    }
+  });
+
+  app.post("/api/admin/chief-of-staff/route", requireAdminKey, async (req, res) => {
+    try {
+      const { description } = req.body as { description?: string };
+      if (!description) return res.status(400).json({ message: "description is required" });
+      const result = await routeIncomingTask(description);
+      return res.json(result);
+    } catch (err) {
+      console.error("[CHIEF_OF_STAFF] route error:", err);
+      return res.status(500).json({ message: "Routing failed" });
+    }
+  });
+
+  app.get("/api/admin/chief-of-staff/conflicts", requireAdminKey, async (_req, res) => {
+    try {
+      const flags = await checkForConflicts();
+      return res.json({ flags });
+    } catch (err) {
+      console.error("[CHIEF_OF_STAFF] conflicts error:", err);
+      return res.status(500).json({ message: "Conflict check failed" });
     }
   });
 

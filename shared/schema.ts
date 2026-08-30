@@ -281,3 +281,379 @@ export const insertAssessmentSchema = createInsertSchema(assessments).omit({
 });
 export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
 export type Assessment = typeof assessments.$inferSelect;
+
+// ─── Trust & Safety (Agent 01) ───────────────────────────────────────────────
+// Crisis-language screening across every Jai/Jio/Jazz turn. Locked response
+// wording lives in server/trustSafety.ts — this table is the audit log.
+export const SAFETY_TRIGGER_CATEGORIES = [
+  "passive_ideation",
+  "active_ideation",
+  "ideation_with_plan_or_means",
+  "hopelessness_finality",
+  "direct_self_harm",
+  "abuse_in_progress",
+  "medical_emergency",
+  "disordered_eating",
+] as const;
+export type SafetyTriggerCategory = typeof SAFETY_TRIGGER_CATEGORIES[number];
+
+export const SAFETY_RESPONSE_TYPES = ["primary", "backtrack_followup"] as const;
+export type SafetyResponseType = typeof SAFETY_RESPONSE_TYPES[number];
+
+export const safetyEvents = pgTable("safety_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  category: text("category").notNull(),
+  responseType: text("response_type").notNull().default("primary"),
+  triggeringMessage: text("triggering_message").notNull(),
+  surface: text("surface").notNull().default("chat"), // chat | grounding_journal | rebuild
+  alertSent: boolean("alert_sent").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSafetyEventSchema = createInsertSchema(safetyEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSafetyEvent = z.infer<typeof insertSafetyEventSchema>;
+export type SafetyEvent = typeof safetyEvents.$inferSelect;
+
+// ─── Jai Quality Supervisor (Agent 02) ───────────────────────────────────────
+// Samples Jai conversation and pre-publish drafts against a style guide that
+// only the founder can promote to "approved". Flags drift with the rule and
+// line quoted — never edits Jai's core prompt or any content directly.
+export const STYLE_GUIDE_STATUSES = ["draft", "approved", "superseded"] as const;
+export type StyleGuideStatus = typeof STYLE_GUIDE_STATUSES[number];
+
+export const styleGuideVersions = pgTable("style_guide_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  content: text("content").notNull(),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+});
+
+export const insertStyleGuideVersionSchema = createInsertSchema(styleGuideVersions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertStyleGuideVersion = z.infer<typeof insertStyleGuideVersionSchema>;
+export type StyleGuideVersion = typeof styleGuideVersions.$inferSelect;
+
+export const QUALITY_CHECK_SOURCES = ["jai_sample", "content_repurposing", "curriculum"] as const;
+export type QualityCheckSource = typeof QUALITY_CHECK_SOURCES[number];
+
+export const qualityChecks = pgTable("quality_checks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").notNull(), // jai_sample | content_repurposing | curriculum
+  sourceRef: text("source_ref"), // message id for jai_sample; a draft id/slug once Phase 5/8 exist
+  excerpt: text("excerpt").notNull(),
+  passed: boolean("passed").notNull(),
+  ruleBroken: text("rule_broken"),
+  quotedLine: text("quoted_line"),
+  explanation: text("explanation"),
+  checkedAgainstApprovedGuide: boolean("checked_against_approved_guide").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertQualityCheckSchema = createInsertSchema(qualityChecks).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertQualityCheck = z.infer<typeof insertQualityCheckSchema>;
+export type QualityCheck = typeof qualityChecks.$inferSelect;
+
+// ─── Support & Onboarding Agent (Agent 03) ───────────────────────────────────
+// Answers onboarding questions from an approved response library only, and
+// routes anything outside it — plus refunds, deletions, and payment disputes
+// — to a human instead of improvising. Every inquiry is logged here so the
+// weekly "where are users getting stuck" report has real data to run on.
+export const SUPPORT_OUTCOMES = ["library", "escalated", "unhandled"] as const;
+export type SupportOutcome = typeof SUPPORT_OUTCOMES[number];
+
+export const SUPPORT_ESCALATION_REASONS = ["refund", "account_deletion", "payment_dispute"] as const;
+export type SupportEscalationReason = typeof SUPPORT_ESCALATION_REASONS[number];
+
+export const supportInquiries = pgTable("support_inquiries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  text: text("text").notNull(),
+  outcome: text("outcome").notNull(), // library | escalated | unhandled
+  libraryEntryId: text("library_entry_id"),
+  escalationReason: text("escalation_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSupportInquirySchema = createInsertSchema(supportInquiries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSupportInquiry = z.infer<typeof insertSupportInquirySchema>;
+export type SupportInquiry = typeof supportInquiries.$inferSelect;
+
+// ─── Billing & Subscription Agent (Agent 04) ─────────────────────────────────
+// Audit log for the dunning sequence, reconciliation, and the MRR/churn
+// report. This agent never issues refunds, discounts, pricing changes, or
+// manual subscription overrides — those always require the founder's
+// explicit sign-off, per the build's global constraints.
+export const BILLING_EVENT_TYPES = [
+  "payment_failed",
+  "dunning_sent",
+  "payment_recovered",
+  "cancellation_requested",
+  "reconciliation_mismatch",
+  "subscription_started",
+] as const;
+export type BillingEventType = typeof BILLING_EVENT_TYPES[number];
+
+export const billingEvents = pgTable("billing_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  detail: jsonb("detail"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
+export type BillingEvent = typeof billingEvents.$inferSelect;
+
+// ─── Content Repurposing Agent (Agent 05) ────────────────────────────────────
+// Turns a transcript into drafted show notes / email nudges / social
+// captions. Every draft routes through Jai Quality Supervisor's pre-publish
+// gate (server/qualitySupervisor.ts) before it can reach the founder's
+// approval queue, and nothing here ever auto-publishes — "approved" just
+// means the founder signed off on the copy; there's no real publish target
+// wired up in this codebase to push it to.
+export const CONTENT_SOURCE_TYPES = ["video_transcript", "rebuild_script"] as const;
+export type ContentSourceType = typeof CONTENT_SOURCE_TYPES[number];
+
+export const CONTENT_DRAFT_STATUSES = ["pending_review", "blocked_needs_revision", "approved", "rejected"] as const;
+export type ContentDraftStatus = typeof CONTENT_DRAFT_STATUSES[number];
+
+export const contentDrafts = pgTable("content_drafts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceType: text("source_type").notNull(),
+  sourceExcerpt: text("source_excerpt").notNull(),
+  showNotes: text("show_notes").notNull(),
+  emailNudges: jsonb("email_nudges").notNull().default(sql`'[]'::jsonb`),
+  socialCaptions: jsonb("social_captions").notNull().default(sql`'[]'::jsonb`),
+  qualityCheckPassed: boolean("quality_check_passed").notNull(),
+  qualityCheckDetail: jsonb("quality_check_detail"),
+  status: text("status").notNull().default("pending_review"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
+export const insertContentDraftSchema = createInsertSchema(contentDrafts).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertContentDraft = z.infer<typeof insertContentDraftSchema>;
+export type ContentDraft = typeof contentDrafts.$inferSelect;
+
+export const CALENDAR_DRAFT_STATUSES = ["idea", "drafted", "approved"] as const;
+export type CalendarDraftStatus = typeof CALENDAR_DRAFT_STATUSES[number];
+
+export const contentCalendarEntries = pgTable("content_calendar_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  notes: text("notes").notNull().default(""),
+  plannedDate: text("planned_date"),
+  status: text("status").notNull().default("idea"),
+  contentDraftId: varchar("content_draft_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContentCalendarEntrySchema = createInsertSchema(contentCalendarEntries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertContentCalendarEntry = z.infer<typeof insertContentCalendarEntrySchema>;
+export type ContentCalendarEntry = typeof contentCalendarEntries.$inferSelect;
+
+// ─── Retention & Engagement Agent (Agent 06) ─────────────────────────────────
+// Streak nudges, "falling behind your own goal" prompts, and win-back
+// messaging from approved templates only — never freeform generation, so
+// tone stays locked without needing a per-message quality check. Any user
+// with a recent Trust & Safety flag is skipped entirely; that's a human
+// follow-up, never an engagement nudge.
+export const RETENTION_NUDGE_TYPES = ["streak_nudge", "falling_behind", "win_back"] as const;
+export type RetentionNudgeType = typeof RETENTION_NUDGE_TYPES[number];
+
+export const RETENTION_SEGMENTS = ["starting", "building", "locked_in", "slipping", "lapsed"] as const;
+export type RetentionSegment = typeof RETENTION_SEGMENTS[number];
+
+export const retentionNudges = pgTable("retention_nudges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  nudgeType: text("nudge_type").notNull(),
+  segment: text("segment").notNull(),
+  messageId: varchar("message_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRetentionNudgeSchema = createInsertSchema(retentionNudges).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertRetentionNudge = z.infer<typeof insertRetentionNudgeSchema>;
+export type RetentionNudge = typeof retentionNudges.$inferSelect;
+
+// ─── Analytics & Reporting Agent (Agent 07) ──────────────────────────────────
+// Read-only, always. This agent never takes automated action on anything it
+// finds — every table and function it touches is for reporting and anomaly
+// flagging only.
+export const analyticsAnomalies = pgTable("analytics_anomalies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metric: text("metric").notNull(),
+  detail: jsonb("detail"),
+  alertSent: boolean("alert_sent").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAnalyticsAnomalySchema = createInsertSchema(analyticsAnomalies).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAnalyticsAnomaly = z.infer<typeof insertAnalyticsAnomalySchema>;
+export type AnalyticsAnomaly = typeof analyticsAnomalies.$inferSelect;
+
+// ─── Curriculum Production Agent (Agent 08) ──────────────────────────────────
+// Drafts a talk track, worksheet questions, a slide outline, and a
+// voiceover-ready script for a Rebuild module — matching Day 1's real,
+// locked structure and pacing. Every draft routes through Jai Quality
+// Supervisor's gate, same as Content Repurposing. Nothing here finalizes on
+// its own: every module is still recorded on camera by the founder, and
+// "approved" only means the script is signed off, never that a video exists.
+export const CURRICULUM_DRAFT_STATUSES = ["pending_review", "blocked_needs_revision", "approved", "rejected"] as const;
+export type CurriculumDraftStatus = typeof CURRICULUM_DRAFT_STATUSES[number];
+
+export const curriculumDrafts = pgTable("curriculum_drafts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  forDay: integer("for_day").notNull(),
+  heartbeatFocus: text("heartbeat_focus"),
+  title: text("title").notNull(),
+  subtitle: text("subtitle").notNull().default(""),
+  talkTrack: text("talk_track").notNull(),
+  worksheetQuestions: jsonb("worksheet_questions").notNull().default(sql`'[]'::jsonb`),
+  slideOutline: jsonb("slide_outline").notNull().default(sql`'[]'::jsonb`),
+  voiceoverScript: text("voiceover_script").notNull(),
+  qualityCheckPassed: boolean("quality_check_passed").notNull(),
+  qualityCheckDetail: jsonb("quality_check_detail"),
+  status: text("status").notNull().default("pending_review"),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
+export const insertCurriculumDraftSchema = createInsertSchema(curriculumDrafts).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCurriculumDraft = z.infer<typeof insertCurriculumDraftSchema>;
+export type CurriculumDraft = typeof curriculumDrafts.$inferSelect;
+
+// ─── Funnel Optimization Agent (Agent 09) ────────────────────────────────────
+// Proposes A/B tests on assessment/journal/subscription-page copy. HARD
+// CONSTRAINT: no test can record real traffic until the founder approves it
+// by ID — enforced in code (server/funnelOptimizationAgent.ts), not just by
+// convention. This agent is genuinely premature for this app pre-launch (no
+// meaningful traffic yet), so it's built and ready but has nothing live to
+// run against until Tier 1 is proven out.
+export const AB_TEST_PAGES = ["assessment", "journal", "subscription"] as const;
+export type ABTestPage = typeof AB_TEST_PAGES[number];
+
+export const AB_TEST_STATUSES = ["proposed", "approved", "concluded_winner", "concluded_inconclusive"] as const;
+export type ABTestStatus = typeof AB_TEST_STATUSES[number];
+
+export const abTests = pgTable("ab_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  page: text("page").notNull(),
+  status: text("status").notNull().default("proposed"),
+  winnerVariantId: varchar("winner_variant_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  concludedAt: timestamp("concluded_at"),
+});
+
+export const insertABTestSchema = createInsertSchema(abTests).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertABTest = z.infer<typeof insertABTestSchema>;
+export type ABTest = typeof abTests.$inferSelect;
+
+export const abTestVariants = pgTable("ab_test_variants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  testId: varchar("test_id").notNull(),
+  name: text("name").notNull(),
+  copy: text("copy").notNull(),
+  isControl: boolean("is_control").notNull().default(false),
+  impressions: integer("impressions").notNull().default(0),
+  conversions: integer("conversions").notNull().default(0),
+  retired: boolean("retired").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertABTestVariantSchema = createInsertSchema(abTestVariants).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertABTestVariant = z.infer<typeof insertABTestVariantSchema>;
+export type ABTestVariant = typeof abTestVariants.$inferSelect;
+
+// ─── Technical & Release Ops Agent (Agent 10) ────────────────────────────────
+// Centralizes bugs/feature requests, gates "production-ready" behind real
+// recorded verification checks, and writes the changelog. HARD CONSTRAINT:
+// no production deploy authority anywhere in this agent — "shipped" means
+// the internal record is marked ready and a changelog entry exists, never
+// that anything was deployed. This repo doesn't use GitHub Issues yet (0
+// open or closed at time of writing), so this table is the primary tracker;
+// GitHub Issue creation is wired in as an optional mirror if GITHUB_TOKEN
+// and GITHUB_REPO_FULL_NAME are ever configured.
+export const RELEASE_ITEM_TYPES = ["bug", "feature"] as const;
+export type ReleaseItemType = typeof RELEASE_ITEM_TYPES[number];
+
+export const RELEASE_ITEM_STATUSES = ["logged", "staged", "verified", "shipped", "rejected"] as const;
+export type ReleaseItemStatus = typeof RELEASE_ITEM_STATUSES[number];
+
+export const releaseItems = pgTable("release_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("logged"),
+  githubIssueNumber: integer("github_issue_number"),
+  verificationChecks: jsonb("verification_checks"),
+  createdAt: timestamp("created_at").defaultNow(),
+  stagedAt: timestamp("staged_at"),
+  verifiedAt: timestamp("verified_at"),
+  shippedAt: timestamp("shipped_at"),
+});
+
+export const insertReleaseItemSchema = createInsertSchema(releaseItems).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertReleaseItem = z.infer<typeof insertReleaseItemSchema>;
+export type ReleaseItem = typeof releaseItems.$inferSelect;
+
+export const changelogEntries = pgTable("changelog_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  summary: text("summary").notNull(),
+  releaseItemId: varchar("release_item_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertChangelogEntrySchema = createInsertSchema(changelogEntries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertChangelogEntry = z.infer<typeof insertChangelogEntrySchema>;
+export type ChangelogEntry = typeof changelogEntries.$inferSelect;

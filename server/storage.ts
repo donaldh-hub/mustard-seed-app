@@ -9,10 +9,24 @@ import {
   type Commitment, type InsertCommitment, commitments,
   type GroundingJournalEntry, groundingJournalEntries,
   type RebuildInstance, rebuildInstances,
+  type SafetyEvent, type InsertSafetyEvent, safetyEvents,
+  type StyleGuideVersion, styleGuideVersions,
+  type QualityCheck, type InsertQualityCheck, qualityChecks,
+  type SupportInquiry, type InsertSupportInquiry, supportInquiries,
+  type BillingEvent, type InsertBillingEvent, billingEvents,
+  type ContentDraft, type InsertContentDraft, contentDrafts,
+  type ContentCalendarEntry, type InsertContentCalendarEntry, contentCalendarEntries,
+  type RetentionNudge, type InsertRetentionNudge, retentionNudges,
+  type AnalyticsAnomaly, type InsertAnalyticsAnomaly, analyticsAnomalies,
+  type CurriculumDraft, type InsertCurriculumDraft, curriculumDrafts,
+  type ABTest, type InsertABTest, abTests,
+  type ABTestVariant, type InsertABTestVariant, abTestVariants,
+  type ReleaseItem, type InsertReleaseItem, releaseItems,
+  type ChangelogEntry, type InsertChangelogEntry, changelogEntries,
   passwordResetTokens, authEvents,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, desc, asc, and, gte } from "drizzle-orm";
+import { eq, desc, asc, and, gte, inArray, sql as sqlOp } from "drizzle-orm";
 import pg from "pg";
 
 export interface IStorage {
@@ -69,6 +83,71 @@ export interface IStorage {
   getGroundingJournalEntries(userId: string): Promise<GroundingJournalEntry[]>;
   createGroundingJournalEntry(data: Omit<GroundingJournalEntry, "id" | "createdAt">): Promise<GroundingJournalEntry>;
   updateGroundingJournalEntry(id: string, data: Partial<GroundingJournalEntry>): Promise<GroundingJournalEntry | undefined>;
+
+  createSafetyEvent(data: InsertSafetyEvent): Promise<SafetyEvent>;
+  updateSafetyEvent(id: string, data: Partial<SafetyEvent>): Promise<SafetyEvent | undefined>;
+  getRecentSafetyEvents(userId: string, since: Date): Promise<SafetyEvent[]>;
+  getAllSafetyEvents(limit?: number): Promise<SafetyEvent[]>;
+  getSafetyEventsSince(since: Date): Promise<SafetyEvent[]>;
+
+  createStyleGuideDraft(content: string): Promise<StyleGuideVersion>;
+  getAnyStyleGuide(): Promise<StyleGuideVersion | undefined>;
+  getApprovedStyleGuide(): Promise<StyleGuideVersion | undefined>;
+  getLatestStyleGuideDraft(): Promise<StyleGuideVersion | undefined>;
+  approveStyleGuide(id: string): Promise<StyleGuideVersion | undefined>;
+
+  createQualityCheck(data: InsertQualityCheck): Promise<QualityCheck>;
+  getSampledMessageIds(source: string, candidateIds: string[]): Promise<Set<string>>;
+  getRecentJaeMessages(limit: number): Promise<Message[]>;
+  getOpenQualityFlags(limit?: number): Promise<QualityCheck[]>;
+
+  createSupportInquiry(data: InsertSupportInquiry): Promise<SupportInquiry>;
+  getSupportInquiriesSince(since: Date): Promise<SupportInquiry[]>;
+
+  createBillingEvent(data: InsertBillingEvent): Promise<BillingEvent>;
+  getBillingEventsSince(since: Date): Promise<BillingEvent[]>;
+  getRecentBillingEventsForUser(userId: string, type: string, since: Date): Promise<BillingEvent[]>;
+  getUsersBySubscriptionStates(states: string[]): Promise<User[]>;
+
+  createContentDraft(data: InsertContentDraft): Promise<ContentDraft>;
+  getContentDraft(id: string): Promise<ContentDraft | undefined>;
+  getContentDrafts(status?: string): Promise<ContentDraft[]>;
+  updateContentDraft(id: string, data: Partial<ContentDraft>): Promise<ContentDraft | undefined>;
+
+  createCalendarEntry(data: InsertContentCalendarEntry): Promise<ContentCalendarEntry>;
+  getCalendarEntries(): Promise<ContentCalendarEntry[]>;
+  updateCalendarEntry(id: string, data: Partial<ContentCalendarEntry>): Promise<ContentCalendarEntry | undefined>;
+
+  getAllUsers(limit?: number): Promise<User[]>;
+  createRetentionNudge(data: InsertRetentionNudge): Promise<RetentionNudge>;
+  getLastRetentionNudge(userId: string): Promise<RetentionNudge | undefined>;
+  getRetentionNudgesSince(since: Date): Promise<RetentionNudge[]>;
+
+  createAnalyticsAnomaly(data: InsertAnalyticsAnomaly): Promise<AnalyticsAnomaly>;
+  updateAnalyticsAnomaly(id: string, data: Partial<AnalyticsAnomaly>): Promise<AnalyticsAnomaly | undefined>;
+  getAnalyticsAnomaliesSince(since: Date): Promise<AnalyticsAnomaly[]>;
+
+  createCurriculumDraft(data: InsertCurriculumDraft): Promise<CurriculumDraft>;
+  getCurriculumDraft(id: string): Promise<CurriculumDraft | undefined>;
+  getCurriculumDrafts(status?: string): Promise<CurriculumDraft[]>;
+  updateCurriculumDraft(id: string, data: Partial<CurriculumDraft>): Promise<CurriculumDraft | undefined>;
+
+  createABTest(data: InsertABTest): Promise<ABTest>;
+  getABTest(id: string): Promise<ABTest | undefined>;
+  getABTests(): Promise<ABTest[]>;
+  updateABTest(id: string, data: Partial<ABTest>): Promise<ABTest | undefined>;
+  createABTestVariant(data: InsertABTestVariant): Promise<ABTestVariant>;
+  getABTestVariants(testId: string): Promise<ABTestVariant[]>;
+  getABTestVariant(id: string): Promise<ABTestVariant | undefined>;
+  incrementABTestVariant(id: string, field: "impressions" | "conversions"): Promise<ABTestVariant | undefined>;
+  retireABTestVariant(id: string): Promise<ABTestVariant | undefined>;
+
+  createReleaseItem(data: InsertReleaseItem): Promise<ReleaseItem>;
+  getReleaseItem(id: string): Promise<ReleaseItem | undefined>;
+  getReleaseItems(status?: string): Promise<ReleaseItem[]>;
+  updateReleaseItem(id: string, data: Partial<ReleaseItem>): Promise<ReleaseItem | undefined>;
+  createChangelogEntry(data: InsertChangelogEntry): Promise<ChangelogEntry>;
+  getChangelogEntries(limit?: number): Promise<ChangelogEntry[]>;
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -349,6 +428,305 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(rebuildInstances.userId, userId), eq(rebuildInstances.instanceNumber, instanceNumber)))
       .returning();
     return row;
+  }
+
+  // ─── Trust & Safety (Agent 01) ─────────────────────────────────────────────
+
+  async createSafetyEvent(data: InsertSafetyEvent): Promise<SafetyEvent> {
+    const [event] = await db.insert(safetyEvents).values(data).returning();
+    return event;
+  }
+
+  async updateSafetyEvent(id: string, data: Partial<SafetyEvent>): Promise<SafetyEvent | undefined> {
+    const [event] = await db.update(safetyEvents).set(data).where(eq(safetyEvents.id, id)).returning();
+    return event;
+  }
+
+  async getRecentSafetyEvents(userId: string, since: Date): Promise<SafetyEvent[]> {
+    return db.select().from(safetyEvents)
+      .where(and(eq(safetyEvents.userId, userId), gte(safetyEvents.createdAt, since)))
+      .orderBy(desc(safetyEvents.createdAt));
+  }
+
+  async getAllSafetyEvents(limit = 200): Promise<SafetyEvent[]> {
+    return db.select().from(safetyEvents).orderBy(desc(safetyEvents.createdAt)).limit(limit);
+  }
+
+  async getSafetyEventsSince(since: Date): Promise<SafetyEvent[]> {
+    return db.select().from(safetyEvents).where(gte(safetyEvents.createdAt, since)).orderBy(desc(safetyEvents.createdAt));
+  }
+
+  // ─── Jai Quality Supervisor (Agent 02) ─────────────────────────────────────
+
+  async createStyleGuideDraft(content: string): Promise<StyleGuideVersion> {
+    const [row] = await db.insert(styleGuideVersions).values({ content, status: "draft" }).returning();
+    return row;
+  }
+
+  async getAnyStyleGuide(): Promise<StyleGuideVersion | undefined> {
+    const [row] = await db.select().from(styleGuideVersions).orderBy(desc(styleGuideVersions.createdAt)).limit(1);
+    return row;
+  }
+
+  async getApprovedStyleGuide(): Promise<StyleGuideVersion | undefined> {
+    const [row] = await db.select().from(styleGuideVersions)
+      .where(eq(styleGuideVersions.status, "approved"))
+      .orderBy(desc(styleGuideVersions.approvedAt))
+      .limit(1);
+    return row;
+  }
+
+  async getLatestStyleGuideDraft(): Promise<StyleGuideVersion | undefined> {
+    const [row] = await db.select().from(styleGuideVersions)
+      .where(eq(styleGuideVersions.status, "draft"))
+      .orderBy(desc(styleGuideVersions.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  async approveStyleGuide(id: string): Promise<StyleGuideVersion | undefined> {
+    await db.update(styleGuideVersions).set({ status: "superseded" }).where(eq(styleGuideVersions.status, "approved"));
+    const [row] = await db.update(styleGuideVersions)
+      .set({ status: "approved", approvedAt: new Date() })
+      .where(eq(styleGuideVersions.id, id))
+      .returning();
+    return row;
+  }
+
+  async createQualityCheck(data: InsertQualityCheck): Promise<QualityCheck> {
+    const [row] = await db.insert(qualityChecks).values(data).returning();
+    return row;
+  }
+
+  async getSampledMessageIds(source: string, candidateIds: string[]): Promise<Set<string>> {
+    if (candidateIds.length === 0) return new Set();
+    const rows = await db.select({ sourceRef: qualityChecks.sourceRef }).from(qualityChecks)
+      .where(and(eq(qualityChecks.source, source), inArray(qualityChecks.sourceRef, candidateIds)));
+    return new Set(rows.map((r) => r.sourceRef).filter((id): id is string => !!id));
+  }
+
+  async getRecentJaeMessages(limit: number): Promise<Message[]> {
+    return db.select().from(messages).where(eq(messages.sender, "jae")).orderBy(desc(messages.createdAt)).limit(limit);
+  }
+
+  async getOpenQualityFlags(limit = 100): Promise<QualityCheck[]> {
+    return db.select().from(qualityChecks).where(eq(qualityChecks.passed, false)).orderBy(desc(qualityChecks.createdAt)).limit(limit);
+  }
+
+  // ─── Support & Onboarding (Agent 03) ───────────────────────────────────────
+
+  async createSupportInquiry(data: InsertSupportInquiry): Promise<SupportInquiry> {
+    const [row] = await db.insert(supportInquiries).values(data).returning();
+    return row;
+  }
+
+  async getSupportInquiriesSince(since: Date): Promise<SupportInquiry[]> {
+    return db.select().from(supportInquiries).where(gte(supportInquiries.createdAt, since)).orderBy(desc(supportInquiries.createdAt));
+  }
+
+  // ─── Billing & Subscription (Agent 04) ─────────────────────────────────────
+
+  async createBillingEvent(data: InsertBillingEvent): Promise<BillingEvent> {
+    const [row] = await db.insert(billingEvents).values(data).returning();
+    return row;
+  }
+
+  async getBillingEventsSince(since: Date): Promise<BillingEvent[]> {
+    return db.select().from(billingEvents).where(gte(billingEvents.createdAt, since)).orderBy(desc(billingEvents.createdAt));
+  }
+
+  async getRecentBillingEventsForUser(userId: string, type: string, since: Date): Promise<BillingEvent[]> {
+    return db.select().from(billingEvents)
+      .where(and(eq(billingEvents.userId, userId), eq(billingEvents.type, type), gte(billingEvents.createdAt, since)))
+      .orderBy(desc(billingEvents.createdAt));
+  }
+
+  async getUsersBySubscriptionStates(states: string[]): Promise<User[]> {
+    if (states.length === 0) return [];
+    return db.select().from(users).where(inArray(users.subscriptionState, states));
+  }
+
+  // ─── Content Repurposing (Agent 05) ────────────────────────────────────────
+
+  async createContentDraft(data: InsertContentDraft): Promise<ContentDraft> {
+    const [row] = await db.insert(contentDrafts).values(data).returning();
+    return row;
+  }
+
+  async getContentDraft(id: string): Promise<ContentDraft | undefined> {
+    const [row] = await db.select().from(contentDrafts).where(eq(contentDrafts.id, id));
+    return row;
+  }
+
+  async getContentDrafts(status?: string): Promise<ContentDraft[]> {
+    if (status) {
+      return db.select().from(contentDrafts).where(eq(contentDrafts.status, status)).orderBy(desc(contentDrafts.createdAt));
+    }
+    return db.select().from(contentDrafts).orderBy(desc(contentDrafts.createdAt));
+  }
+
+  async updateContentDraft(id: string, data: Partial<ContentDraft>): Promise<ContentDraft | undefined> {
+    const [row] = await db.update(contentDrafts).set(data).where(eq(contentDrafts.id, id)).returning();
+    return row;
+  }
+
+  async createCalendarEntry(data: InsertContentCalendarEntry): Promise<ContentCalendarEntry> {
+    const [row] = await db.insert(contentCalendarEntries).values(data).returning();
+    return row;
+  }
+
+  async getCalendarEntries(): Promise<ContentCalendarEntry[]> {
+    return db.select().from(contentCalendarEntries).orderBy(desc(contentCalendarEntries.createdAt));
+  }
+
+  async updateCalendarEntry(id: string, data: Partial<ContentCalendarEntry>): Promise<ContentCalendarEntry | undefined> {
+    const [row] = await db.update(contentCalendarEntries).set(data).where(eq(contentCalendarEntries.id, id)).returning();
+    return row;
+  }
+
+  // ─── Retention & Engagement (Agent 06) ─────────────────────────────────────
+
+  async getAllUsers(limit = 1000): Promise<User[]> {
+    return db.select().from(users).limit(limit);
+  }
+
+  async createRetentionNudge(data: InsertRetentionNudge): Promise<RetentionNudge> {
+    const [row] = await db.insert(retentionNudges).values(data).returning();
+    return row;
+  }
+
+  async getLastRetentionNudge(userId: string): Promise<RetentionNudge | undefined> {
+    const [row] = await db.select().from(retentionNudges)
+      .where(eq(retentionNudges.userId, userId))
+      .orderBy(desc(retentionNudges.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  async getRetentionNudgesSince(since: Date): Promise<RetentionNudge[]> {
+    return db.select().from(retentionNudges).where(gte(retentionNudges.createdAt, since)).orderBy(desc(retentionNudges.createdAt));
+  }
+
+  // ─── Analytics & Reporting (Agent 07) ──────────────────────────────────────
+
+  async createAnalyticsAnomaly(data: InsertAnalyticsAnomaly): Promise<AnalyticsAnomaly> {
+    const [row] = await db.insert(analyticsAnomalies).values(data).returning();
+    return row;
+  }
+
+  async updateAnalyticsAnomaly(id: string, data: Partial<AnalyticsAnomaly>): Promise<AnalyticsAnomaly | undefined> {
+    const [row] = await db.update(analyticsAnomalies).set(data).where(eq(analyticsAnomalies.id, id)).returning();
+    return row;
+  }
+
+  async getAnalyticsAnomaliesSince(since: Date): Promise<AnalyticsAnomaly[]> {
+    return db.select().from(analyticsAnomalies).where(gte(analyticsAnomalies.createdAt, since)).orderBy(desc(analyticsAnomalies.createdAt));
+  }
+
+  // ─── Curriculum Production (Agent 08) ──────────────────────────────────────
+
+  async createCurriculumDraft(data: InsertCurriculumDraft): Promise<CurriculumDraft> {
+    const [row] = await db.insert(curriculumDrafts).values(data).returning();
+    return row;
+  }
+
+  async getCurriculumDraft(id: string): Promise<CurriculumDraft | undefined> {
+    const [row] = await db.select().from(curriculumDrafts).where(eq(curriculumDrafts.id, id));
+    return row;
+  }
+
+  async getCurriculumDrafts(status?: string): Promise<CurriculumDraft[]> {
+    if (status) {
+      return db.select().from(curriculumDrafts).where(eq(curriculumDrafts.status, status)).orderBy(desc(curriculumDrafts.createdAt));
+    }
+    return db.select().from(curriculumDrafts).orderBy(desc(curriculumDrafts.createdAt));
+  }
+
+  async updateCurriculumDraft(id: string, data: Partial<CurriculumDraft>): Promise<CurriculumDraft | undefined> {
+    const [row] = await db.update(curriculumDrafts).set(data).where(eq(curriculumDrafts.id, id)).returning();
+    return row;
+  }
+
+  // ─── Funnel Optimization (Agent 09) ────────────────────────────────────────
+
+  async createABTest(data: InsertABTest): Promise<ABTest> {
+    const [row] = await db.insert(abTests).values(data).returning();
+    return row;
+  }
+
+  async getABTest(id: string): Promise<ABTest | undefined> {
+    const [row] = await db.select().from(abTests).where(eq(abTests.id, id));
+    return row;
+  }
+
+  async getABTests(): Promise<ABTest[]> {
+    return db.select().from(abTests).orderBy(desc(abTests.createdAt));
+  }
+
+  async updateABTest(id: string, data: Partial<ABTest>): Promise<ABTest | undefined> {
+    const [row] = await db.update(abTests).set(data).where(eq(abTests.id, id)).returning();
+    return row;
+  }
+
+  async createABTestVariant(data: InsertABTestVariant): Promise<ABTestVariant> {
+    const [row] = await db.insert(abTestVariants).values(data).returning();
+    return row;
+  }
+
+  async getABTestVariants(testId: string): Promise<ABTestVariant[]> {
+    return db.select().from(abTestVariants).where(eq(abTestVariants.testId, testId));
+  }
+
+  async getABTestVariant(id: string): Promise<ABTestVariant | undefined> {
+    const [row] = await db.select().from(abTestVariants).where(eq(abTestVariants.id, id));
+    return row;
+  }
+
+  async incrementABTestVariant(id: string, field: "impressions" | "conversions"): Promise<ABTestVariant | undefined> {
+    const column = field === "impressions" ? abTestVariants.impressions : abTestVariants.conversions;
+    const [row] = await db.update(abTestVariants)
+      .set({ [field]: sqlOp`${column} + 1` })
+      .where(eq(abTestVariants.id, id))
+      .returning();
+    return row;
+  }
+
+  async retireABTestVariant(id: string): Promise<ABTestVariant | undefined> {
+    const [row] = await db.update(abTestVariants).set({ retired: true }).where(eq(abTestVariants.id, id)).returning();
+    return row;
+  }
+
+  // ─── Technical & Release Ops (Agent 10) ────────────────────────────────────
+
+  async createReleaseItem(data: InsertReleaseItem): Promise<ReleaseItem> {
+    const [row] = await db.insert(releaseItems).values(data).returning();
+    return row;
+  }
+
+  async getReleaseItem(id: string): Promise<ReleaseItem | undefined> {
+    const [row] = await db.select().from(releaseItems).where(eq(releaseItems.id, id));
+    return row;
+  }
+
+  async getReleaseItems(status?: string): Promise<ReleaseItem[]> {
+    if (status) {
+      return db.select().from(releaseItems).where(eq(releaseItems.status, status)).orderBy(desc(releaseItems.createdAt));
+    }
+    return db.select().from(releaseItems).orderBy(desc(releaseItems.createdAt));
+  }
+
+  async updateReleaseItem(id: string, data: Partial<ReleaseItem>): Promise<ReleaseItem | undefined> {
+    const [row] = await db.update(releaseItems).set(data).where(eq(releaseItems.id, id)).returning();
+    return row;
+  }
+
+  async createChangelogEntry(data: InsertChangelogEntry): Promise<ChangelogEntry> {
+    const [row] = await db.insert(changelogEntries).values(data).returning();
+    return row;
+  }
+
+  async getChangelogEntries(limit = 100): Promise<ChangelogEntry[]> {
+    return db.select().from(changelogEntries).orderBy(desc(changelogEntries.createdAt)).limit(limit);
   }
 }
 
