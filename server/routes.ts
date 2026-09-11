@@ -1412,14 +1412,31 @@ export async function registerRoutes(
 
       // --- PROGRESS CREDIBILITY VALIDATION ---
       // Runs immediately after TITAN classification, before any reward logic.
-      type EntryQualification = "verifiedAction" | "reflectionEntry" | "tooShort" | "duplicate";
+      type EntryQualification = "verifiedAction" | "reflectionEntry" | "tooShort" | "duplicate" | "restraintTooShort" | "restraintCapReached";
       let entryQualification: EntryQualification | null = null;
 
-      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
-        if (rawText.length < 20) {
+      // Restraint (RS) is self-reported with no external proof, unlike a
+      // completed action — so it gets two extra anti-gaming guardrails below:
+      // a higher detail bar, and a hard daily ceiling on how many times it
+      // can be credited, tracked on the user record like the other TITAN
+      // counters (consecutiveIOCount, driftWarningCount14d, etc).
+      const RS_MIN_LENGTH = 35;
+      const RS_DAILY_CAP = 2;
+      const rsDay = clientLocalDate || todayStr();
+      const rsCountToday = user.rsCreditsDate === rsDay ? (user.rsCreditsToday || 0) : 0;
+
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
+        const isRestraint = agg.primaryCategory === "RS";
+        const minLength = isRestraint ? RS_MIN_LENGTH : 20;
+        if (rawText.length < minLength) {
           // Too brief to verify — downgrade to reflection
           agg.primaryCategory = "RW";
-          entryQualification = "tooShort";
+          entryQualification = isRestraint ? "restraintTooShort" : "tooShort";
+        } else if (isRestraint && rsCountToday >= RS_DAILY_CAP) {
+          // Daily ceiling reached — restraint can't be farmed for infinite water
+          agg.primaryCategory = "RW";
+          entryQualification = "restraintCapReached";
+          console.log(`[CREDIBILITY] restraint_cap_reached | count=${rsCountToday} | cap=${RS_DAILY_CAP}`);
         } else {
           // Duplicate guard: check for same content logged within last 10 minutes
           const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
@@ -1511,7 +1528,7 @@ export async function registerRoutes(
 
       // Auto-resolve pending commitments when user takes real action
       const resolvedCommitments: string[] = [];
-      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
         const pending = await storage.getPendingCommitments(userId);
         for (const c of pending) {
           const actionWords = c.action.toLowerCase().split(/\s+/);
@@ -1545,7 +1562,7 @@ export async function registerRoutes(
         waterGoalId: null,
       };
 
-      // ZERO REWARD FOR TALK OR COMMITMENT — only VA/AR earn AP
+      // ZERO REWARD FOR TALK OR COMMITMENT — only VA/AR/RS earn AP
       // Commitments are tracked and followed up, but never rewarded
 
       const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
@@ -1569,7 +1586,7 @@ export async function registerRoutes(
 
       let finalStreak = streak;
       let heartbeatKey: HeartbeatKey | null = null;
-      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
         const creditKeys = Object.keys(agg.heartbeatCredits) as HeartbeatKey[];
         heartbeatKey = creditKeys[0] || "consistency";
         const updatedCredits = { ...userCredits };
@@ -1622,8 +1639,17 @@ export async function registerRoutes(
           growthResult = rewardResult.growthResult;
         }
 
+        // Guardrail: only count a restraint credit toward the daily cap once
+        // the reward transaction actually succeeded (not on dedup/db-failure skips)
+        if (agg.primaryCategory === "RS" && rewardResult.success) {
+          await storage.updateUser(userId, {
+            rsCreditsToday: rsCountToday + 1,
+            rsCreditsDate: rsDay,
+          } as any);
+        }
+
         // --- REWARD VERIFICATION LOGGING ---
-        if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
+        if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS")) {
           try {
             const debugEntries = await storage.getEntries(userId);
             const matchGoalForDebug = targetedGoal || untargetedGoal;
@@ -1775,7 +1801,7 @@ export async function registerRoutes(
         cBurnActive: user.cBurnActive || 0,
       });
 
-      const justVerified = agg.primaryCategory === "VA" || agg.primaryCategory === "AR";
+      const justVerified = agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS";
       if (escalation.driftWarning && !escalation.cBurnTriggered && !justVerified) {
         await storage.updateUser(userId, {
           lastDriftWarningAt: new Date(),
@@ -1800,7 +1826,7 @@ export async function registerRoutes(
         momentumBoostActive: boolean;
       } | null = null;
 
-      if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
+      if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS")) {
         const mg = targetedGoal || untargetedGoal;
         if (mg && mg.targetMetric && mg.targetMetric > 0) {
           try {
@@ -1944,7 +1970,7 @@ export async function registerRoutes(
         jaeMessage: jaeMsg,
         titan: { category: agg.primaryCategory, actionPoints: apDelta, insightPoints: ipDelta, driftMarkers: driftDelta },
         escalation: (escalation.escalationMessage && !justVerified) ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
-        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") ? (() => {
+        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") ? (() => {
           const mg = targetedGoal || untargetedGoal;
           // Prefer completionGrowthResult (includes bonus water) over normal reward result
           const effectiveGrowth = completionGrowthResult ?? growthResult;

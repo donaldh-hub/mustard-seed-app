@@ -42,6 +42,8 @@ export const users = pgTable("users", {
   lastVerifiedActionAt: timestamp("last_verified_action_at"),
   lastDriftWarningAt: timestamp("last_drift_warning_at"),
   driftWarningCount14d: integer("drift_warning_count_14d").notNull().default(0),
+  rsCreditsToday: integer("rs_credits_today").notNull().default(0),
+  rsCreditsDate: text("rs_credits_date").default(""),
   heartbeatCredits: jsonb("heartbeat_credits").notNull().default(sql`'{"clarity":0,"consistency":0,"mindset":0,"adaptation":0,"courage":0}'::jsonb`),
   weeklyCycleStart: timestamp("weekly_cycle_start"),
   subscriptionTier: text("subscription_tier").notNull().default("lite"),
