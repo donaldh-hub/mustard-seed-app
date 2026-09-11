@@ -213,7 +213,7 @@ function NudgeCard({
   );
 }
 
-type ReflectionQualification = "reflectionEntry" | "tooShort" | "duplicate";
+type ReflectionQualification = "reflectionEntry" | "tooShort" | "duplicate" | "restraintTooShort" | "restraintCapReached";
 
 function ReflectionCard({
   qualification, onDismiss,
@@ -234,6 +234,18 @@ function ReflectionCard({
     duplicate: {
       icon: <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500" />,
       text: "Already logged recently — your progress is saved.",
+      bg: "bg-emerald-50 border-emerald-200",
+      textColor: "text-emerald-800",
+    },
+    restraintTooShort: {
+      icon: <Ban className="w-3 h-3 shrink-0 text-amber-500" />,
+      text: "Say a bit more — what did you almost do, and what did you do instead?",
+      bg: "bg-amber-50 border-amber-200",
+      textColor: "text-amber-800",
+    },
+    restraintCapReached: {
+      icon: <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500" />,
+      text: "You've already earned today's restraint credit — noted, but real actions still grow the seed anytime.",
       bg: "bg-emerald-50 border-emerald-200",
       textColor: "text-emerald-800",
     },
@@ -607,7 +619,7 @@ export default function Chat() {
             description: `${category} · +${data.water!.actionPointsAccumulated} AP · Water added`,
             duration: 3000,
           });
-        } else if (qualification === "tooShort" || qualification === "duplicate") {
+        } else if (qualification === "tooShort" || qualification === "duplicate" || qualification === "restraintTooShort" || qualification === "restraintCapReached") {
           // Credibility rejection — show inline feedback card
           setInlineCards(prev => ({
             ...prev,

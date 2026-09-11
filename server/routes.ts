@@ -1412,14 +1412,31 @@ export async function registerRoutes(
 
       // --- PROGRESS CREDIBILITY VALIDATION ---
       // Runs immediately after TITAN classification, before any reward logic.
-      type EntryQualification = "verifiedAction" | "reflectionEntry" | "tooShort" | "duplicate";
+      type EntryQualification = "verifiedAction" | "reflectionEntry" | "tooShort" | "duplicate" | "restraintTooShort" | "restraintCapReached";
       let entryQualification: EntryQualification | null = null;
 
+      // Restraint (RS) is self-reported with no external proof, unlike a
+      // completed action — so it gets two extra anti-gaming guardrails below:
+      // a higher detail bar, and a hard daily ceiling on how many times it
+      // can be credited, tracked on the user record like the other TITAN
+      // counters (consecutiveIOCount, driftWarningCount14d, etc).
+      const RS_MIN_LENGTH = 35;
+      const RS_DAILY_CAP = 2;
+      const rsDay = clientLocalDate || todayStr();
+      const rsCountToday = user.rsCreditsDate === rsDay ? (user.rsCreditsToday || 0) : 0;
+
       if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
-        if (rawText.length < 20) {
+        const isRestraint = agg.primaryCategory === "RS";
+        const minLength = isRestraint ? RS_MIN_LENGTH : 20;
+        if (rawText.length < minLength) {
           // Too brief to verify — downgrade to reflection
           agg.primaryCategory = "RW";
-          entryQualification = "tooShort";
+          entryQualification = isRestraint ? "restraintTooShort" : "tooShort";
+        } else if (isRestraint && rsCountToday >= RS_DAILY_CAP) {
+          // Daily ceiling reached — restraint can't be farmed for infinite water
+          agg.primaryCategory = "RW";
+          entryQualification = "restraintCapReached";
+          console.log(`[CREDIBILITY] restraint_cap_reached | count=${rsCountToday} | cap=${RS_DAILY_CAP}`);
         } else {
           // Duplicate guard: check for same content logged within last 10 minutes
           const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
@@ -1620,6 +1637,15 @@ export async function registerRoutes(
           waterAwarded = true;
           waterGoalId = rewardResult.waterGoalId;
           growthResult = rewardResult.growthResult;
+        }
+
+        // Guardrail: only count a restraint credit toward the daily cap once
+        // the reward transaction actually succeeded (not on dedup/db-failure skips)
+        if (agg.primaryCategory === "RS" && rewardResult.success) {
+          await storage.updateUser(userId, {
+            rsCreditsToday: rsCountToday + 1,
+            rsCreditsDate: rsDay,
+          } as any);
         }
 
         // --- REWARD VERIFICATION LOGGING ---

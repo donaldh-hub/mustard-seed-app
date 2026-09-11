@@ -57,14 +57,18 @@ const AR_PATTERNS = [
 // paused long enough to choose differently. This is the "watering the pause"
 // moment — rewarded like a verified action even though nothing was completed,
 // because noticing and not acting is its own real win.
+// Deliberately excludes bare, contextless triggers like "chose not to" or
+// "decided not to" — those can be typed as a magic word with zero implied
+// struggle. Every pattern here requires naming the impulse/urge itself or a
+// setup-then-reversal shape, which at least forces the claim to describe
+// something specific rather than just claim a category tag.
 const RS_PATTERNS = [
-  /\b(almost|was about to|nearly)\b.*\b(but (i )?(didn't|did not|stopped|caught myself|held off|resisted|talked myself out of it|chose not to|decided not to))\b/i,
+  /\b(almost|was about to|nearly)\b.*\b(but (i )?(didn't|did not|stopped|caught myself|held off|resisted|talked myself out of it))\b/i,
   /\b(caught myself|stopped myself|held myself back|talked myself out of it)\b/i,
   /\b(resisted (the )?(urge|temptation|impulse)|fought (the )?(urge|temptation|impulse))\b/i,
-  /\b(wanted to|felt like|was tempted to)\b.*\b(but (i )?(didn't|did not|stopped|resisted|held off|chose not to|decided not to))\b/i,
+  /\b(wanted to|felt like|was tempted to)\b.*\b(but (i )?(didn't|did not|stopped|resisted|held off))\b/i,
   /\b(didn't (give in|cave|do it|act on it)|did not (give in|cave|do it|act on it))\b/i,
   /\b(took a (breath|beat|pause|moment)|paused)\b.*\b(instead|before|and (didn't|chose))\b/i,
-  /\b(chose not to|decided not to|held off on)\b/i,
 ];
 
 const IO_PATTERNS = [
