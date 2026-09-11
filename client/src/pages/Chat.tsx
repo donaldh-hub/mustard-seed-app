@@ -505,7 +505,7 @@ export default function Chat() {
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;
 
-      const isVerifiedAction = category === "VA" || category === "AR";
+      const isVerifiedAction = category === "VA" || category === "AR" || category === "RS";
 
       if (isVerifiedAction) {
         console.log("[SYNC] verifiedAction success");
@@ -545,7 +545,7 @@ export default function Chat() {
       // Set inline confirmation / nudge / reflection card for this Jai message
       if (jaeId) {
         const qualification = data?.entryQualification as ReflectionQualification | "verifiedAction" | null | undefined;
-        if ((category === "VA" || category === "AR") && data?.goalCompleted) {
+        if ((category === "VA" || category === "AR" || category === "RS") && data?.goalCompleted) {
           // Goal completion — trigger full-screen ceremony + keep inline card for history
           const gc = data.goalCompleted as GoalCompletionData;
           setInlineCards(prev => ({
@@ -591,7 +591,7 @@ export default function Chat() {
               console.error(`[CEREMONY_FLOW_ERROR] trigger | goalId=${gc.goalId} | err="${(ceremonyErr as Error).message}"`);
             }
           }
-        } else if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
+        } else if ((category === "VA" || category === "AR" || category === "RS") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
           // Reward card: confirms AP + water earned
           setInlineCards(prev => ({
             ...prev,

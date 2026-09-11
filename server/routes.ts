@@ -1415,7 +1415,7 @@ export async function registerRoutes(
       type EntryQualification = "verifiedAction" | "reflectionEntry" | "tooShort" | "duplicate";
       let entryQualification: EntryQualification | null = null;
 
-      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
         if (rawText.length < 20) {
           // Too brief to verify — downgrade to reflection
           agg.primaryCategory = "RW";
@@ -1511,7 +1511,7 @@ export async function registerRoutes(
 
       // Auto-resolve pending commitments when user takes real action
       const resolvedCommitments: string[] = [];
-      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
         const pending = await storage.getPendingCommitments(userId);
         for (const c of pending) {
           const actionWords = c.action.toLowerCase().split(/\s+/);
@@ -1545,7 +1545,7 @@ export async function registerRoutes(
         waterGoalId: null,
       };
 
-      // ZERO REWARD FOR TALK OR COMMITMENT — only VA/AR earn AP
+      // ZERO REWARD FOR TALK OR COMMITMENT — only VA/AR/RS earn AP
       // Commitments are tracked and followed up, but never rewarded
 
       const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
@@ -1569,7 +1569,7 @@ export async function registerRoutes(
 
       let finalStreak = streak;
       let heartbeatKey: HeartbeatKey | null = null;
-      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") {
+      if (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") {
         const creditKeys = Object.keys(agg.heartbeatCredits) as HeartbeatKey[];
         heartbeatKey = creditKeys[0] || "consistency";
         const updatedCredits = { ...userCredits };
@@ -1623,7 +1623,7 @@ export async function registerRoutes(
         }
 
         // --- REWARD VERIFICATION LOGGING ---
-        if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
+        if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS")) {
           try {
             const debugEntries = await storage.getEntries(userId);
             const matchGoalForDebug = targetedGoal || untargetedGoal;
@@ -1775,7 +1775,7 @@ export async function registerRoutes(
         cBurnActive: user.cBurnActive || 0,
       });
 
-      const justVerified = agg.primaryCategory === "VA" || agg.primaryCategory === "AR";
+      const justVerified = agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS";
       if (escalation.driftWarning && !escalation.cBurnTriggered && !justVerified) {
         await storage.updateUser(userId, {
           lastDriftWarningAt: new Date(),
@@ -1800,7 +1800,7 @@ export async function registerRoutes(
         momentumBoostActive: boolean;
       } | null = null;
 
-      if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
+      if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS")) {
         const mg = targetedGoal || untargetedGoal;
         if (mg && mg.targetMetric && mg.targetMetric > 0) {
           try {
@@ -1944,7 +1944,7 @@ export async function registerRoutes(
         jaeMessage: jaeMsg,
         titan: { category: agg.primaryCategory, actionPoints: apDelta, insightPoints: ipDelta, driftMarkers: driftDelta },
         escalation: (escalation.escalationMessage && !justVerified) ? { message: escalation.escalationMessage, cBurn: escalation.cBurnTriggered, driftWarning: escalation.driftWarning } : null,
-        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR") ? (() => {
+        water: (agg.primaryCategory === "VA" || agg.primaryCategory === "AR" || agg.primaryCategory === "RS") ? (() => {
           const mg = targetedGoal || untargetedGoal;
           // Prefer completionGrowthResult (includes bonus water) over normal reward result
           const effectiveGrowth = completionGrowthResult ?? growthResult;

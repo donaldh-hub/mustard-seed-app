@@ -1,4 +1,4 @@
-export type TitanCategory = "VA" | "AR" | "RW" | "IO" | "AD";
+export type TitanCategory = "VA" | "AR" | "RS" | "RW" | "IO" | "AD";
 
 export type HeartbeatKey = "clarity" | "consistency" | "mindset" | "adaptation" | "courage";
 
@@ -51,6 +51,20 @@ const AR_PATTERNS = [
   /\b(fell off)\b.*\b(back|again|restart)\b/i,
   /\b(adjusted|adapted|changed|modified|tweaked)\b.*\b(my approach|my plan|my routine|my strategy|what I was doing)\b/i,
   /\b(i messed up|i failed|i missed)\b.*\b(but)\b/i,
+];
+
+// RS — Restraint: the user almost acted on impulse and caught themselves, or
+// paused long enough to choose differently. This is the "watering the pause"
+// moment — rewarded like a verified action even though nothing was completed,
+// because noticing and not acting is its own real win.
+const RS_PATTERNS = [
+  /\b(almost|was about to|nearly)\b.*\b(but (i )?(didn't|did not|stopped|caught myself|held off|resisted|talked myself out of it|chose not to|decided not to))\b/i,
+  /\b(caught myself|stopped myself|held myself back|talked myself out of it)\b/i,
+  /\b(resisted (the )?(urge|temptation|impulse)|fought (the )?(urge|temptation|impulse))\b/i,
+  /\b(wanted to|felt like|was tempted to)\b.*\b(but (i )?(didn't|did not|stopped|resisted|held off|chose not to|decided not to))\b/i,
+  /\b(didn't (give in|cave|do it|act on it)|did not (give in|cave|do it|act on it))\b/i,
+  /\b(took a (breath|beat|pause|moment)|paused)\b.*\b(instead|before|and (didn't|chose))\b/i,
+  /\b(chose not to|decided not to|held off on)\b/i,
 ];
 
 const IO_PATTERNS = [
@@ -180,6 +194,19 @@ export function classifyMessage(message: string): TitanClassification {
     }
   }
 
+  for (const pattern of RS_PATTERNS) {
+    if (pattern.test(msg)) {
+      return {
+        category: "RS",
+        actionPoints: 2,
+        insightPoints: 0,
+        driftMarker: 0,
+        heartbeatCredit: "mindset",
+        label: "Verified Restraint",
+      };
+    }
+  }
+
   for (const pattern of VA_PATTERNS) {
     if (pattern.test(msg)) {
       const heartbeat = mapHeartbeat(msg);
@@ -252,7 +279,7 @@ export function classifyMultipleActions(message: string): TitanClassification[] 
   const results: TitanClassification[] = [];
   for (const sentence of sentences) {
     const classification = classifyMessage(sentence);
-    if (classification.category === "VA" || classification.category === "AR") {
+    if (classification.category === "VA" || classification.category === "AR" || classification.category === "RS") {
       results.push(classification);
     }
   }
@@ -433,7 +460,7 @@ export function computeEscalationFromMessages(
     .reduce((count, m) => {
       const c = classifyMultipleActions(m.text);
       const a = aggregateClassifications(c);
-      return count + (a.primaryCategory === "VA" ? 1 : 0);
+      return count + ((a.primaryCategory === "VA" || a.primaryCategory === "RS") ? 1 : 0);
     }, 0);
 
   const hasDriftWarning = user.lastDriftWarningAt
