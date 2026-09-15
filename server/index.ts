@@ -50,6 +50,52 @@ async function ensureSchema() {
         created_at TIMESTAMP DEFAULT now()
       );
     `);
+    // Bill Advocacy — medical bill dispute product. Isolated tables, no FKs
+    // into the Mustard Seed schema above.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bill_advocacy_clients (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT,
+        sms_consent_given BOOLEAN NOT NULL DEFAULT false,
+        sms_consent_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bill_advocacy_cases (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        client_id VARCHAR NOT NULL REFERENCES bill_advocacy_clients(id) ON DELETE CASCADE,
+        provider_name TEXT,
+        insurance_involved BOOLEAN NOT NULL DEFAULT false,
+        fee_percent_agreed REAL,
+        authorization_doc_ref TEXT,
+        authorization_signed_at TIMESTAMP,
+        dispute_amount NUMERIC(10, 2),
+        amount_saved NUMERIC(10, 2),
+        resolution_type TEXT,
+        submitted_at TIMESTAMP,
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bill_advocacy_events (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        entity_id VARCHAR NOT NULL,
+        entity_type TEXT NOT NULL,
+        stage INTEGER NOT NULL,
+        dollar_value NUMERIC(10, 2),
+        notes TEXT,
+        proof_document_ref TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS bill_advocacy_events_entity_idx
+        ON bill_advocacy_events (entity_id, entity_type);
+    `);
     console.log("[schema] auto-migration complete");
   } catch (err) {
     console.error("[schema] auto-migration error (non-fatal):", err);

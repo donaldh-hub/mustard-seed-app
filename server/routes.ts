@@ -27,6 +27,7 @@ import { assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal, RebuildInstance } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { registerBillAdvocacyRoutes } from "./billAdvocacy/routes";
 import { sql } from "drizzle-orm";
 
 // ─── Security helpers ────────────────────────────────────────────────────────
@@ -391,6 +392,7 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   registerObjectStorageRoutes(app);
+  registerBillAdvocacyRoutes(app);
 
   app.use("/api/users", requireAuth);
   app.use("/api/goals", requireAuth);
