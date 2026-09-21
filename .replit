@@ -38,3 +38,6 @@ channel = "stable-25_05"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 300000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-1fc367e4-67bd-4627-85e9-04e9dfa701e1"
