@@ -62,7 +62,7 @@ async function sendDunningEmail(userId: string, attemptNumber: 1 | 2 | 3): Promi
   const user = await storage.getUser(userId);
   if (!user?.email) return false;
 
-  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseedapp.com";
+  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseeddap.com";
   const copy = DUNNING_COPY_DRAFT[attemptNumber];
 
   try {

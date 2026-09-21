@@ -103,7 +103,7 @@ async function sendAnomalyAlert(check: AnomalyCheck): Promise<boolean> {
     console.warn(`[ANALYTICS] Anomaly alert NOT sent (RESEND_API_KEY/FOUNDER_ALERT_EMAIL not set) — ${check.metric}`);
     return false;
   }
-  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseedapp.com";
+  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseeddap.com";
   try {
     const resend = new Resend(apiKey);
     const { error } = await resend.emails.send({

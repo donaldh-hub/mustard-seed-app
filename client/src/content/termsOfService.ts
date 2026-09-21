@@ -34,7 +34,7 @@ To use most features of the Service, you must create an account using a valid em
 Each user may maintain only one active Mustard Seed account. We use email, phone number, and device verification to detect duplicate accounts. If you already have an account, you must sign in to your existing account rather than create a new one — including when switching between the website and the app.
 
 ### 3.3 Account Security
-You are responsible for maintaining the confidentiality of your password and for all activity that occurs under your account. Notify us immediately at support@mustardseedapp.com if you suspect unauthorized access.
+You are responsible for maintaining the confidentiality of your password and for all activity that occurs under your account. Notify us immediately at support@mustardseeddap.com if you suspect unauthorized access.
 
 ### 3.4 Verification
 We may require email or SMS verification to confirm your identity, link your website and app sessions, or prevent fraudulent account creation. We do not store verification codes in plain text and do not permit unlimited resend attempts.
@@ -73,10 +73,10 @@ By subscribing, you authorize us (through our payment processor, Stripe) to char
 The Five Heartbeats Assessment and the 3-Day Grounding Journal are offered free of charge. The 7-Day Rebuild and/or continued use of certain coaching, tracking, and review features may require payment, as indicated in the Service at the time of access. **You are never charged without a clear opportunity to review pricing before payment is collected.**
 
 ### 5.4 Cancellation
-You may cancel your subscription at any time through your account settings or by contacting support@mustardseedapp.com. Cancellation takes effect at the end of the current billing period. You will retain access to paid features through the end of the period you have already paid for.
+You may cancel your subscription at any time through your account settings or by contacting support@mustardseeddap.com. Cancellation takes effect at the end of the current billing period. You will retain access to paid features through the end of the period you have already paid for.
 
 ### 5.5 Refunds
-Except where required by law, payments are non-refundable, including for partial subscription periods. We may, at our sole discretion, issue refunds on a case-by-case basis for billing errors or extenuating circumstances. To request a refund, contact support@mustardseedapp.com.
+Except where required by law, payments are non-refundable, including for partial subscription periods. We may, at our sole discretion, issue refunds on a case-by-case basis for billing errors or extenuating circumstances. To request a refund, contact support@mustardseeddap.com.
 
 ### 5.6 Price Changes
 We may change subscription pricing. If a price change affects your existing subscription, we will provide advance notice before the change takes effect on your next renewal. Continued use after a price change takes effect constitutes acceptance of the new price.
@@ -154,7 +154,7 @@ Upon termination, your right to use the Service ceases immediately. Sections tha
 
 ## 12. Dispute Resolution and Governing Law
 
-These Terms are governed by the laws of [INSERT STATE], United States, without regard to conflict-of-law principles. Any dispute arising from these Terms or the Service shall first be attempted to be resolved informally by contacting support@mustardseedapp.com. [OPTIONAL: insert arbitration clause and venue once business entity/state is finalized — recommend attorney review for this section specifically.]
+These Terms are governed by the laws of [INSERT STATE], United States, without regard to conflict-of-law principles. Any dispute arising from these Terms or the Service shall first be attempted to be resolved informally by contacting support@mustardseeddap.com. [OPTIONAL: insert arbitration clause and venue once business entity/state is finalized — recommend attorney review for this section specifically.]
 
 ---
 
@@ -167,7 +167,7 @@ We may update these Terms from time to time. If we make material changes, we wil
 ## 14. Contact Us
 
 **Mustard Seed App**
-support@mustardseedapp.com
+support@mustardseeddap.com
 
 ---
 

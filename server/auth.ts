@@ -35,7 +35,7 @@ async function sendPasswordResetEmail(
     return false;
   }
 
-  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseedapp.com";
+  const fromEmail = process.env.FROM_EMAIL || "noreply@mustardseeddap.com";
 
   try {
     const resend = new Resend(apiKey);

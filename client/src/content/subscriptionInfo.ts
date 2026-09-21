@@ -19,9 +19,9 @@ Here's how the path works, and what to expect at each step:
 - **You can cancel anytime.** Cancel from your account settings. You'll keep access through the end of your current billing period — we don't cut you off mid-period.
 - **No surprise charges.** You'll always see the price before you're charged, and we'll notify you in advance if pricing ever changes for your plan.
 - **Payments are handled by Stripe**, a trusted third-party payment processor. We don't store your full card number.
-- **Refunds** are handled case-by-case. If something went wrong with a charge, email us at support@mustardseedapp.com and we'll make it right where we can.
+- **Refunds** are handled case-by-case. If something went wrong with a charge, email us at support@mustardseeddap.com and we'll make it right where we can.
 
 We built this funnel so you never feel rushed into paying before you've actually experienced the value. The goal was never to sell you on Day 1. It's to still be useful on Day 100.
 
-*Questions about billing? Contact support@mustardseedapp.com.*
+*Questions about billing? Contact support@mustardseeddap.com.*
 `;
