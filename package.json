@@ -12,7 +12,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.22.0",
+    "@google-cloud/storage": "^8.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -55,8 +55,8 @@
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
     "date-fns": "^3.6.0",
-    "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.7.1",
+    "drizzle-orm": "0.45.2",
+    "drizzle-zod": "0.8.3",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.0.1",
     "express-rate-limit": "^8.5.2",
@@ -110,8 +110,8 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.21",
-    "drizzle-kit": "^0.31.4",
-    "esbuild": "^0.25.0",
+    "drizzle-kit": "0.31.10",
+    "esbuild": "0.25.12",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
@@ -122,6 +122,9 @@
     "bufferutil": "^4.0.8"
   },
   "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    },
     "@tootallnate/once": "2.0.1",
     "body-parser": "2.3.0",
     "brace-expansion": "2.1.4",
@@ -134,6 +137,7 @@
     "picomatch": "4.0.5",
     "qs": "6.15.3",
     "rollup": "4.62.4",
+    "uuid": "11.1.1",
     "@uppy/core": {
       "nanoid": "5.1.16"
     },

@@ -151,7 +151,7 @@ export interface IStorage {
 }
 
 export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+const db = drizzle({ client: pool });
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
