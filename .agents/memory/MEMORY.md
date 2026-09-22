@@ -1,0 +1,1 @@
+- [Stable Drizzle toolchain](stable-drizzle-toolchain.md) — Exact stable Drizzle releases need a loader-scoped esbuild override to keep migrations secure.
