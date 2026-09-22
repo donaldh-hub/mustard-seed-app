@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, jsonb, real, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const SUBSCRIPTION_STATES = [
   "LITE",
@@ -109,7 +108,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
 });
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
 export const passwordResetTokens = pgTable("password_reset_tokens", {
@@ -146,7 +145,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   createdAt: true,
 });
-export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type InsertMessage = typeof messages.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 
 export const photoMemories = pgTable("photo_memories", {
@@ -168,7 +167,7 @@ export const insertPhotoMemorySchema = createInsertSchema(photoMemories).omit({
   id: true,
   createdAt: true,
 });
-export type InsertPhotoMemory = z.infer<typeof insertPhotoMemorySchema>;
+export type InsertPhotoMemory = typeof photoMemories.$inferInsert;
 export type PhotoMemory = typeof photoMemories.$inferSelect;
 
 export const goals = pgTable("goals", {
@@ -203,7 +202,7 @@ export const insertGoalSchema = createInsertSchema(goals).omit({
   id: true,
   createdAt: true,
 });
-export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type InsertGoal = typeof goals.$inferInsert;
 export type Goal = typeof goals.$inferSelect;
 
 export const entries = pgTable("entries", {
@@ -221,7 +220,7 @@ export const insertEntrySchema = createInsertSchema(entries).omit({
   id: true,
   createdAt: true,
 });
-export type InsertEntry = z.infer<typeof insertEntrySchema>;
+export type InsertEntry = typeof entries.$inferInsert;
 export type Entry = typeof entries.$inferSelect;
 
 export const weeklyReviews = pgTable("weekly_reviews", {
@@ -242,7 +241,7 @@ export const insertWeeklyReviewSchema = createInsertSchema(weeklyReviews).omit({
   id: true,
   createdAt: true,
 });
-export type InsertWeeklyReview = z.infer<typeof insertWeeklyReviewSchema>;
+export type InsertWeeklyReview = typeof weeklyReviews.$inferInsert;
 export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 
 export const commitments = pgTable("commitments", {
@@ -260,7 +259,7 @@ export const insertCommitmentSchema = createInsertSchema(commitments).omit({
   id: true,
   createdAt: true,
 });
-export type InsertCommitment = z.infer<typeof insertCommitmentSchema>;
+export type InsertCommitment = typeof commitments.$inferInsert;
 export type Commitment = typeof commitments.$inferSelect;
 
 export const assessments = pgTable("assessments", {
@@ -279,7 +278,7 @@ export const insertAssessmentSchema = createInsertSchema(assessments).omit({
   id: true,
   createdAt: true,
 });
-export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
+export type InsertAssessment = typeof assessments.$inferInsert;
 export type Assessment = typeof assessments.$inferSelect;
 
 // ─── Trust & Safety (Agent 01) ───────────────────────────────────────────────
