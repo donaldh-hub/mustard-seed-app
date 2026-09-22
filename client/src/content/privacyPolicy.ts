@@ -1,9 +1,9 @@
 export const PRIVACY_POLICY_MD = `# Privacy Policy
 
 **Effective Date:** June 20, 2026
-**Last Updated:** June 20, 2026
+**Last Updated:** September 22, 2026
 
-Mustard Seed App ("Mustard Seed," "we," "us," or "our") respects your privacy and is committed to protecting it through this Privacy Policy. This Policy explains what information we collect, how we use it, how we protect it, and the choices you have.
+Mustard Seed App ("Mustard Seed," "we," "us," or "our"), a product of HARDAWAYAI LLC, a New York limited liability company, respects your privacy and is committed to protecting it through this Privacy Policy. This Policy explains what information we collect, how we use it, how we protect it, and the choices you have.
 
 By creating an account, using the Mustard Seed app or website, or otherwise using our services (collectively, the "Service"), you agree to the collection and use of information in accordance with this Policy.
 
@@ -91,11 +91,11 @@ If you request account deletion, we will delete or anonymize your personal infor
 ## 6. Your Choices and Rights
 
 - **Access and correction:** you may review and update your profile information directly in the app or website at any time.
-- **Account deletion:** you may request deletion of your account and associated data by contacting us at support@mustardseedapp.com. We will confirm once deletion is complete.
+- **Account deletion:** you may request deletion of your account and associated data by contacting us at support@mustardseeddap.com. We will confirm once deletion is complete.
 - **Marketing communications:** you may opt out of non-essential marketing emails or notifications at any time using the unsubscribe link or in-app settings. You cannot opt out of essential account or security communications (such as verification codes or payment receipts) while your account remains active.
 - **Photo data:** you may delete individual photo uploads from your account. Deleted photos are removed from active display; associated progress already awarded is not retroactively reversed.
 
-If you are a California resident or a resident of another jurisdiction with specific privacy rights, additional rights may apply to you. Contact us at support@mustardseedapp.com and we will respond consistent with applicable law.
+If you are a California resident or a resident of another jurisdiction with specific privacy rights, additional rights may apply to you. Contact us at support@mustardseeddap.com and we will respond consistent with applicable law.
 
 ---
 
@@ -114,7 +114,7 @@ No method of transmission or storage is 100% secure. We cannot guarantee absolut
 
 ## 8. Children's Privacy
 
-The Service is not directed to children under 13, and we do not knowingly collect personal information from children under 13. If we learn that we have collected personal information from a child under 13 without parental consent, we will delete that information promptly. If you believe a child has provided us with personal information, contact us at support@mustardseedapp.com.
+The Service is not directed to children under 13, and we do not knowingly collect personal information from children under 13. If we learn that we have collected personal information from a child under 13 without parental consent, we will delete that information promptly. If you believe a child has provided us with personal information, contact us at support@mustardseeddap.com.
 
 ---
 
@@ -153,7 +153,8 @@ We may update this Privacy Policy from time to time. If we make material changes
 If you have questions about this Privacy Policy or how we handle your information, contact us at:
 
 **Mustard Seed App**
-support@mustardseedapp.com
+HARDAWAYAI LLC
+support@mustardseeddap.com
 
 ---
 
