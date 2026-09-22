@@ -1,9 +1,9 @@
 export const PRIVACY_POLICY_MD = `# Privacy Policy
 
 **Effective Date:** June 20, 2026
-**Last Updated:** June 20, 2026
+**Last Updated:** September 22, 2026
 
-Mustard Seed App ("Mustard Seed," "we," "us," or "our") respects your privacy and is committed to protecting it through this Privacy Policy. This Policy explains what information we collect, how we use it, how we protect it, and the choices you have.
+Mustard Seed App ("Mustard Seed," "we," "us," or "our"), a product of HARDAWAYAI LLC, a New York limited liability company, respects your privacy and is committed to protecting it through this Privacy Policy. This Policy explains what information we collect, how we use it, how we protect it, and the choices you have.
 
 By creating an account, using the Mustard Seed app or website, or otherwise using our services (collectively, the "Service"), you agree to the collection and use of information in accordance with this Policy.
 
@@ -153,6 +153,7 @@ We may update this Privacy Policy from time to time. If we make material changes
 If you have questions about this Privacy Policy or how we handle your information, contact us at:
 
 **Mustard Seed App**
+HARDAWAYAI LLC
 support@mustardseeddap.com
 
 ---

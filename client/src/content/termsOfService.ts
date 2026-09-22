@@ -1,9 +1,9 @@
 export const TERMS_OF_SERVICE_MD = `# Terms of Service
 
 **Effective Date:** June 20, 2026
-**Last Updated:** June 20, 2026
+**Last Updated:** September 22, 2026
 
-Please read these Terms of Service ("Terms") carefully before using Mustard Seed App ("Mustard Seed," "we," "us," or "our"). These Terms govern your access to and use of the Mustard Seed website, mobile app, and related services (collectively, the "Service").
+Please read these Terms of Service ("Terms") carefully before using Mustard Seed App ("Mustard Seed," "we," "us," or "our"), a product of HARDAWAYAI LLC, a New York limited liability company. These Terms govern your access to and use of the Mustard Seed website, mobile app, and related services (collectively, the "Service").
 
 By creating an account or using the Service, you agree to be bound by these Terms. If you do not agree, do not use the Service.
 
@@ -116,7 +116,7 @@ You agree not to:
 
 ## 8. Intellectual Property
 
-The Service, including its design, features, Jai's character and content, the "Five Heartbeats" framework, logos, and all related materials, is owned by Mustard Seed App and protected by intellectual property laws. Except for the limited license to use the Service as intended, no rights are granted to you in our intellectual property.
+The Service, including its design, features, Jai's character and content, the "Five Heartbeats" framework, logos, and all related materials, is owned by HARDAWAYAI LLC and protected by intellectual property laws. Except for the limited license to use the Service as intended, no rights are granted to you in our intellectual property.
 
 ---
 
@@ -154,7 +154,7 @@ Upon termination, your right to use the Service ceases immediately. Sections tha
 
 ## 12. Dispute Resolution and Governing Law
 
-These Terms are governed by the laws of [INSERT STATE], United States, without regard to conflict-of-law principles. Any dispute arising from these Terms or the Service shall first be attempted to be resolved informally by contacting support@mustardseeddap.com. [OPTIONAL: insert arbitration clause and venue once business entity/state is finalized — recommend attorney review for this section specifically.]
+These Terms are governed by the laws of the State of New York, United States, without regard to conflict-of-law principles. Any dispute arising from these Terms or the Service shall first be attempted to be resolved informally by contacting support@mustardseeddap.com.
 
 ---
 
@@ -167,6 +167,7 @@ We may update these Terms from time to time. If we make material changes, we wil
 ## 14. Contact Us
 
 **Mustard Seed App**
+HARDAWAYAI LLC
 support@mustardseeddap.com
 
 ---
