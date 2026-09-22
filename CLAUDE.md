@@ -1,6 +1,9 @@
 # Mustard Seed — Agent Instructions
 
 ## Role
+These rules apply to Replit's Agent only. Claude Code sessions may edit,
+commit, and push on `claude/*` branches (never directly to `main`).
+
 This Replit environment is for HOSTING ONLY.
 Do not write, edit, or commit code here.
 Do not run git add, git commit, or git push.
