@@ -1,7 +1,7 @@
 export const PRIVACY_POLICY_MD = `# Privacy Policy
 
 **Effective Date:** June 20, 2026
-**Last Updated:** September 22, 2026
+**Last Updated:** September 23, 2026
 
 Mustard Seed App ("Mustard Seed," "we," "us," or "our"), a product of HARDAWAYAI LLC, a New York limited liability company, respects your privacy and is committed to protecting it through this Privacy Policy. This Policy explains what information we collect, how we use it, how we protect it, and the choices you have.
 
@@ -19,7 +19,7 @@ We collect information in three ways: information you give us directly, informat
 
 - **Account information:** first name, email address, phone number, and password (or sign-in credentials if you use Google Sign-In).
 - **Profile and assessment information:** your responses to the Five Heartbeats Assessment, your stated goals, your "why," selected programs (3-Day Grounding Journal, 7-Day Rebuild), and journal or reflection entries.
-- **Progress content you submit:** text reflections, journal entries, weekly/monthly review responses, and conversations with Jai, our AI coaching companion.
+- **Progress content you submit:** text reflections, journal entries, weekly review responses, assessment answers (including recalibrations), and conversations with Jai, our AI coaching companion.
 - **Photos you upload:** images you submit as proof of action toward your goal. Photos may be analyzed (by us or our service providers, including AI image-analysis tools) to determine relevance to your stated goal for the purpose of awarding in-app progress ("water").
 - **Payment information:** if you subscribe, payment is processed by Stripe, our third-party payment processor. We do not store your full credit card number on our servers. See Section 4.
 - **Communications:** messages you send us for support, feedback, or account requests.
@@ -44,7 +44,7 @@ We do **not** knowingly collect more payment information than is necessary to pr
 We use the information we collect to:
 
 1. Create and maintain your account, and keep your account synced between the Mustard Seed website and app.
-2. Operate core features, including the Five Heartbeats Assessment, goal tracking, Jai's coaching responses, photo verification, water/progress rewards, calendar memory, and weekly/monthly reviews.
+2. Operate core features, including the Five Heartbeats Assessment, goal tracking, Jai's coaching responses, photo verification, water/progress rewards, calendar memory, weekly reviews, and assessment recalibrations.
 3. Personalize Jai's coaching using your stated goal, your "why," your assessment results, and your recent activity, so that coaching feels relevant rather than generic.
 4. Process subscription payments and manage your subscription status.
 5. Send you account-related communications, including verification codes, password reset emails, receipts, and service updates.

@@ -214,6 +214,9 @@ export const entries = pgTable("entries", {
   summary: text("summary").notNull(),
   mood: text("mood").notNull(),
   userTimezone: text("user_timezone"),
+  // Growth-garden water this entry is worth when mood is "happy". 1 for a
+  // normal action; Premium "weighted water" records 2 for courage/recovery.
+  waterUnits: integer("water_units").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -18,13 +18,13 @@ import { proposeTest, approveTest, recordImpression, recordConversion, checkSign
 import { logItem, listReleaseItems, stageItem, verifyItem, markShipped, rejectItem, getChangelog } from "./releaseOpsAgent";
 import { getMasterQueue, routeIncomingTask, checkForConflicts } from "./chiefOfStaffAgent";
 import { buildContinuityContext } from "./continuityContext";
-import { evaluateHeartbeatDirections, generateCollectiveAnalysis } from "./weeklyReview";
+import { evaluateHeartbeatDirections, generateCollectiveAnalysis, type HeartbeatDirections } from "./weeklyReview";
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
 import { assessments, insertGoalSchema } from "@shared/schema";
-import type { InsertAssessment, Assessment, Goal, RebuildInstance } from "@shared/schema";
+import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
@@ -73,6 +73,97 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction) {
 
 function todayStr(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+// Shift a calendar date string (YYYY-MM-DD) by whole days. Pure date math in
+// UTC so the result never drifts with the server's timezone — the input is
+// already the user's local date.
+function shiftDateStr(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+// Rewarded ("happy") entries that count toward a goal's garden. An entry counts
+// if it was written after the goal was planted, or falls on/after the goal's
+// UTC planting date (the original rule, kept so no existing garden shrinks).
+// The timestamp check fixes evening actions in US timezones, whose local date
+// is a day behind the UTC planting date.
+function rewardedEntriesForGoal(goal: Goal, entries: Entry[]): Entry[] {
+  const plantedAt = goal.createdAt ? new Date(goal.createdAt).getTime() : 0;
+  const plantedDate = goal.createdAt ? new Date(goal.createdAt).toISOString().split("T")[0] : "1970-01-01";
+  return entries.filter((e) =>
+    e.mood === "happy" &&
+    (e.date >= plantedDate || (!!e.createdAt && new Date(e.createdAt).getTime() >= plantedAt))
+  );
+}
+
+// The single growth calculation every screen shows: garden, chat water bar,
+// photo and confirm-progress responses. Water = sum of rewarded entries'
+// waterUnits (1 each, 2 for Premium weighted actions).
+function computeDisplayGrowth(goal: Goal, entries: Entry[], user: User | undefined) {
+  const waterCount = rewardedEntriesForGoal(goal, entries)
+    .reduce((sum, e) => sum + (e.waterUnits ?? 1), 0);
+  const boostEligible = goal.goalType === "targeted" && !!user && !user.firstGoalMomentumUsed;
+  const growth = boostEligible
+    ? computeGrowthStateWithBoost(waterCount)
+    : computeGrowthStateFromEntries(waterCount);
+  return {
+    ...growth,
+    waterCount,
+    boostEligible,
+    momentumBoostActive: boostEligible && waterCount < BOOST_FIRST_CUP_THRESHOLD,
+  };
+}
+
+// Water-bar animation fields for a before/after pair of display growth states.
+function waterTransition(
+  before: ReturnType<typeof computeDisplayGrowth>,
+  after: ReturnType<typeof computeDisplayGrowth>,
+) {
+  const cupJustFilled = after.cupsFilled > before.cupsFilled;
+  return {
+    waterEvents: after.waterEvents,
+    cupsFilled: after.cupsFilled,
+    seedStage: after.seedStage,
+    fillPercent: after.fillPercent,
+    cupJustFilled,
+    stageAdvanced: after.seedStage > before.seedStage,
+    preResetFillPercent: cupJustFilled ? 100 : after.fillPercent,
+  };
+}
+
+// Premium "weighted water": courage actions and adaptive recoveries (doing it
+// anyway on a hard day) are worth 2 garden water instead of 1.
+function weightedWaterUnits(user: User, category: string, heartbeat: string | null): number {
+  if (!getFeatureLimits(user).waterWeighting) return 1;
+  return category === "AR" || heartbeat === "courage" ? 2 : 1;
+}
+
+// Lite weekly review: a plain-language recap built from the week's numbers,
+// with no AI call.
+function buildWeeklySummary(
+  goalProgress: { hasGoal: boolean; goalStatement?: string; netChange?: number | null },
+  directions: HeartbeatDirections,
+): string {
+  const parts: string[] = [];
+  if (goalProgress.hasGoal) {
+    const net = goalProgress.netChange;
+    parts.push(net == null
+      ? `This week you kept "${goalProgress.goalStatement}" in front of you.`
+      : `"${goalProgress.goalStatement}" moved ${net > 0 ? "+" : ""}${net} this week.`);
+  } else {
+    parts.push("No targeted goal was active this week.");
+  }
+  const named = (dir: string) => Object.entries(directions)
+    .filter(([k, d]) => d === dir && HEARTBEAT_NAMES[k as HeartbeatKey])
+    .map(([k]) => HEARTBEAT_NAMES[k as HeartbeatKey]);
+  const rising = named("up");
+  const slipping = named("down");
+  if (rising.length) parts.push(`Rising: ${rising.join(", ")}.`);
+  if (slipping.length) parts.push(`Needs attention: ${slipping.join(", ")}.`);
+  if (!rising.length && !slipping.length) parts.push("Your heartbeats held steady.");
+  return parts.join(" ");
 }
 
 function pick<T>(arr: T[]): T {
@@ -1528,6 +1619,8 @@ export async function registerRoutes(
       let waterAwarded = false;
       let waterGoalId: string | null = null;
       let growthResult: any = null;
+      // Garden water-bar state (same calculation as garden-summary) for the response.
+      let displayWater: ReturnType<typeof waterTransition> | null = null;
       let postUpdateAP: number | null = null;
       let apDelta = agg.totalActionPoints;
       // Goal-aware override: ensure baseline 3 AP so the reward engine creates the entry
@@ -1603,6 +1696,9 @@ export async function registerRoutes(
         console.log(`[STREAK] syncCompleted: true, userId: ${userId}`);
 
         const matchGoal = targetedGoal || untargetedGoal;
+        const growthBefore = matchGoal
+          ? computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user)
+          : null;
 
         // --- CENTRAL REWARD ENGINE: single source of truth for AP/water/entry ---
         rewardResult = await processRewardTransaction({
@@ -1613,7 +1709,13 @@ export async function registerRoutes(
           actionType: agg.primaryCategory as RewardActionType,
           todayStr: clientLocalDate || todayStr(),
           userTimezone: clientTimezone,
+          waterUnits: weightedWaterUnits(user, agg.primaryCategory, heartbeatKey),
         });
+
+        if (matchGoal && growthBefore && rewardResult.success) {
+          const growthAfter = computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user);
+          displayWater = waterTransition(growthBefore, growthAfter);
+        }
 
         if (rewardResult.postUpdateAP !== null) postUpdateAP = rewardResult.postUpdateAP;
         if (rewardResult.waterAwarded && rewardResult.growthResult) {
@@ -1623,33 +1725,12 @@ export async function registerRoutes(
         }
 
         // --- REWARD VERIFICATION LOGGING ---
-        if (rewardResult.success && (agg.primaryCategory === "VA" || agg.primaryCategory === "AR")) {
-          try {
-            const debugEntries = await storage.getEntries(userId);
-            const matchGoalForDebug = targetedGoal || untargetedGoal;
-            const goalCreatedDebug = matchGoalForDebug?.createdAt
-              ? new Date(matchGoalForDebug.createdAt).toISOString().split("T")[0]
-              : "1970-01-01";
-            const entryCount = debugEntries.filter(
-              (e) => e.mood === "happy" && e.date >= goalCreatedDebug
-            ).length;
-            const prevGrowth = computeGrowthStateFromEntries(Math.max(0, entryCount - 1));
-            const newGrowth = computeGrowthStateFromEntries(entryCount);
-            const stageChanged = prevGrowth.seedStage !== newGrowth.seedStage;
-            const stageInfo = SEED_STAGE_INFO[newGrowth.seedStage] || SEED_STAGE_INFO[0];
-            console.log(`[DEBUG] REWARD_VERIFICATION | actionType=${agg.primaryCategory} | apAwarded=${rewardResult.apActuallyAwarded}`);
-            console.log(`  VA/AR entries toward goal: ${entryCount} (was ${entryCount - 1})`);
-            console.log(`  fillPercent: ${prevGrowth.fillPercent}% → ${newGrowth.fillPercent}%`);
-            console.log(`  cupsFilled: ${prevGrowth.cupsFilled} → ${newGrowth.cupsFilled}`);
-            if (stageChanged) {
-              const prevInfo = SEED_STAGE_INFO[prevGrowth.seedStage] || SEED_STAGE_INFO[0];
-              console.log(`  SEED STAGE CHANGE: stage ${prevGrowth.seedStage} (${prevInfo.name}) → stage ${newGrowth.seedStage} (${stageInfo.name})`);
-            } else {
-              console.log(`  seedStage: ${newGrowth.seedStage} (${stageInfo.name}) [unchanged]`);
-            }
-          } catch (debugErr) {
-            console.error("[DEBUG] REWARD_VERIFICATION log failed:", (debugErr as Error).message);
-          }
+        if (displayWater) {
+          console.log(
+            `[REWARD] GARDEN | actionType=${agg.primaryCategory} | apAwarded=${rewardResult.apActuallyAwarded} ` +
+            `| water=${displayWater.waterEvents} | fill=${displayWater.fillPercent}% | cups=${displayWater.cupsFilled} ` +
+            `| stage=${displayWater.seedStage} | cupJustFilled=${displayWater.cupJustFilled} | stageAdvanced=${displayWater.stageAdvanced}`
+          );
         }
 
         // --- PROGRESS MODE: Anime Celebration Engine ---
@@ -1806,12 +1887,7 @@ export async function registerRoutes(
           try {
             const feedbackEntries = await storage.getEntries(userId);
             const pfUser = await storage.getUser(userId);
-            const goalCreated = mg.createdAt
-              ? new Date(mg.createdAt).toISOString().split("T")[0]
-              : "1970-01-01";
-            const completedUnits = feedbackEntries.filter(
-              (e) => e.mood === "happy" && e.date >= goalCreated
-            ).length;
+            const completedUnits = rewardedEntriesForGoal(mg, feedbackEntries).length;
 
             // Momentum Boost: active for user's first targeted goal until first cup fills
             const boostEligible = mg.goalType === "targeted" && pfUser && !pfUser.firstGoalMomentumUsed;
@@ -1952,6 +2028,19 @@ export async function registerRoutes(
           const cf = effectiveGrowth?.cupsFilled ?? (mg?.cupsFilled ?? 0);
           const ap = completionGrowthResult ? 0 : (postUpdateAP ?? ((mg?.actionPoints ?? 0) + apDelta));
           const fillPct = Math.min(100, Math.round(we * 10 + ap));
+          // Normal actions report the garden's own numbers so the chat water
+          // bar matches Home/Progress; the completion ceremony keeps its bonus.
+          if (displayWater && !completionGrowthResult) {
+            return {
+              awarded: rewardResult.success && rewardResult.apActuallyAwarded > 0 && !!mg,
+              goalId: mg?.id || null,
+              ...displayWater,
+              actionPointsAccumulated: rewardResult.apActuallyAwarded,
+              actionPointsNeeded: 10,
+              rewardTransaction: rewardResult.skipReason ?? "success",
+              progressFeedback,
+            };
+          }
           return {
             // awarded is TRUE when reward transaction succeeded OR when completion bonus fired
             awarded: (rewardResult.success && rewardResult.apActuallyAwarded > 0 && !!mg) || !!completionGrowthResult,
@@ -2016,7 +2105,7 @@ export async function registerRoutes(
   app.post("/api/users/:userId/confirm-progress", async (req, res) => {
     try {
       const { userId } = req.params;
-      const { rawText } = req.body;
+      const { rawText, localDate, userTimezone } = req.body;
       if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
         return res.status(400).json({ message: "rawText required" });
       }
@@ -2024,20 +2113,23 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
-      const todayStr = new Date().toISOString().split("T")[0];
       const goals = await storage.getActiveGoals(userId);
-      const targetedGoal = goals.find((g: any) => g.goalType === "targeted") || null;
-      const untargetedGoal = goals.find((g: any) => g.goalType === "identity") || null;
+      const targetedGoal = goals.find((g) => g.goalType === "targeted") || null;
+      const untargetedGoal = goals.find((g) => g.goalType === "untargeted") || null;
       const matchGoal = targetedGoal || untargetedGoal;
+      const growthBefore = matchGoal ? computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user) : null;
 
       const VA_AP = 3;
+      const confirmHeartbeat = classifyMultipleActions(rawText.trim())[0]?.heartbeatCredit ?? null;
       const rewardResult = await processRewardTransaction({
         userId,
         rawText: rawText.trim(),
         apDelta: VA_AP,
         matchGoal: matchGoal || null,
         actionType: "VA",
-        todayStr,
+        todayStr: (typeof localDate === "string" && localDate) || todayStr(),
+        ...(typeof userTimezone === "string" && userTimezone ? { userTimezone } : {}),
+        waterUnits: weightedWaterUnits(user, "VA", confirmHeartbeat),
       });
 
       if (!rewardResult.success) {
@@ -2045,31 +2137,51 @@ export async function registerRoutes(
         return res.json({ awarded: false, rewardTransaction: rewardResult.skipReason, water: null });
       }
 
-      const gr = rewardResult.growthResult;
-      const ap = rewardResult.postUpdateAP ?? VA_AP;
-      const we = gr?.waterEvents ?? (matchGoal?.waterEvents ?? 0);
-      const fillPct = Math.min(100, Math.round(we * 10 + ap));
-
       console.log(`[CONFIRM] success | userId=${userId} | ap=${VA_AP} | waterAwarded=${rewardResult.waterAwarded} | text="${rawText.substring(0, 60)}"`);
+
+      // Every rewarded entry adds garden water, so report the garden's own
+      // numbers — the same ones Home and Progress show.
+      const water = matchGoal && growthBefore
+        ? waterTransition(growthBefore, computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user))
+        : null;
 
       return res.json({
         awarded: true,
         rewardTransaction: "success",
-        water: {
-          awarded: rewardResult.waterAwarded && !!matchGoal,
-          goalId: rewardResult.waterGoalId || matchGoal?.id || null,
-          waterEvents: we,
-          cupsFilled: gr?.cupsFilled ?? (matchGoal?.cupsFilled ?? 0),
-          seedStage: gr?.seedStage ?? (matchGoal?.seedStage ?? 0),
-          cupJustFilled: gr?.cupJustFilled ?? false,
-          stageAdvanced: gr?.stageAdvanced ?? false,
-          fillPercent: fillPct,
-          preResetFillPercent: gr?.preResetFillPercent ?? fillPct,
-          actionPointsAccumulated: ap,
+        water: water ? {
+          awarded: true,
+          goalId: matchGoal!.id,
+          ...water,
+          actionPointsAccumulated: VA_AP,
           actionPointsNeeded: 10,
           rewardTransaction: "success",
-        },
+        } : null,
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Heartbeat Trends (Premium): every assessment's Five Heartbeat scores in
+  // date order, so the client can show how each heartbeat moved over time.
+  app.get("/api/users/:userId/heartbeat-trends", async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!getFeatureLimits(user).heartbeatTrends) {
+        return res.status(403).json({
+          message: "Heartbeat Trends are a Premium feature.",
+          upgradeRequired: true,
+          feature: "heartbeat_trends",
+        });
+      }
+      const history = await storage.getAssessments(user.id);
+      return res.json(history.map((a) => ({
+        date: a.createdAt,
+        totalScore: a.totalScore,
+        heartbeatScores: a.heartbeatScores,
+      })));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });
@@ -2094,6 +2206,18 @@ export async function registerRoutes(
       }
 
       const previousAssessment = await storage.getLatestAssessment(userId);
+
+      // The first assessment is free; retaking it (Monthly Recalibration) is Premium.
+      if (previousAssessment) {
+        const assessUser = await storage.getUser(userId);
+        if (assessUser && !getFeatureLimits(assessUser).monthlyRecalibration) {
+          return res.status(403).json({
+            message: "Recalibrating your Five Heartbeats is a Premium feature.",
+            upgradeRequired: true,
+            feature: "monthly_recalibration",
+          });
+        }
+      }
 
       const totalScore = answers.reduce((sum: number, v: number) => sum + v, 0);
 
@@ -2176,11 +2300,12 @@ export async function registerRoutes(
 
       const distinctDates = new Set(allEntries.map((e) => e.date));
 
-      const now = new Date();
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-      const windowStart = sevenDaysAgo.toISOString().split("T")[0];
-      const todayDate = now.toISOString().split("T")[0];
+      // The client passes its own calendar day; fall back to the server's.
+      const localDate = typeof req.query.localDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.localDate)
+        ? req.query.localDate
+        : todayStr();
+      const todayDate = localDate;
+      const windowStart = shiftDateStr(localDate, -6);
 
       let weeklyActiveDays = 0;
       Array.from(distinctDates).forEach((d) => {
@@ -2392,6 +2517,7 @@ export async function registerRoutes(
         date: logLocalDate,
         summary,
         mood,
+        ...(req.body?.userTimezone ? { userTimezone: req.body.userTimezone } : {}),
       });
 
       const goalEntries = await storage.getEntriesByGoalId(goal.id);
@@ -2407,10 +2533,10 @@ export async function registerRoutes(
       if (goal.goalType === "untargeted") {
         const distinctDates = new Set(goalEntries.map((e) => e.date));
         const now = new Date();
-        const sevenDaysAgo = new Date(now);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-        const windowStart = sevenDaysAgo.toISOString().split("T")[0];
-        const today = todayStr();
+        // "Today" is the user's own calendar day (entries are stamped with it),
+        // so an evening log in a US timezone doesn't read as tomorrow in UTC.
+        const today = logLocalDate;
+        const windowStart = shiftDateStr(today, -6);
 
         let weeklyActive = 0;
         distinctDates.forEach((d) => {
@@ -2421,11 +2547,8 @@ export async function registerRoutes(
 
         const allDates = Array.from(distinctDates).sort();
         let streak = 0;
-        const todayD = new Date(today);
         for (let i = 0; i < 365; i++) {
-          const checkDate = new Date(todayD);
-          checkDate.setDate(checkDate.getDate() - i);
-          const checkStr = checkDate.toISOString().split("T")[0];
+          const checkStr = shiftDateStr(today, -i);
           if (distinctDates.has(checkStr)) {
             streak++;
           } else {
@@ -2494,26 +2617,15 @@ export async function registerRoutes(
       };
 
       for (const goal of activeGoals) {
-        // Count happy entries since this goal was created.
-        const goalCreatedAt = goal.createdAt ? new Date(goal.createdAt).toISOString().split("T")[0] : "1970-01-01";
-        const happyEntryCount = allEntries.filter(
-          (e) => e.mood === "happy" && e.date >= goalCreatedAt
-        ).length;
-
-        // Momentum Boost: active on the user's first targeted goal until first cup fills.
-        const boostEligible = goal.goalType === "targeted" && userRecord && !userRecord.firstGoalMomentumUsed;
-        const momentumBoostActive = !!boostEligible && happyEntryCount < BOOST_FIRST_CUP_THRESHOLD;
+        // Growth state from rewarded entries (Momentum Boost applied on the
+        // user's first targeted goal until the first cup fills).
+        const growth = computeDisplayGrowth(goal, allEntries, userRecord);
+        const { waterEvents, cupsFilled, seedStage, fillPercent, momentumBoostActive } = growth;
 
         // Expire boost in DB when first cup threshold is crossed (fire-and-forget)
-        if (boostEligible && happyEntryCount >= BOOST_FIRST_CUP_THRESHOLD && userRecord && !userRecord.firstGoalMomentumUsed) {
+        if (growth.boostEligible && growth.waterCount >= BOOST_FIRST_CUP_THRESHOLD) {
           storage.updateUser(userId, { firstGoalMomentumUsed: true } as any).catch(() => {});
         }
-
-        // Growth state: use boosted or normal computation.
-        const growth = (boostEligible)
-          ? computeGrowthStateWithBoost(happyEntryCount)
-          : computeGrowthStateFromEntries(happyEntryCount);
-        const { waterEvents, cupsFilled, seedStage, fillPercent } = growth;
 
         const stageInfo = SEED_STAGE_INFO[seedStage] || SEED_STAGE_INFO[0];
 
@@ -2594,6 +2706,7 @@ export async function registerRoutes(
       const userId = req.params.userId;
       const activeGoals = await storage.getActiveGoals(userId);
       const allEntries = await storage.getEntries(userId);
+      const debugUser = await storage.getUser(userId);
 
       const STAGE_CUP_REQUIREMENTS: Record<number, number> = {
         1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 8,
@@ -2601,14 +2714,9 @@ export async function registerRoutes(
 
       const goals: any[] = [];
       for (const goal of activeGoals) {
-        const goalCreatedAt = goal.createdAt
-          ? new Date(goal.createdAt).toISOString().split("T")[0]
-          : "1970-01-01";
-        const happyEntries = allEntries.filter(
-          (e) => e.mood === "happy" && e.date >= goalCreatedAt
-        );
+        const happyEntries = rewardedEntriesForGoal(goal, allEntries);
         const entryCount = happyEntries.length;
-        const growth = computeGrowthStateFromEntries(entryCount);
+        const growth = computeDisplayGrowth(goal, allEntries, debugUser);
         const stageInfo = SEED_STAGE_INFO[growth.seedStage] || SEED_STAGE_INFO[0];
 
         const nextStage = growth.seedStage + 1;
@@ -2745,8 +2853,15 @@ export async function registerRoutes(
         balanceFeedback = ` Heartbeat imbalance detected: ${weakNames} below 15%. Distribution: Clarity ${balance.percentages.clarity}%, Consistency ${balance.percentages.consistency}%, Mindset ${balance.percentages.mindset}%, Adaptation ${balance.percentages.adaptation}%, Courage ${balance.percentages.courage}%.`;
       }
 
-      const analysis = await generateCollectiveAnalysis(goalProgress, directions, recentMessages);
-      const fullAnalysis = analysis + balanceFeedback;
+      // Premium gets Jai's full written analysis plus the heartbeat balance
+      // breakdown; Lite gets a plain summary of the same numbers.
+      let fullAnalysis: string;
+      if (getFeatureLimits(user).weeklyReviewDepth === "full") {
+        const analysis = await generateCollectiveAnalysis(goalProgress, directions, recentMessages);
+        fullAnalysis = analysis + balanceFeedback;
+      } else {
+        fullAnalysis = buildWeeklySummary(goalProgress, directions);
+      }
 
       const review = await storage.createWeeklyReview({
         userId,
@@ -2978,44 +3093,33 @@ export async function registerRoutes(
         tags: analysis.tags || [],
       });
 
-      let photoWaterAwarded = false;
-      let photoGrowthResult: any = null;
+      // Verified photo → central reward engine: promotes the photo's calendar
+      // memory to a rewarded entry, adds AP, and applies the same 90-second
+      // duplicate guard as chat. cBurn zeroes AP, so no water that turn.
+      let photoDisplayWater: ReturnType<typeof waterTransition> | null = null;
       if (photoAP > 0) {
-        // Reward-granting photo: promote its memory entry to "happy" so the
-        // Growth Dashboard's entry-based water/cup aggregation (garden-summary)
-        // picks it up. It's created "neutral" above so a rejected/unclear photo
-        // still shows on the calendar without counting as a rewarded action.
-        storage.updateEntry(photoEntry.id, { mood: "happy" }).catch((err) => {
-          console.error(`[MEMORY_WRITE_ERROR] photo_entry_mood_update | entryId=${photoEntry.id} | err="${(err as Error).message}"`);
+        const matchGoal = targetedGoal || untargetedGoal;
+        const effectiveAP = user.cBurnActive ? 0 : photoAP;
+        const growthBefore = matchGoal ? computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user) : null;
+
+        const photoReward = await processRewardTransaction({
+          userId,
+          rawText: `photo ${uploadAttemptId || photoUrl}`,
+          apDelta: effectiveAP,
+          matchGoal: matchGoal || null,
+          actionType: "PHOTO_PROOF",
+          todayStr: dateKey,
+          existingEntryId: photoEntry.id,
         });
 
-        const matchGoal = targetedGoal || untargetedGoal;
+        if (matchGoal && growthBefore && photoReward.success) {
+          photoDisplayWater = waterTransition(
+            growthBefore,
+            computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user),
+          );
+        }
+
         if (matchGoal) {
-          const effectiveAP = user.cBurnActive ? 0 : photoAP;
-          const currentAP = matchGoal.actionPoints || 0;
-          const { waterUnits, remainingAP } = computeWaterFromAP(currentAP, effectiveAP);
-
-          if (waterUnits > 0) {
-            const gr = computeGrowthUpdate(
-              matchGoal.waterEvents,
-              matchGoal.cupsFilled,
-              matchGoal.seedStage,
-              waterUnits
-            );
-            photoGrowthResult = gr;
-            photoWaterAwarded = true;
-            await storage.updateGoal(matchGoal.id, {
-              actionPoints: remainingAP,
-              waterEvents: gr.waterEvents,
-              cupsFilled: gr.cupsFilled,
-              seedStage: gr.seedStage,
-            });
-          } else if (effectiveAP > 0) {
-            await storage.updateGoal(matchGoal.id, {
-              actionPoints: remainingAP,
-            });
-          }
-
           const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
           const hbKey = analysis.action_type?.includes("courage") ? "courage" as HeartbeatKey : "consistency" as HeartbeatKey;
           const updatedCredits = { ...userCredits, [hbKey]: (userCredits[hbKey] || 0) + 1 };
@@ -3026,13 +3130,11 @@ export async function registerRoutes(
             cBurnActive: 0,
           } as any);
 
-          console.log(`[TITAN-PHOTO] apDelta=${effectiveAP} | heartbeat=${hbKey} | goalAP=${remainingAP} | waterUnits=${waterUnits} | cBurnWasActive=${!!user.cBurnActive}`);
+          console.log(`[TITAN-PHOTO] apDelta=${effectiveAP} | heartbeat=${hbKey} | reward=${photoReward.skipReason ?? "success"} | cBurnWasActive=${!!user.cBurnActive}`);
         }
       }
 
-      const matchGoalForPhoto = targetedGoal || untargetedGoal;
-      const effectivePhotoAP = user.cBurnActive ? 0 : photoAP;
-      const photoWaterAck = (effectivePhotoAP > 0 && matchGoalForPhoto) ? " Water added to your cup." : "";
+      const photoWaterAck = photoDisplayWater ? " Water added to your cup." : "";
       const jaeResponse = await storage.createMessage({
         userId,
         text: analysis.next_prompt + photoWaterAck,
@@ -3051,22 +3153,7 @@ export async function registerRoutes(
         jaeResponse,
         analysis,
         photoMemory,
-        water: (effectivePhotoAP > 0 && matchGoalForPhoto) ? (() => {
-          const mg = matchGoalForPhoto;
-          const we = photoGrowthResult?.waterEvents ?? (mg?.waterEvents ?? 0);
-          const cf = photoGrowthResult?.cupsFilled ?? (mg?.cupsFilled ?? 0);
-          const ap = photoGrowthResult ? 0 : ((mg?.actionPoints ?? 0) + effectivePhotoAP);
-          const remainAP = photoGrowthResult ? ((mg?.actionPoints ?? 0) + effectivePhotoAP) % 10 : ap;
-          const fillPct = Math.min(100, Math.round(we * 10 + remainAP));
-          return {
-            awarded: true,
-            fillPercent: fillPct,
-            cupsFilled: cf,
-            cupJustFilled: photoGrowthResult?.cupJustFilled ?? false,
-            stageAdvanced: photoGrowthResult?.stageAdvanced ?? false,
-            preResetFillPercent: photoGrowthResult?.preResetFillPercent ?? fillPct,
-          };
-        })() : null,
+        water: photoDisplayWater ? { awarded: true, ...photoDisplayWater } : null,
       });
     } catch (err: any) {
       console.error(`[PHOTO] Error after ${Date.now() - startTime}ms:`, err?.message || err);

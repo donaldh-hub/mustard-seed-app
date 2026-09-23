@@ -5,7 +5,8 @@ import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Check, AlertCircle } from "lucide-react";
+import { ArrowLeft, Check, AlertCircle, Crown } from "lucide-react";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 const DIR_SYMBOL: Record<string, string> = {
   up: "↑",
@@ -35,6 +36,14 @@ export default function WeeklyReview() {
   const queryClient = useQueryClient();
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
+    enabled: !!userId,
+  });
+  const isSummaryOnly = user?.featureLimits?.weeklyReviewDepth === "summary";
 
   useEffect(() => {
     if (!userId) setLocation("/");
@@ -244,6 +253,16 @@ export default function WeeklyReview() {
                 {review.collectiveAnalysis || "Insufficient data for analysis this week."}
               </p>
             </div>
+            {isSummaryOnly && (
+              <button
+                onClick={() => setShowUpgrade(true)}
+                className="mt-3 w-full flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-900"
+                data-testid="button-upgrade-deep-review"
+              >
+                <Crown className="w-4 h-4 shrink-0" />
+                <span>Get Jai's full written analysis of your week with Premium.</span>
+              </button>
+            )}
           </section>
         </motion.div>
       </div>
@@ -276,6 +295,7 @@ export default function WeeklyReview() {
           )}
         </div>
       </div>
+      <UpgradePrompt feature="deep_weekly_review" show={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </div>
   );
 }

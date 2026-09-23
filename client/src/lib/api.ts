@@ -1,4 +1,9 @@
 import { queryClient } from "./queryClient";
+import { getLocalDateStr, getUserTimezone } from "./dateUtils";
+
+// Stamp writes with the device's calendar day so entries, streaks and the
+// calendar agree with the user's clock rather than the server's (UTC).
+const localDateFields = () => ({ localDate: getLocalDateStr(), userTimezone: getUserTimezone() });
 
 const BASE = "/api";
 
@@ -65,14 +70,16 @@ export const api = {
   getEntries: (userId: string) => fetchJson<any[]>(`/users/${userId}/entries`),
 
   getAssessment: (userId: string) => fetchJson<any>(`/users/${userId}/assessment`),
+  getHeartbeatTrends: (userId: string) =>
+    fetchJson<{ date: string; totalScore: number; heartbeatScores: Record<string, number> }[]>(`/users/${userId}/heartbeat-trends`),
   submitAssessment: (userId: string, answers: number[]) => fetchJson<any>(`/users/${userId}/assessment`, { method: "POST", body: JSON.stringify({ answers }) }),
 
-  getConsistencySummary: (userId: string) => fetchJson<any>(`/users/${userId}/consistency-summary`),
+  getConsistencySummary: (userId: string) => fetchJson<any>(`/users/${userId}/consistency-summary?localDate=${getLocalDateStr()}`),
 
   getActiveGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals`),
   getAllGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals/all`),
   createGoal: (userId: string, data: any) =>
-    fetchJson<any>(`/users/${userId}/goals`, { method: "POST", body: JSON.stringify(data) }),
+    fetchJson<any>(`/users/${userId}/goals`, { method: "POST", body: JSON.stringify({ ...localDateFields(), ...data }) }),
   updateGoal: (goalId: string, data: any) =>
     fetchJson<any>(`/goals/${goalId}`, { method: "PATCH", body: JSON.stringify(data) }),
   archiveGoal: (goalId: string) =>
@@ -80,12 +87,12 @@ export const api = {
   completeGoal: (goalId: string, completionType?: string) =>
     fetchJson<any>(`/goals/${goalId}/complete`, { method: "POST", body: JSON.stringify({ completionType }) }),
   logGoalProgress: (goalId: string, data: { summary: string; mood?: string; progressValue?: number }) =>
-    fetchJson<any>(`/goals/${goalId}/log`, { method: "POST", body: JSON.stringify(data) }),
+    fetchJson<any>(`/goals/${goalId}/log`, { method: "POST", body: JSON.stringify({ ...localDateFields(), ...data }) }),
 
   confirmProgress: (userId: string, rawText: string) =>
     fetchJson<any>(`/users/${userId}/confirm-progress`, {
       method: "POST",
-      body: JSON.stringify({ rawText }),
+      body: JSON.stringify({ rawText, ...localDateFields() }),
     }),
 
   getGardenSummary: (userId: string) => fetchJson<any>(`/users/${userId}/garden-summary`),
