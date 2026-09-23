@@ -142,7 +142,7 @@ function _markRewardGranted(userId: string, rawText: string, todayStr: string): 
   _rewardHashes.set(key, Date.now());
   // Prune entries older than 10 minutes
   const cutoff = Date.now() - 600_000;
-  for (const [k, v] of _rewardHashes) {
+  for (const [k, v] of Array.from(_rewardHashes)) {
     if (v < cutoff) _rewardHashes.delete(k);
   }
 }
@@ -159,6 +159,14 @@ export interface RewardInput {
   actionType: RewardActionType;
   todayStr: string;
   userTimezone?: string;
+  /** Garden water this entry is worth (Premium weighted water). Defaults to 1. */
+  waterUnits?: number;
+  /**
+   * Promote this already-saved entry to a rewarded ("happy") one instead of
+   * creating a new entry — used by photo uploads, whose calendar memory is
+   * written before the vision analysis runs.
+   */
+  existingEntryId?: string;
 }
 
 export type RewardSkipReason =
@@ -207,7 +215,17 @@ export interface RewardResult {
 export async function processRewardTransaction(
   input: RewardInput
 ): Promise<RewardResult> {
-  const { userId, rawText, apDelta, matchGoal, actionType, todayStr, userTimezone } = input;
+  const { userId, rawText, apDelta, matchGoal, actionType, todayStr, userTimezone, existingEntryId } = input;
+  const entryWaterUnits = Math.max(1, Math.round(input.waterUnits ?? 1));
+
+  // Writes the rewarded calendar entry — the record the growth garden counts.
+  const writeRewardEntry = async () => {
+    if (existingEntryId) {
+      await storage.updateEntry(existingEntryId, { mood: "happy", waterUnits: entryWaterUnits });
+    } else {
+      await storage.createEntry({ userId, goalId: null, date: todayStr, summary: rawText, mood: "happy", waterUnits: entryWaterUnits, ...(userTimezone ? { userTimezone } : {}) });
+    }
+  };
 
   const skip = (reason: RewardSkipReason): RewardResult => {
     console.log(`[REWARD] SKIP | reason=${reason} | actionType=${actionType} | ap=${apDelta} | text="${rawText.substring(0, 60)}"`);
@@ -245,7 +263,7 @@ export async function processRewardTransaction(
     _markRewardGranted(userId, rawText, todayStr);
     let entryCreated = false;
     try {
-      await storage.createEntry({ userId, goalId: null, date: todayStr, summary: rawText, mood: "happy", ...(userTimezone ? { userTimezone } : {}) });
+      await writeRewardEntry();
       entryCreated = true;
     } catch (err) {
       console.error(`[MEMORY_WRITE_ERROR] no_goal_entry | userId=${userId} | err="${(err as Error).message}"`);
@@ -312,7 +330,7 @@ export async function processRewardTransaction(
   // 5. Create progress entry
   let entryCreated = false;
   try {
-    await storage.createEntry({ userId, date: todayStr, summary: rawText, mood: "happy", ...(userTimezone ? { userTimezone } : {}) });
+    await writeRewardEntry();
     entryCreated = true;
   } catch (err) {
     // Non-fatal — reward already written; log but don't block

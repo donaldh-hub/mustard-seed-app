@@ -97,7 +97,9 @@ Applied to `routes.ts`, `rewardEngine.ts`, `api.ts`, `Chat.tsx`, `GoalCompletion
 - **Profile goal display**: Reads from garden-summary (goals table) as primary source, falls back to users.goals array
 
 ### Water Reward System
-- **Cup fill formula**: `fillPercent = min(100, waterEvents * 10 + actionPoints)` — shows AP sub-progress within the current water unit
+- **One growth source**: Every screen (garden-summary, chat water bar, photo and confirm-progress responses) uses `computeDisplayGrowth()` in `routes.ts` — water = sum of rewarded ("happy") entries' `water_units` since the goal was planted. The goal row's `waterEvents`/`actionPoints` are internal AP bookkeeping, not what users see.
+- **Weighted water (Premium)**: adaptive recoveries and courage-mapped actions store `water_units = 2` on their entry (set at write time, so a downgrade never shrinks a garden).
+- **Photos**: verified photos go through `processRewardTransaction` with `existingEntryId`, promoting the photo's calendar memory to a rewarded entry (same 90s duplicate guard as chat).
 - **Water acknowledgment**: Every VA/AR with AP > 0 and an active goal triggers "Water added to your cup." in Jae's celebration text
 - **Mini water cup**: Displayed in Chat header next to Jae's avatar when user has an active goal; shows current fill level with animation on reward
 - **Cup animation**: On water awarded, the mini cup animates fill. If cup just filled (threshold crossed), it shows fill→empty→new-fill sequence
@@ -116,6 +118,9 @@ Applied to `routes.ts`, `rewardEngine.ts`, `api.ts`, `Chat.tsx`, `GoalCompletion
 - **Static path resolution**: `server/static.ts` uses `path.resolve(__dirname, "public")` with `process.cwd()+"/dist/public"` fallback
 - **Port**: 5000 (mapped to external port 80)
 - **Health check**: GET `/` returns 200 (index.html served by express.static)
+
+### Premium Feature Gates
+`getFeatureLimits()` (subscriptionEngine.ts) is enforced server-side for all five sold Premium features: dual goals, weighted water, Heartbeat Trends (`GET /api/users/:userId/heartbeat-trends`, shown on Profile), deep weekly reviews (Lite gets `buildWeeklySummary()`, no AI call), and Monthly Recalibration (Lite's first assessment is free; retakes return 403 `upgradeRequired`). New accounts start on a 14-day Premium trial. Jai's AI coaching and photo verification are intentionally available on Lite.
 
 ### Reassessment Reminders & Settings Overhaul
 - **User preference fields** (`shared/schema.ts`): `assessmentReminderCadenceMonths` (0=off, default 3), `notifyDailyEncouragement`, `notifyWeeklySummary`, `notifyAssessmentReminder` (all default true), `themePreference` ("light"/"dark", default "light"). Updated via existing `PATCH /api/users/:id`.
