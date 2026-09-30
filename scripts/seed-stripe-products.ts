@@ -1,14 +1,19 @@
 import Stripe from 'stripe';
 
-// Creates the Mustard Seed Premium product and its two monthly prices in
+// Creates the Mustard Seed Premium product and its four prices in
 // whichever Stripe mode STRIPE_SECRET_KEY belongs to (test or live).
 // Safe to re-run: existing product/prices with the right amount are reused.
+// Annual = 10 × monthly (two months free).
 //
-//   standard → $17.99/month  → STRIPE_PRICE_ID
-//   rebuild  → $15.99/month  → STRIPE_PRICE_ID_REBUILD (users who completed the paid Rebuild)
+//   standard         → $17.99/month  → STRIPE_PRICE_ID
+//   rebuild          → $15.99/month  → STRIPE_PRICE_ID_REBUILD (users who completed the paid Rebuild)
+//   standard_annual  → $179.90/year  → STRIPE_PRICE_ID_ANNUAL
+//   rebuild_annual   → $159.90/year  → STRIPE_PRICE_ID_REBUILD_ANNUAL
 const PLANS = [
-  { plan: 'standard', unitAmount: 1799, envVar: 'STRIPE_PRICE_ID' },
-  { plan: 'rebuild', unitAmount: 1599, envVar: 'STRIPE_PRICE_ID_REBUILD' },
+  { plan: 'standard', unitAmount: 1799, interval: 'month', envVar: 'STRIPE_PRICE_ID' },
+  { plan: 'rebuild', unitAmount: 1599, interval: 'month', envVar: 'STRIPE_PRICE_ID_REBUILD' },
+  { plan: 'standard_annual', unitAmount: 1799 * 10, interval: 'year', envVar: 'STRIPE_PRICE_ID_ANNUAL' },
+  { plan: 'rebuild_annual', unitAmount: 1599 * 10, interval: 'year', envVar: 'STRIPE_PRICE_ID_REBUILD_ANNUAL' },
 ] as const;
 
 async function seedProducts() {
@@ -37,10 +42,10 @@ async function seedProducts() {
 
   const activePrices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
 
-  for (const { plan, unitAmount, envVar } of PLANS) {
-    const dollars = `$${(unitAmount / 100).toFixed(2)}/month`;
+  for (const { plan, unitAmount, interval, envVar } of PLANS) {
+    const dollars = `$${(unitAmount / 100).toFixed(2)}/${interval}`;
     let price = activePrices.data.find(
-      (p) => p.unit_amount === unitAmount && p.currency === 'usd' && p.recurring?.interval === 'month',
+      (p) => p.unit_amount === unitAmount && p.currency === 'usd' && p.recurring?.interval === interval,
     );
     if (price) {
       console.log(`Reusing ${plan} price:`, price.id, `— ${dollars}`);
@@ -49,7 +54,7 @@ async function seedProducts() {
         product: product.id,
         unit_amount: unitAmount,
         currency: 'usd',
-        recurring: { interval: 'month' },
+        recurring: { interval },
         metadata: { plan },
       });
       console.log(`Created ${plan} price:`, price.id, `— ${dollars}`);
@@ -58,7 +63,7 @@ async function seedProducts() {
   }
 
   const otherPrices = activePrices.data.filter(
-    (p) => !PLANS.some(({ unitAmount }) => p.unit_amount === unitAmount && p.recurring?.interval === 'month'),
+    (p) => !PLANS.some(({ unitAmount, interval }) => p.unit_amount === unitAmount && p.recurring?.interval === interval),
   );
   for (const p of otherPrices) {
     console.log(`Note: other active price ${p.id} — $${((p.unit_amount ?? 0) / 100).toFixed(2)}/${p.recurring?.interval} (left unchanged; archive it in the dashboard if unused)`);

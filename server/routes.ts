@@ -3096,19 +3096,24 @@ export async function registerRoutes(
 
   app.get("/api/stripe/config", (_req, res) => {
     const configured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
-    return res.json({ configured });
+    const annualAvailable = configured && !!process.env.STRIPE_PRICE_ID_ANNUAL;
+    return res.json({ configured, annualAvailable });
   });
 
   app.post("/api/users/:userId/stripe/create-checkout", async (req, res) => {
     const userId = req.params.userId;
 
     const stripeKey = process.env.STRIPE_SECRET_KEY;
-    // [FLAGGED] Two price IDs needed:
-    //   STRIPE_PRICE_ID         → $17.99/mo standard rate
-    //   STRIPE_PRICE_ID_REBUILD → $15.99/mo rate for users who completed the paid Rebuild
-    // Both must be set up as recurring prices in your Stripe dashboard.
+    // Price IDs (created by scripts/seed-stripe-products.ts):
+    //   STRIPE_PRICE_ID                → $17.99/mo standard rate
+    //   STRIPE_PRICE_ID_REBUILD        → $15.99/mo rate for users who completed the paid Rebuild
+    //   STRIPE_PRICE_ID_ANNUAL         → $179.90/yr standard (10 × monthly)
+    //   STRIPE_PRICE_ID_REBUILD_ANNUAL → $159.90/yr Rebuild rate (10 × monthly)
     const standardPriceId = process.env.STRIPE_PRICE_ID;
     const rebuildPriceId = process.env.STRIPE_PRICE_ID_REBUILD;
+    const standardAnnualPriceId = process.env.STRIPE_PRICE_ID_ANNUAL;
+    const rebuildAnnualPriceId = process.env.STRIPE_PRICE_ID_REBUILD_ANNUAL;
+    const interval: "month" | "year" = req.body?.interval === "year" ? "year" : "month";
 
     if (!stripeKey || !standardPriceId) {
       console.warn(
@@ -3125,10 +3130,20 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
-      // Select price based on whether user completed the paid Rebuild product
-      const priceId = (user as any).hasCompletedRebuild && rebuildPriceId
-        ? rebuildPriceId
-        : standardPriceId;
+      // Select price based on billing interval and whether user completed the paid Rebuild product
+      const isRebuildGrad = !!(user as any).hasCompletedRebuild;
+      const priceId = interval === "year"
+        ? (isRebuildGrad && rebuildAnnualPriceId ? rebuildAnnualPriceId : standardAnnualPriceId)
+        : (isRebuildGrad && rebuildPriceId ? rebuildPriceId : standardPriceId);
+
+      if (!priceId) {
+        // Never silently fall back to monthly when the user chose annual.
+        console.warn("[CONFIG_WARNING] Annual checkout requested but STRIPE_PRICE_ID_ANNUAL is not set.");
+        return res.status(503).json({
+          message: "Annual billing is not available yet. Please choose monthly.",
+          configError: true,
+        });
+      }
 
       // Dynamic import avoids bundling Stripe in non-payment code paths
       const Stripe = (await import("stripe")).default;
@@ -3148,7 +3163,7 @@ export async function registerRoutes(
         cancel_url: `${baseUrl}/profile`,
       });
 
-      console.log(`[STRIPE] Checkout session created for user ${userId.slice(0, 8)}***`);
+      console.log(`[STRIPE] Checkout session created for user ${userId.slice(0, 8)}*** | interval=${interval}`);
       return res.json({ url: session.url });
     } catch (err: any) {
       console.error("[STRIPE] create-checkout error:", err?.message || err);

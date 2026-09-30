@@ -115,9 +115,9 @@ export const api = {
 
   getSubscription: (userId: string) => fetchJson<any>(`/users/${userId}/subscription`),
 
-  getStripeConfig: () => fetchJson<{ configured: boolean }>("/stripe/config"),
-  createStripeCheckout: (userId: string) =>
-    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST" }),
+  getStripeConfig: () => fetchJson<{ configured: boolean; annualAvailable?: boolean }>("/stripe/config"),
+  createStripeCheckout: (userId: string, interval: "month" | "year" = "month") =>
+    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST", body: JSON.stringify({ interval }) }),
   createStripePortalSession: (userId: string) =>
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-portal-session`, { method: "POST" }),
 

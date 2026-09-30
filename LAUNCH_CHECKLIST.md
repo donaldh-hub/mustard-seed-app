@@ -7,8 +7,10 @@ setting is read.
 ## 1. Blocking decisions (need Donald)
 
 - [x] **Price decided:** **$17.99/month** standard, **$15.99/month** for
-  Rebuild graduates. `scripts/seed-stripe-products.ts` now creates exactly
-  these two monthly prices (the old $9.99/month and $79.99/year prices are gone).
+  Rebuild graduates. Annual = 10 months' price: **$179.90/year** standard,
+  **$159.90/year** Rebuild. `scripts/seed-stripe-products.ts` creates exactly
+  these four prices. The upgrade screens show a Monthly / Annual toggle once
+  `STRIPE_PRICE_ID_ANNUAL` is set; Stripe checkout shows the exact amount.
 - [ ] **Legal review.** `client/src/content/termsOfService.ts` and
   `privacyPolicy.ts` are marked as drafts that need attorney review before
   taking payments (especially Terms sections 5, 10, 12).
@@ -32,6 +34,8 @@ setting is read.
 | `STRIPE_SECRET_KEY` | `server/routes.ts`, `billingAgent.ts` | Live key starts with `sk_live_`. |
 | `STRIPE_PRICE_ID` | checkout | Live standard price ID (`price_...`). |
 | `STRIPE_PRICE_ID_REBUILD` | checkout | Live Rebuild-graduate price ID. |
+| `STRIPE_PRICE_ID_ANNUAL` | checkout, `/api/stripe/config` | Live $179.90/yr price ID. The annual toggle stays hidden until this is set. |
+| `STRIPE_PRICE_ID_REBUILD_ANNUAL` | checkout | Live $159.90/yr Rebuild price ID. If unset, Rebuild grads choosing annual get the standard annual price. |
 | `STRIPE_WEBHOOK_SECRET` | `/api/stripe/webhook` | From the **live** webhook endpoint (`whsec_...`). Without it, subscriptions never activate. |
 | `APP_BASE_URL` | checkout/portal return URLs | e.g. `https://mustardseeddap.com`. Falls back to the request host. |
 | `STRIPE_STANDARD_PRICE_CENTS` | `billingAgent.ts` MRR report | Optional; set to `1799`. |
@@ -57,8 +61,8 @@ setting is read.
    activation (business details for HARDAWAYAI LLC, bank account).
 2. With the live `STRIPE_SECRET_KEY` set, run
    `npx tsx scripts/seed-stripe-products.ts`. It creates the product plus the
-   $17.99 and $15.99 monthly prices (or reuses them if they exist) and prints
-   the `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_REBUILD` values to copy into
+   four prices ($17.99/mo, $15.99/mo, $179.90/yr, $159.90/yr), or reuses them
+   if they exist, and prints the four `STRIPE_PRICE_ID*` values to copy into
    Replit Secrets. The first line of output says `LIVE` or `test`, so check it.
 3. Add a webhook endpoint: `https://<your domain>/api/stripe/webhook`,
    subscribed to these events (the ones the server handles):
@@ -78,8 +82,10 @@ setting is read.
 - [ ] Complete onboarding and plant a seed; send Jae a message and get a reply.
 - [ ] Log a verified action and confirm water and the reward card appear.
 - [ ] Upload a photo and confirm it saves.
-- [ ] Subscribe with a real card, then confirm the user shows as Premium and
-      the webhook shows `200` in the Stripe dashboard.
+- [ ] Subscribe **monthly** with a real card, then confirm the user shows as
+      Premium and the webhook shows `200` in the Stripe dashboard.
+- [ ] Repeat with **annual** on a second account and confirm checkout shows
+      $179.90/year (or $159.90/year for a Rebuild graduate).
 - [ ] Open the billing portal, cancel, and confirm the status updates.
 - [ ] Refund the test charge in Stripe.
 - [ ] Confirm the founder alert and transactional emails arrive.

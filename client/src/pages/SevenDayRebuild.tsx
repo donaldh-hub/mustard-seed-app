@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ChevronRight, CheckCircle2, Lock, Play, ArrowLeft, Loader2, AlertCircle,
 } from "lucide-react";
+import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import {
@@ -262,6 +263,10 @@ export default function SevenDayRebuild() {
 
   // Memory accumulator (filled as user answers, sent on complete)
   const [memoryData, setMemoryData] = useState<Record<string, any>>({});
+
+  // Billing period for the post-Rebuild subscribe CTA
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
+  const { data: stripeConfig } = useQuery({ queryKey: ["stripe-config"], queryFn: () => api.getStripeConfig() });
 
   const instances: any[] = rebuildData?.instances ?? [];
   const lastActivityAt = rebuildData?.lastRebuildActivityAt ?? null;
@@ -521,12 +526,15 @@ export default function SevenDayRebuild() {
               Subscribe to keep growing. Cancel anytime.
             </p>
           </div>
+          {stripeConfig?.annualAvailable && (
+            <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} className="w-full" />
+          )}
           <Button
             className="w-full rounded-full h-12 text-base font-bold"
             style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)", color: "#1a1a1a" }}
             onClick={async () => {
               try {
-                const { url } = await api.createStripeCheckout(userId!);
+                const { url } = await api.createStripeCheckout(userId!, billingInterval);
                 if (url) window.location.href = url;
               } catch {
                 setLocation("/profile");
