@@ -43,7 +43,24 @@ export const api = {
 
   getMessages: (userId: string) => fetchJson<any[]>(`/users/${userId}/messages`),
   sendMessage: (userId: string, text: string, localDate?: string, userTimezone?: string) =>
-    fetchJson<{ userMessage: any; jaeMessage: any; water?: { awarded: boolean; fillPercent: number; cupsFilled: number; cupJustFilled: boolean; stageAdvanced: boolean; preResetFillPercent: number } }>(`/users/${userId}/messages`, {
+    fetchJson<{
+      userMessage: any;
+      jaeMessage: any;
+      titan?: { category: string; actionPoints: number; insightPoints: number; driftMarkers: number };
+      water?: {
+        awarded: boolean;
+        fillPercent: number;
+        cupsFilled: number;
+        cupJustFilled: boolean;
+        stageAdvanced: boolean;
+        preResetFillPercent: number;
+        actionPointsAccumulated: number;
+        rewardTransaction: string;
+        progressFeedback?: { completedUnits: number; targetUnits: number; percentComplete: number; feedbackText: string; momentumBoostActive: boolean } | null;
+      } | null;
+      entryQualification?: string | null;
+      goalCompleted?: unknown;
+    }>(`/users/${userId}/messages`, {
       method: "POST",
       body: JSON.stringify({ text, localDate, userTimezone }),
     }),
