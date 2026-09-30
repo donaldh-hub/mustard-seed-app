@@ -43,7 +43,24 @@ export const api = {
 
   getMessages: (userId: string) => fetchJson<any[]>(`/users/${userId}/messages`),
   sendMessage: (userId: string, text: string, localDate?: string, userTimezone?: string) =>
-    fetchJson<{ userMessage: any; jaeMessage: any; water?: { awarded: boolean; fillPercent: number; cupsFilled: number; cupJustFilled: boolean; stageAdvanced: boolean; preResetFillPercent: number } }>(`/users/${userId}/messages`, {
+    fetchJson<{
+      userMessage: any;
+      jaeMessage: any;
+      titan?: { category: string; actionPoints: number; insightPoints: number; driftMarkers: number };
+      water?: {
+        awarded: boolean;
+        fillPercent: number;
+        cupsFilled: number;
+        cupJustFilled: boolean;
+        stageAdvanced: boolean;
+        preResetFillPercent: number;
+        actionPointsAccumulated: number;
+        rewardTransaction: string;
+        progressFeedback?: { completedUnits: number; targetUnits: number; percentComplete: number; feedbackText: string; momentumBoostActive: boolean } | null;
+      } | null;
+      entryQualification?: string | null;
+      goalCompleted?: unknown;
+    }>(`/users/${userId}/messages`, {
       method: "POST",
       body: JSON.stringify({ text, localDate, userTimezone }),
     }),
@@ -98,9 +115,11 @@ export const api = {
 
   getSubscription: (userId: string) => fetchJson<any>(`/users/${userId}/subscription`),
 
-  getStripeConfig: () => fetchJson<{ configured: boolean }>("/stripe/config"),
-  createStripeCheckout: (userId: string) =>
-    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST" }),
+  getStripeConfig: () => fetchJson<{ configured: boolean; annualAvailable?: boolean; rebuildPurchaseAvailable?: boolean }>("/stripe/config"),
+  createRebuildCheckout: (userId: string) =>
+    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-rebuild-checkout`, { method: "POST" }),
+  createStripeCheckout: (userId: string, interval: "month" | "year" = "month") =>
+    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST", body: JSON.stringify({ interval }) }),
   createStripePortalSession: (userId: string) =>
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-portal-session`, { method: "POST" }),
 
@@ -123,7 +142,7 @@ export const api = {
     fetchJson<any>(`/users/${userId}/grounding-journal/complete`, { method: "POST" }),
 
   getRebuild: (userId: string) =>
-    fetchJson<{ instances: any[]; hasCompletedRebuild: boolean; lastRebuildActivityAt: string | null }>(`/users/${userId}/rebuild`),
+    fetchJson<{ instances: any[]; hasPaidRebuild: boolean; hasCompletedRebuild: boolean; lastRebuildActivityAt: string | null }>(`/users/${userId}/rebuild`),
   rebuildReflect: (
     userId: string,
     instanceNumber: number,
