@@ -14,6 +14,9 @@ setting is read.
 - [x] **7-Day Rebuild is $25, one time, for everyone.** Day 1 stays locked
   until the payment clears. The purchase screen explains the graduate rate.
   All amounts live in `shared/pricing.ts`, the single source of truth.
+- [x] **Graduates only ever see graduate prices** ($15.99/mo, $159.90/yr).
+  Checkout never falls back to the $17.99/$179.90 price for a graduate. If
+  a graduate price isn't configured, checkout errors instead of overcharging.
 - [ ] **Rebuild refund policy.** Terms §5.3 says the Rebuild "may require
   payment" but says nothing about refunds for a one-time purchase. Decide
   the policy and add it before launch (attorney review item).
@@ -39,10 +42,10 @@ setting is read.
 |---|---|---|
 | `STRIPE_SECRET_KEY` | `server/routes.ts`, `billingAgent.ts` | Live key starts with `sk_live_`. |
 | `STRIPE_PRICE_ID` | checkout | Live standard price ID (`price_...`). |
-| `STRIPE_PRICE_ID_REBUILD` | checkout | Live Rebuild-graduate price ID. |
-| `STRIPE_PRICE_ID_ANNUAL` | checkout, `/api/stripe/config` | Live $179.90/yr price ID. The annual toggle stays hidden until this is set. |
+| `STRIPE_PRICE_ID_REBUILD` | checkout | Live Rebuild-graduate price ID. **Required**: without it, graduates can't subscribe (they never fall back to $17.99). |
+| `STRIPE_PRICE_ID_ANNUAL` | checkout, `/api/stripe/config` | Live $179.90/yr price ID. The annual toggle stays hidden until this **and** `STRIPE_PRICE_ID_REBUILD_ANNUAL` are set. |
 | `STRIPE_PRICE_ID_REBUILD_PROGRAM` | Rebuild checkout, `/api/stripe/config` | Live **$25 one-time** Rebuild price ID. Until set, the Rebuild shows "opens for purchase soon" and nobody can start it (except admin grants). |
-| `STRIPE_PRICE_ID_REBUILD_ANNUAL` | checkout | Live $159.90/yr Rebuild price ID. If unset, Rebuild grads choosing annual get the standard annual price. |
+| `STRIPE_PRICE_ID_REBUILD_ANNUAL` | checkout, `/api/stripe/config` | Live $159.90/yr Rebuild price ID. Required for the annual toggle to appear. |
 | `STRIPE_WEBHOOK_SECRET` | `/api/stripe/webhook` | From the **live** webhook endpoint (`whsec_...`). Without it, subscriptions never activate. |
 | `APP_BASE_URL` | checkout/portal return URLs | e.g. `https://mustardseeddap.com`. Falls back to the request host. |
 | `STRIPE_STANDARD_PRICE_CENTS` | `billingAgent.ts` MRR report | Optional; set to `1799`. |
@@ -82,7 +85,9 @@ setting is read.
    - `customer.subscription.deleted`
 4. Copy its signing secret into `STRIPE_WEBHOOK_SECRET`.
 5. Turn on the **customer billing portal** (Settings → Billing → Customer
-   portal), because the app links users there.
+   portal), because the app links users there. Leave **"customers can switch
+   plans" off**: the portal would list every price, so graduates could see
+   (and switch to) $17.99, and non-graduates could switch to $15.99.
 6. Put the live `STRIPE_SECRET_KEY` in Replit Secrets and redeploy.
 
 ## 4. Go-live smoke test (real card, real money)

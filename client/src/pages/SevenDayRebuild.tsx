@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
 import { RebuildPurchaseCard } from "@/components/RebuildPurchaseCard";
-import { PRICING, formatUsd } from "@shared/pricing";
+import { GraduateRateNote } from "@/components/GraduateRateNote";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import {
@@ -543,13 +543,7 @@ export default function SevenDayRebuild() {
               Subscribe to keep growing. Cancel anytime.
             </p>
           </div>
-          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 w-full text-left" data-testid="rebuild-graduate-rate-unlocked">
-            <p className="text-sm font-semibold text-amber-900">Your graduate rate is unlocked</p>
-            <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
-              As a Rebuild graduate, Premium is {formatUsd(PRICING.rebuildGradMonthlyCents)}/month instead of{" "}
-              {formatUsd(PRICING.standardMonthlyCents)}. It's applied automatically at checkout.
-            </p>
-          </div>
+          <GraduateRateNote className="w-full" />
           {stripeConfig?.annualAvailable && (
             <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} className="w-full" />
           )}

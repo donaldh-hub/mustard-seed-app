@@ -3118,7 +3118,8 @@ export async function registerRoutes(
 
   app.get("/api/stripe/config", (_req, res) => {
     const configured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
-    const annualAvailable = configured && !!process.env.STRIPE_PRICE_ID_ANNUAL;
+    // Annual needs both prices so graduates never fall back to the standard annual price.
+    const annualAvailable = configured && !!process.env.STRIPE_PRICE_ID_ANNUAL && !!process.env.STRIPE_PRICE_ID_REBUILD_ANNUAL;
     const rebuildPurchaseAvailable = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID_REBUILD_PROGRAM);
     return res.json({ configured, annualAvailable, rebuildPurchaseAvailable });
   });
@@ -3200,17 +3201,21 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
-      // Select price based on billing interval and whether user completed the paid Rebuild product
+      // Select price based on billing interval and whether user completed the Rebuild.
+      // Rebuild graduates only ever get the graduate price — never the standard one —
+      // and annual never silently falls back to monthly.
       const isRebuildGrad = !!(user as any).hasCompletedRebuild;
-      const priceId = interval === "year"
-        ? (isRebuildGrad && rebuildAnnualPriceId ? rebuildAnnualPriceId : standardAnnualPriceId)
-        : (isRebuildGrad && rebuildPriceId ? rebuildPriceId : standardPriceId);
+      const priceId = isRebuildGrad
+        ? (interval === "year" ? rebuildAnnualPriceId : rebuildPriceId)
+        : (interval === "year" ? standardAnnualPriceId : standardPriceId);
 
       if (!priceId) {
-        // Never silently fall back to monthly when the user chose annual.
-        console.warn("[CONFIG_WARNING] Annual checkout requested but STRIPE_PRICE_ID_ANNUAL is not set.");
+        const missing = `STRIPE_PRICE_ID${isRebuildGrad ? "_REBUILD" : ""}${interval === "year" ? "_ANNUAL" : ""}`;
+        console.warn(`[CONFIG_WARNING] Checkout requested but ${missing} is not set.`);
         return res.status(503).json({
-          message: "Annual billing is not available yet. Please choose monthly.",
+          message: interval === "year"
+            ? "Annual billing is not available yet. Please choose monthly."
+            : "Payment processing is not configured. Please contact support.",
           configError: true,
         });
       }

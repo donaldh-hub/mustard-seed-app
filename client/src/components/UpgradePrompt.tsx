@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Sparkles, X, Loader2, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
+import { GraduateRateNote } from "@/components/GraduateRateNote";
 
 const FEATURE_MESSAGES: Record<string, { title: string; description: string }> = {
   dual_goals: {
@@ -46,6 +48,11 @@ export function UpgradePrompt({
   onClose: () => void;
 }) {
   const userId = useStore((s) => s.userId);
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
+    enabled: !!userId && show,
+  });
   const featureInfo = FEATURE_MESSAGES[feature] || { title: "Premium Feature", description: "This feature is available with Premium." };
 
   const [loading, setLoading] = useState(false);
@@ -133,6 +140,8 @@ export function UpgradePrompt({
                 <p className="text-xs text-amber-700">Payment processing is not yet configured. Please check back soon.</p>
               </div>
             )}
+
+            {user?.hasCompletedRebuild && <GraduateRateNote />}
 
             {stripeConfigured !== false && annualAvailable && (
               <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} />
