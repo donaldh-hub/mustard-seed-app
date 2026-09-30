@@ -35,6 +35,7 @@ async function ensureSchema() {
     await pool.query(`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS has_completed_rebuild BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS has_paid_rebuild BOOLEAN NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS last_rebuild_activity_at TIMESTAMP;
     `);
     await pool.query(`

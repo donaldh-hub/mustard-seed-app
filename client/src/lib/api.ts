@@ -115,7 +115,9 @@ export const api = {
 
   getSubscription: (userId: string) => fetchJson<any>(`/users/${userId}/subscription`),
 
-  getStripeConfig: () => fetchJson<{ configured: boolean; annualAvailable?: boolean }>("/stripe/config"),
+  getStripeConfig: () => fetchJson<{ configured: boolean; annualAvailable?: boolean; rebuildPurchaseAvailable?: boolean }>("/stripe/config"),
+  createRebuildCheckout: (userId: string) =>
+    fetchJson<{ url: string }>(`/users/${userId}/stripe/create-rebuild-checkout`, { method: "POST" }),
   createStripeCheckout: (userId: string, interval: "month" | "year" = "month") =>
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-checkout`, { method: "POST", body: JSON.stringify({ interval }) }),
   createStripePortalSession: (userId: string) =>
@@ -140,7 +142,7 @@ export const api = {
     fetchJson<any>(`/users/${userId}/grounding-journal/complete`, { method: "POST" }),
 
   getRebuild: (userId: string) =>
-    fetchJson<{ instances: any[]; hasCompletedRebuild: boolean; lastRebuildActivityAt: string | null }>(`/users/${userId}/rebuild`),
+    fetchJson<{ instances: any[]; hasPaidRebuild: boolean; hasCompletedRebuild: boolean; lastRebuildActivityAt: string | null }>(`/users/${userId}/rebuild`),
   rebuildReflect: (
     userId: string,
     instanceNumber: number,

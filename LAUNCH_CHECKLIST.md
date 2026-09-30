@@ -11,6 +11,12 @@ setting is read.
   **$159.90/year** Rebuild. `scripts/seed-stripe-products.ts` creates exactly
   these four prices. The upgrade screens show a Monthly / Annual toggle once
   `STRIPE_PRICE_ID_ANNUAL` is set; Stripe checkout shows the exact amount.
+- [x] **7-Day Rebuild is $25, one time, for everyone.** Day 1 stays locked
+  until the payment clears. The purchase screen explains the graduate rate.
+  All amounts live in `shared/pricing.ts`, the single source of truth.
+- [ ] **Rebuild refund policy.** Terms §5.3 says the Rebuild "may require
+  payment" but says nothing about refunds for a one-time purchase. Decide
+  the policy and add it before launch (attorney review item).
 - [ ] **Legal review.** `client/src/content/termsOfService.ts` and
   `privacyPolicy.ts` are marked as drafts that need attorney review before
   taking payments (especially Terms sections 5, 10, 12).
@@ -35,6 +41,7 @@ setting is read.
 | `STRIPE_PRICE_ID` | checkout | Live standard price ID (`price_...`). |
 | `STRIPE_PRICE_ID_REBUILD` | checkout | Live Rebuild-graduate price ID. |
 | `STRIPE_PRICE_ID_ANNUAL` | checkout, `/api/stripe/config` | Live $179.90/yr price ID. The annual toggle stays hidden until this is set. |
+| `STRIPE_PRICE_ID_REBUILD_PROGRAM` | Rebuild checkout, `/api/stripe/config` | Live **$25 one-time** Rebuild price ID. Until set, the Rebuild shows "opens for purchase soon" and nobody can start it (except admin grants). |
 | `STRIPE_PRICE_ID_REBUILD_ANNUAL` | checkout | Live $159.90/yr Rebuild price ID. If unset, Rebuild grads choosing annual get the standard annual price. |
 | `STRIPE_WEBHOOK_SECRET` | `/api/stripe/webhook` | From the **live** webhook endpoint (`whsec_...`). Without it, subscriptions never activate. |
 | `APP_BASE_URL` | checkout/portal return URLs | e.g. `https://mustardseeddap.com`. Falls back to the request host. |
@@ -61,12 +68,14 @@ setting is read.
    activation (business details for HARDAWAYAI LLC, bank account).
 2. With the live `STRIPE_SECRET_KEY` set, run
    `npx tsx scripts/seed-stripe-products.ts`. It creates the product plus the
-   four prices ($17.99/mo, $15.99/mo, $179.90/yr, $159.90/yr), or reuses them
-   if they exist, and prints the four `STRIPE_PRICE_ID*` values to copy into
+   Premium product with four prices ($17.99/mo, $15.99/mo, $179.90/yr,
+   $159.90/yr) and the 7-Day Rebuild product ($25 one-time), or reuses them
+   if they exist, and prints the five `STRIPE_PRICE_ID*` values to copy into
    Replit Secrets. The first line of output says `LIVE` or `test`, so check it.
 3. Add a webhook endpoint: `https://<your domain>/api/stripe/webhook`,
    subscribed to these events (the ones the server handles):
-   - `checkout.session.completed`
+   - `checkout.session.completed` (activates subscriptions **and** records
+     $25 Rebuild purchases)
    - `invoice.payment_succeeded`
    - `invoice.payment_failed`
    - `customer.subscription.updated`
@@ -82,6 +91,10 @@ setting is read.
 - [ ] Complete onboarding and plant a seed; send Jae a message and get a reply.
 - [ ] Log a verified action and confirm water and the reward card appear.
 - [ ] Upload a photo and confirm it saves.
+- [ ] Finish the Grounding Journal, open the Rebuild, and confirm Day 1 is
+      locked behind the $25 card with the graduate-rate note.
+- [ ] Buy the Rebuild with a real card. You should land back on the Rebuild
+      page, see "Confirming your payment…", then Day 1 unlocks.
 - [ ] Subscribe **monthly** with a real card, then confirm the user shows as
       Premium and the webhook shows `200` in the Stripe dashboard.
 - [ ] Repeat with **annual** on a second account and confirm checkout shows
@@ -98,3 +111,17 @@ setting is read.
   is excluded from type-checking. Nothing imports it, and `chat/storage.ts`
   references a `db` module and `conversations` table that don't exist. It can
   be deleted in a follow-up once confirmed unneeded.
+
+## 6. Rebuild access for testers, comps, and refunds
+
+Grant or revoke Rebuild access without a payment (needs `ADMIN_API_KEY`):
+
+```
+curl -X POST https://<your domain>/api/admin/users/<userId>/rebuild-access \
+  -H "x-admin-key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+  -d '{"granted": true}'      # false to revoke (e.g. after a refund)
+```
+
+Refunding in Stripe does **not** remove access automatically. Revoke it with
+the call above. Users who already finished the Rebuild before it became paid
+keep access.

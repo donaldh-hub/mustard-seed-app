@@ -254,6 +254,28 @@ export function registerStripeWebhook(app: Express) {
         switch (event.type) {
           case "checkout.session.completed": {
             const session = event.data.object;
+
+            // One-time 7-Day Rebuild purchase ($25) — grants Rebuild access, no subscription.
+            if (session.mode === "payment" && session.metadata?.purchase === "rebuild") {
+              const buyerId = session.client_reference_id || session.metadata?.userId;
+              if (!buyerId) {
+                console.error("[STRIPE] Rebuild checkout.session.completed missing userId reference");
+                break;
+              }
+              if (session.payment_status !== "paid") {
+                console.warn(`[STRIPE] Rebuild checkout completed but payment_status=${session.payment_status}; access not granted`);
+                break;
+              }
+              const buyer = await storage.getUser(buyerId);
+              if (!buyer) break;
+              await storage.updateUser(buyerId, {
+                hasPaidRebuild: true,
+                ...(session.customer ? { stripeCustomerId: session.customer as string } : {}),
+              } as any);
+              console.log(`[STRIPE] Rebuild purchase recorded for user ${buyerId.slice(0, 8)}***`);
+              break;
+            }
+
             if (session.mode !== "subscription") break;
 
             const userId = session.client_reference_id || session.metadata?.userId;
@@ -3097,7 +3119,55 @@ export async function registerRoutes(
   app.get("/api/stripe/config", (_req, res) => {
     const configured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
     const annualAvailable = configured && !!process.env.STRIPE_PRICE_ID_ANNUAL;
-    return res.json({ configured, annualAvailable });
+    const rebuildPurchaseAvailable = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID_REBUILD_PROGRAM);
+    return res.json({ configured, annualAvailable, rebuildPurchaseAvailable });
+  });
+
+  // One-time $25 purchase of the 7-Day Rebuild (Stripe "payment" mode).
+  // Access is granted by the webhook (checkout.session.completed), never here.
+  app.post("/api/users/:userId/stripe/create-rebuild-checkout", async (req, res) => {
+    const userId = req.params.userId;
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const rebuildProgramPriceId = process.env.STRIPE_PRICE_ID_REBUILD_PROGRAM;
+
+    if (!stripeKey || !rebuildProgramPriceId) {
+      console.warn("[CONFIG_WARNING] Rebuild checkout requested but STRIPE_SECRET_KEY or STRIPE_PRICE_ID_REBUILD_PROGRAM is not set.");
+      return res.status(503).json({
+        message: "Rebuild purchase is not available yet. Please check back soon.",
+        configError: true,
+      });
+    }
+
+    try {
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (hasRebuildAccess(user)) {
+        return res.status(409).json({ message: "You already have access to the 7-Day Rebuild." });
+      }
+
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-04-30.basil" } as any);
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: [{ price: rebuildProgramPriceId, quantity: 1 }],
+        ...(user.stripeCustomerId
+          ? { customer: user.stripeCustomerId }
+          : { customer_email: user.email ?? undefined, customer_creation: "always" as const }),
+        client_reference_id: userId,
+        metadata: { userId, purchase: "rebuild" },
+        success_url: `${baseUrl}/rebuild?purchased=1`,
+        cancel_url: `${baseUrl}/rebuild`,
+      });
+
+      console.log(`[STRIPE] Rebuild checkout session created for user ${userId.slice(0, 8)}***`);
+      return res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[STRIPE] create-rebuild-checkout error:", err?.message || err);
+      return res.status(500).json({ message: "Could not start checkout. Please try again." });
+    }
   });
 
   app.post("/api/users/:userId/stripe/create-checkout", async (req, res) => {
@@ -3485,6 +3555,12 @@ export async function registerRoutes(
   // Checked lazily on every GET so no cron/scheduler is needed.
   const REBUILD_UNLOCK_HOURS = 24;
 
+  // Paid access gate: everyone pays $25 once. Users who already finished the
+  // Rebuild before it was paid keep access (grandfathered).
+  function hasRebuildAccess(user: { hasPaidRebuild?: boolean | null; hasCompletedRebuild?: boolean | null }): boolean {
+    return !!(user.hasPaidRebuild || user.hasCompletedRebuild);
+  }
+
   async function applyRebuildUnlockGate(userId: string, instances: RebuildInstance[]): Promise<RebuildInstance[]> {
     const byNumber = new Map(instances.map((i) => [i.instanceNumber, i]));
     const now = Date.now();
@@ -3513,6 +3589,7 @@ export async function registerRoutes(
 
       return res.json({
         instances,
+        hasPaidRebuild: hasRebuildAccess(user),
         hasCompletedRebuild: (user as any).hasCompletedRebuild ?? false,
         lastRebuildActivityAt: (user as any).lastRebuildActivityAt ?? null,
         unlockHours: REBUILD_UNLOCK_HOURS,
@@ -3537,6 +3614,9 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+      if (!hasRebuildAccess(user)) {
+        return res.status(402).json({ message: "The 7-Day Rebuild requires purchase.", paymentRequired: true });
+      }
 
       // ─── Trust & Safety Agent (Agent 01) — screens rebuild reflections too ───
       const rebuildText = (prompts || []).map((p) => p.response).filter(Boolean).join("\n");
@@ -3600,6 +3680,12 @@ export async function registerRoutes(
         memoryData?: Record<string, any>;
         day7Stages?: Record<string, any>;
       };
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!hasRebuildAccess(user)) {
+        return res.status(402).json({ message: "The 7-Day Rebuild requires purchase.", paymentRequired: true });
+      }
 
       const instance = await storage.getRebuildInstance(userId, instanceNumber);
       if (!instance) return res.status(404).json({ message: "Instance not found" });
@@ -3732,6 +3818,21 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[RESET] reset error:", err);
       return res.status(500).json({ message: "Reset failed" });
+    }
+  });
+
+  // ─── 7-Day Rebuild access — founder-only grant/revoke ──────────────────────
+  // For comps, testers, and refunds. Body: { granted: boolean } (default true).
+  app.post("/api/admin/users/:userId/rebuild-access", requireAdminKey, async (req, res) => {
+    try {
+      const userId = String(req.params.userId);
+      const granted = req.body?.granted !== false;
+      const user = await storage.updateUser(userId, { hasPaidRebuild: granted } as any);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      console.log(`[ADMIN] Rebuild access ${granted ? "granted" : "revoked"} for user ${userId.slice(0, 8)}***`);
+      return res.json({ userId, hasPaidRebuild: granted });
+    } catch (err) {
+      return res.status(500).json({ message: "Rebuild access update failed" });
     }
   });
 
