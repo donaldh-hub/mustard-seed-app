@@ -1,46 +1,68 @@
-import { getUncachableStripeClient } from '../server/stripeClient';
+import Stripe from 'stripe';
+
+// Creates the Mustard Seed Premium product and its two monthly prices in
+// whichever Stripe mode STRIPE_SECRET_KEY belongs to (test or live).
+// Safe to re-run: existing product/prices with the right amount are reused.
+//
+//   standard → $17.99/month  → STRIPE_PRICE_ID
+//   rebuild  → $15.99/month  → STRIPE_PRICE_ID_REBUILD (users who completed the paid Rebuild)
+const PLANS = [
+  { plan: 'standard', unitAmount: 1799, envVar: 'STRIPE_PRICE_ID' },
+  { plan: 'rebuild', unitAmount: 1599, envVar: 'STRIPE_PRICE_ID_REBUILD' },
+] as const;
 
 async function seedProducts() {
-  const stripe = await getUncachableStripeClient();
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) {
+    throw new Error('STRIPE_SECRET_KEY is not set.');
+  }
+  const stripe = new Stripe(stripeKey, { apiVersion: '2025-04-30.basil' } as any);
+  console.log(`Stripe mode: ${stripeKey.startsWith('sk_live_') ? 'LIVE' : 'test'}`);
 
   const existing = await stripe.products.search({ query: "name:'Mustard Seed Premium'" });
-  if (existing.data.length > 0) {
-    console.log('Mustard Seed Premium product already exists:', existing.data[0].id);
-    const prices = await stripe.prices.list({ product: existing.data[0].id, active: true });
-    for (const p of prices.data) {
-      console.log(`  Price: ${p.id} — $${(p.unit_amount! / 100).toFixed(2)}/${p.recurring?.interval}`);
-    }
-    return;
+  let product = existing.data[0];
+  if (product) {
+    console.log('Mustard Seed Premium product already exists:', product.id);
+  } else {
+    product = await stripe.products.create({
+      name: 'Mustard Seed Premium',
+      description: 'Full access to the Five Heartbeats engine, dual goals, weighted water system, heartbeat trend analytics, deep weekly reviews, and monthly recalibration.',
+      metadata: {
+        tier: 'premium',
+        app: 'mustard_seed',
+      },
+    });
+    console.log('Created product:', product.id);
   }
 
-  const product = await stripe.products.create({
-    name: 'Mustard Seed Premium',
-    description: 'Full access to the Five Heartbeats engine, dual goals, weighted water system, heartbeat trend analytics, deep weekly reviews, and monthly recalibration.',
-    metadata: {
-      tier: 'premium',
-      app: 'mustard_seed',
-    },
-  });
+  const activePrices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
 
-  console.log('Created product:', product.id);
+  for (const { plan, unitAmount, envVar } of PLANS) {
+    const dollars = `$${(unitAmount / 100).toFixed(2)}/month`;
+    let price = activePrices.data.find(
+      (p) => p.unit_amount === unitAmount && p.currency === 'usd' && p.recurring?.interval === 'month',
+    );
+    if (price) {
+      console.log(`Reusing ${plan} price:`, price.id, `— ${dollars}`);
+    } else {
+      price = await stripe.prices.create({
+        product: product.id,
+        unit_amount: unitAmount,
+        currency: 'usd',
+        recurring: { interval: 'month' },
+        metadata: { plan },
+      });
+      console.log(`Created ${plan} price:`, price.id, `— ${dollars}`);
+    }
+    console.log(`  → set ${envVar}=${price.id}`);
+  }
 
-  const monthlyPrice = await stripe.prices.create({
-    product: product.id,
-    unit_amount: 999,
-    currency: 'usd',
-    recurring: { interval: 'month' },
-    metadata: { plan: 'monthly' },
-  });
-  console.log('Created monthly price:', monthlyPrice.id, '— $9.99/month');
-
-  const annualPrice = await stripe.prices.create({
-    product: product.id,
-    unit_amount: 7999,
-    currency: 'usd',
-    recurring: { interval: 'year' },
-    metadata: { plan: 'annual' },
-  });
-  console.log('Created annual price:', annualPrice.id, '— $79.99/year');
+  const otherPrices = activePrices.data.filter(
+    (p) => !PLANS.some(({ unitAmount }) => p.unit_amount === unitAmount && p.recurring?.interval === 'month'),
+  );
+  for (const p of otherPrices) {
+    console.log(`Note: other active price ${p.id} — $${((p.unit_amount ?? 0) / 100).toFixed(2)}/${p.recurring?.interval} (left unchanged; archive it in the dashboard if unused)`);
+  }
 }
 
 seedProducts()

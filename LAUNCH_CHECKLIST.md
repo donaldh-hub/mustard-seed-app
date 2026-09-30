@@ -6,13 +6,9 @@ setting is read.
 
 ## 1. Blocking decisions (need Donald)
 
-- [ ] **Pick the real price.** The code disagrees with itself:
-  - `scripts/seed-stripe-products.ts` creates **$9.99/month** and **$79.99/year**.
-  - `server/routes.ts` (checkout) documents **$17.99/month** standard
-    (`STRIPE_PRICE_ID`) and **$15.99/month** for Rebuild graduates
-    (`STRIPE_PRICE_ID_REBUILD`).
-  Decide the price, then make the Stripe prices match. Do not run the seed
-  script in live mode until this is settled.
+- [x] **Price decided:** **$17.99/month** standard, **$15.99/month** for
+  Rebuild graduates. `scripts/seed-stripe-products.ts` now creates exactly
+  these two monthly prices (the old $9.99/month and $79.99/year prices are gone).
 - [ ] **Legal review.** `client/src/content/termsOfService.ts` and
   `privacyPolicy.ts` are marked as drafts that need attorney review before
   taking payments (especially Terms sections 5, 10, 12).
@@ -38,7 +34,7 @@ setting is read.
 | `STRIPE_PRICE_ID_REBUILD` | checkout | Live Rebuild-graduate price ID. |
 | `STRIPE_WEBHOOK_SECRET` | `/api/stripe/webhook` | From the **live** webhook endpoint (`whsec_...`). Without it, subscriptions never activate. |
 | `APP_BASE_URL` | checkout/portal return URLs | e.g. `https://mustardseeddap.com`. Falls back to the request host. |
-| `STRIPE_STANDARD_PRICE_CENTS` | `billingAgent.ts` MRR report | Optional; set to match the chosen price (e.g. `1799`). |
+| `STRIPE_STANDARD_PRICE_CENTS` | `billingAgent.ts` MRR report | Optional; set to `1799`. |
 
 ### Sign-in, email, storage
 | Variable | Used in | Notes |
@@ -59,8 +55,11 @@ setting is read.
 
 1. In the Stripe dashboard, switch to **live mode** and finish account
    activation (business details for HARDAWAYAI LLC, bank account).
-2. Create the product and the price(s) decided in section 1. Copy the
-   `price_...` IDs into `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_REBUILD`.
+2. With the live `STRIPE_SECRET_KEY` set, run
+   `npx tsx scripts/seed-stripe-products.ts`. It creates the product plus the
+   $17.99 and $15.99 monthly prices (or reuses them if they exist) and prints
+   the `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_REBUILD` values to copy into
+   Replit Secrets. The first line of output says `LIVE` or `test`, so check it.
 3. Add a webhook endpoint: `https://<your domain>/api/stripe/webhook`,
    subscribed to these events (the ones the server handles):
    - `checkout.session.completed`
