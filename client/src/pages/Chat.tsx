@@ -213,7 +213,7 @@ function NudgeCard({
   );
 }
 
-type ReflectionQualification = "reflectionEntry" | "tooShort" | "duplicate";
+type ReflectionQualification = "reflectionEntry" | "tooShort" | "duplicate" | "restraintTooShort" | "restraintCapReached";
 
 function ReflectionCard({
   qualification, onDismiss,
@@ -234,6 +234,18 @@ function ReflectionCard({
     duplicate: {
       icon: <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500" />,
       text: "Already logged recently — your progress is saved.",
+      bg: "bg-emerald-50 border-emerald-200",
+      textColor: "text-emerald-800",
+    },
+    restraintTooShort: {
+      icon: <Ban className="w-3 h-3 shrink-0 text-amber-500" />,
+      text: "Say a bit more — what did you almost do, and what did you do instead?",
+      bg: "bg-amber-50 border-amber-200",
+      textColor: "text-amber-800",
+    },
+    restraintCapReached: {
+      icon: <CheckCircle2 className="w-3 h-3 shrink-0 text-emerald-500" />,
+      text: "You've already earned today's restraint credit — noted, but real actions still grow the seed anytime.",
       bg: "bg-emerald-50 border-emerald-200",
       textColor: "text-emerald-800",
     },
@@ -505,7 +517,7 @@ export default function Chat() {
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;
 
-      const isVerifiedAction = category === "VA" || category === "AR";
+      const isVerifiedAction = category === "VA" || category === "AR" || category === "RS";
 
       if (isVerifiedAction) {
         console.log("[SYNC] verifiedAction success");
@@ -545,7 +557,7 @@ export default function Chat() {
       // Set inline confirmation / nudge / reflection card for this Jai message
       if (jaeId) {
         const qualification = data?.entryQualification as ReflectionQualification | "verifiedAction" | null | undefined;
-        if ((category === "VA" || category === "AR") && data?.goalCompleted) {
+        if ((category === "VA" || category === "AR" || category === "RS") && data?.goalCompleted) {
           // Goal completion — trigger full-screen ceremony + keep inline card for history
           const gc = data.goalCompleted as GoalCompletionData;
           setInlineCards(prev => ({
@@ -591,7 +603,7 @@ export default function Chat() {
               console.error(`[CEREMONY_FLOW_ERROR] trigger | goalId=${gc.goalId} | err="${(ceremonyErr as Error).message}"`);
             }
           }
-        } else if ((category === "VA" || category === "AR") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
+        } else if ((category === "VA" || category === "AR" || category === "RS") && data?.water?.rewardTransaction === "success" && data?.water?.awarded) {
           // Reward card: confirms AP + water earned
           setInlineCards(prev => ({
             ...prev,
@@ -607,7 +619,7 @@ export default function Chat() {
             description: `${category} · +${data.water!.actionPointsAccumulated} AP · Water added`,
             duration: 3000,
           });
-        } else if (qualification === "tooShort" || qualification === "duplicate") {
+        } else if (qualification === "tooShort" || qualification === "duplicate" || qualification === "restraintTooShort" || qualification === "restraintCapReached") {
           // Credibility rejection — show inline feedback card
           setInlineCards(prev => ({
             ...prev,

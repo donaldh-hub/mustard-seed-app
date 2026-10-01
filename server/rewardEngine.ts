@@ -17,6 +17,7 @@ import type { Goal } from "@shared/schema";
 export type RewardActionType =
   | "VA"            // Verified Action (TITAN-detected)
   | "AR"            // Adaptive Recovery (TITAN-detected)
+  | "RS"            // Verified Restraint — impulse noticed and resisted (TITAN-detected)
   | "RW"            // Reflection Without Action — no reward
   | "IO"            // Intention Only — no reward
   | "AD"            // Avoidance / Drift — no reward
@@ -53,6 +54,15 @@ export const REWARD_CONFIG: Record<RewardActionType, RewardConfig> = {
     triggersCelebration: true,
     verificationRule: "TITAN AR_PATTERNS keyword match",
     description: "Bounced back or adapted after a setback",
+  },
+  RS: {
+    actionType: "RS",
+    baseActionPoints: 2,
+    awardsWater: true,
+    awardsEntry: true,
+    triggersCelebration: true,
+    verificationRule: "TITAN RS_PATTERNS keyword match",
+    description: "Noticed an impulse and resisted it — restraint counted as real progress",
   },
   RW: {
     actionType: "RW",
