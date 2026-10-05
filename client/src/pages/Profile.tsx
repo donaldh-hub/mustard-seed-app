@@ -22,6 +22,8 @@ import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
+import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
+import { GraduateRateNote } from "@/components/GraduateRateNote";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -85,13 +87,17 @@ export default function Profile() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+  const [annualAvailable, setAnnualAvailable] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const [theme, setTheme] = useState<"light" | "dark">(() => getStoredTheme());
   const [dataCleared, setDataCleared] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
-    api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
+    api.getStripeConfig()
+      .then((cfg) => { setStripeConfigured(cfg.configured); setAnnualAvailable(!!cfg.annualAvailable); })
+      .catch(() => setStripeConfigured(false));
   }, []);
 
   const updateSettingsMut = useMutation({
@@ -146,7 +152,7 @@ export default function Profile() {
     setCheckoutError(null);
     setCheckoutLoading(true);
     try {
-      const { url } = await api.createStripeCheckout(userId);
+      const { url } = await api.createStripeCheckout(userId, billingInterval);
       window.location.href = url;
     } catch (err: any) {
       setCheckoutError(err.message?.includes("not configured")
@@ -554,6 +560,12 @@ export default function Profile() {
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-700">Payment processing is coming soon. Check back shortly.</p>
               </div>
+            )}
+
+            {user.hasCompletedRebuild && <GraduateRateNote className="mt-3" />}
+
+            {stripeConfigured !== false && annualAvailable && (
+              <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} className="mt-4" />
             )}
 
             {stripeConfigured !== false && (

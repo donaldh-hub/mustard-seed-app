@@ -43,7 +43,7 @@ export const SUPPORT_RESPONSE_LIBRARY: SupportLibraryEntry[] = [
     id: "start-rebuild",
     question: "How do I start the 7-Day Rebuild?",
     patterns: [/start.*rebuild/i, /7.?day rebuild/i, /begin.*rebuild/i],
-    answer: "The 7-Day Rebuild unlocks as a banner on your Home tab once you finish the 3-Day Grounding Journal — tap that banner to begin.",
+    answer: "The 7-Day Rebuild unlocks as a banner on your Home tab once you finish the 3-Day Grounding Journal — tap that banner to begin. It's a one-time $25 purchase, and once you finish all 7 days you can subscribe to Premium at the graduate rate of $15.99/month instead of $17.99.",
   },
   {
     id: "start-grounding-journal",

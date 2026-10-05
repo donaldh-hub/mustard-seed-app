@@ -9,6 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ChevronRight, CheckCircle2, Lock, Play, ArrowLeft, Loader2, AlertCircle,
 } from "lucide-react";
+import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
+import { RebuildPurchaseCard } from "@/components/RebuildPurchaseCard";
+import { GraduateRateNote } from "@/components/GraduateRateNote";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import {
@@ -234,11 +237,26 @@ export default function SevenDayRebuild() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
+  // Returning from Stripe checkout: the webhook may land a few seconds after
+  // the redirect, so poll briefly until the purchase shows up.
+  const [returnedFromPurchase] = useState(() => new URLSearchParams(window.location.search).get("purchased") === "1");
+  const [purchasePollExpired, setPurchasePollExpired] = useState(false);
+  useEffect(() => {
+    if (!returnedFromPurchase) return;
+    const t = setTimeout(() => setPurchasePollExpired(true), 60_000);
+    return () => clearTimeout(t);
+  }, [returnedFromPurchase]);
+
   const { data: rebuildData, isLoading } = useQuery({
     queryKey: ["rebuild", userId],
     queryFn: () => api.getRebuild(userId!),
     enabled: !!userId,
+    refetchInterval: (query) =>
+      returnedFromPurchase && !purchasePollExpired && !query.state.data?.hasPaidRebuild ? 2000 : false,
   });
+  const hasPaidRebuild = !!rebuildData?.hasPaidRebuild;
+  const confirmingPurchase = returnedFromPurchase && !purchasePollExpired && !hasPaidRebuild;
+  const purchaseNotYetConfirmed = returnedFromPurchase && purchasePollExpired && !hasPaidRebuild;
 
   const [view, setView] = useState<View>("overview");
   const [currentInstanceNum, setCurrentInstanceNum] = useState<number | null>(null);
@@ -263,6 +281,10 @@ export default function SevenDayRebuild() {
   // Memory accumulator (filled as user answers, sent on complete)
   const [memoryData, setMemoryData] = useState<Record<string, any>>({});
 
+  // Billing period for the post-Rebuild subscribe CTA
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
+  const { data: stripeConfig } = useQuery({ queryKey: ["stripe-config"], queryFn: () => api.getStripeConfig() });
+
   const instances: any[] = rebuildData?.instances ?? [];
   const lastActivityAt = rebuildData?.lastRebuildActivityAt ?? null;
   const currentConfig = REBUILD_INSTANCES.find((c) => c.instanceNumber === currentInstanceNum);
@@ -277,7 +299,7 @@ export default function SevenDayRebuild() {
 
   function enterInstance(n: number) {
     const inst = instances.find((i) => i.instanceNumber === n);
-    if (!inst || inst.status === "locked") return;
+    if (!hasPaidRebuild || !inst || inst.status === "locked") return;
 
     setCurrentInstanceNum(n);
     setView("instance");
@@ -521,12 +543,16 @@ export default function SevenDayRebuild() {
               Subscribe to keep growing. Cancel anytime.
             </p>
           </div>
+          <GraduateRateNote className="w-full" />
+          {stripeConfig?.annualAvailable && (
+            <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} className="w-full" />
+          )}
           <Button
             className="w-full rounded-full h-12 text-base font-bold"
             style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)", color: "#1a1a1a" }}
             onClick={async () => {
               try {
-                const { url } = await api.createStripeCheckout(userId!);
+                const { url } = await api.createStripeCheckout(userId!, billingInterval);
                 if (url) window.location.href = url;
               } catch {
                 setLocation("/profile");
@@ -561,9 +587,27 @@ export default function SevenDayRebuild() {
             </div>
           </div>
 
-          {/* Overview video — shown only before the program has been started */}
-          {!instances.some((i) => i.status !== "locked") && (
+          {/* Overview video — shown before the program has been started, and to anyone who hasn't bought it */}
+          {(!hasPaidRebuild || !instances.some((i) => i.status !== "locked")) && (
             <OverviewVideo />
+          )}
+
+          {purchaseNotYetConfirmed && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200" data-testid="rebuild-purchase-delayed">
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-700">
+                We haven't received confirmation from Stripe yet. If you were charged, please don't buy again.
+                Refresh in a minute, or email support@mustardseeddap.com and we'll sort it out.
+              </p>
+            </div>
+          )}
+
+          {!hasPaidRebuild && (
+            <RebuildPurchaseCard
+              userId={userId!}
+              purchaseAvailable={!!stripeConfig?.rebuildPurchaseAvailable}
+              confirming={confirmingPurchase}
+            />
           )}
 
           {/* Day 5 follow-up prompt if pending */}
@@ -598,7 +642,7 @@ export default function SevenDayRebuild() {
           <div className="space-y-3">
             {REBUILD_INSTANCES.map((config) => {
               const inst = instances.find((i) => i.instanceNumber === config.instanceNumber);
-              const status: string = inst?.status ?? "locked";
+              const status: string = hasPaidRebuild ? (inst?.status ?? "locked") : "locked";
               const isLocked = status === "locked";
               const isComplete = status === "completed";
               const isActive = status === "unlocked" || status === "in_progress";

@@ -185,8 +185,8 @@ export interface BillingReport {
  * generateBillingReport — MRR/churn/recovery-rate report from real logged
  * events and current subscription state, no fabricated numbers. MRR is only
  * estimated (activePremiumSubscribers × STRIPE_STANDARD_PRICE_CENTS) when
- * that env var is set — this product has two different price points
- * (standard vs. post-Rebuild rate) so a flat multiply is an approximation,
+ * that env var is set — this product has four price points (standard vs.
+ * post-Rebuild rate, monthly vs. annual) so a flat multiply is an approximation,
  * not a precise figure; left null rather than guessing when unset.
  */
 export async function generateBillingReport(windowDays = 30): Promise<BillingReport> {

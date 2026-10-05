@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Droplets, MessageCircle, Target, Brain, BookOpe
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { PRICING, formatUsd } from "@shared/pricing";
 import { useLocation } from "wouter";
 
 function CircularProgressRing({
@@ -269,6 +270,13 @@ export default function Home() {
                     <>
                       <p className="text-sm font-semibold text-indigo-900">7-Day Rebuild</p>
                       <p className="text-xs text-indigo-700/70 mt-0.5">Revisit your plan</p>
+                    </>
+                  ) : rebuild && !rebuild.hasPaidRebuild ? (
+                    <>
+                      <p className="text-sm font-semibold text-indigo-900">Start Your 7-Day Rebuild</p>
+                      <p className="text-xs text-indigo-700/70 mt-0.5">
+                        {formatUsd(PRICING.rebuildProgramCents)} one time. Graduates get Premium for {formatUsd(PRICING.rebuildGradMonthlyCents)}/mo.
+                      </p>
                     </>
                   ) : (
                     <>

@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Sparkles, X, Loader2, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { useStore } from "@/lib/store";
+import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
+import { GraduateRateNote } from "@/components/GraduateRateNote";
 
 const FEATURE_MESSAGES: Record<string, { title: string; description: string }> = {
   dual_goals: {
@@ -45,16 +48,25 @@ export function UpgradePrompt({
   onClose: () => void;
 }) {
   const userId = useStore((s) => s.userId);
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
+    enabled: !!userId && show,
+  });
   const featureInfo = FEATURE_MESSAGES[feature] || { title: "Premium Feature", description: "This feature is available with Premium." };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+  const [annualAvailable, setAnnualAvailable] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
 
   useEffect(() => {
     if (show) {
       setError(null);
-      api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
+      api.getStripeConfig()
+        .then((cfg) => { setStripeConfigured(cfg.configured); setAnnualAvailable(!!cfg.annualAvailable); })
+        .catch(() => setStripeConfigured(false));
     }
   }, [show]);
 
@@ -63,7 +75,7 @@ export function UpgradePrompt({
     setError(null);
     setLoading(true);
     try {
-      const { url } = await api.createStripeCheckout(userId);
+      const { url } = await api.createStripeCheckout(userId, billingInterval);
       window.location.href = url;
     } catch (err: any) {
       if (err.message?.includes("not configured")) {
@@ -127,6 +139,12 @@ export function UpgradePrompt({
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-700">Payment processing is not yet configured. Please check back soon.</p>
               </div>
+            )}
+
+            {user?.hasCompletedRebuild && <GraduateRateNote />}
+
+            {stripeConfigured !== false && annualAvailable && (
+              <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} />
             )}
 
             {stripeConfigured !== false && (
