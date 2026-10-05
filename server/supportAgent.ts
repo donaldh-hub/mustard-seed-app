@@ -68,7 +68,7 @@ export const SUPPORT_RESPONSE_LIBRARY: SupportLibraryEntry[] = [
     id: "subscription-price",
     question: "How much does Mustard Seed cost / what's included in my plan?",
     patterns: [/how much.*(cost|price)/i, /what.*plan.*include/i, /pricing/i, /subscription.*cost/i],
-    answer: `Premium is ${formatUsd(PRICING.standardMonthlyCents)}/month after your free assessment and journal. Your Profile tab shows your current plan and status.`,
+    answer: `The 3-Day Grounding Journal is free. Premium is ${formatUsd(PRICING.standardMonthlyCents)}/month, and the 7-Day Rebuild is a one-time ${formatUsd(PRICING.rebuildProgramCents)}. Your Profile tab shows your current plan and status.`,
   },
   {
     id: "see-progress",

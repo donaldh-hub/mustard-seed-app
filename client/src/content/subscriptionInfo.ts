@@ -4,18 +4,17 @@ export const SUBSCRIPTION_INFO_MD = `# How Mustard Seed Subscriptions Work
 
 ---
 
-**You don't pay to try Mustard Seed. You pay to keep growing with it.**
+**The 3-Day Grounding Journal is free. The 7-Day Rebuild and Premium are paid, and there is no free trial.**
 
 Here's how the path works, and what to expect at each step:
 
-1. **Five Heartbeats Assessment** — Free. Always.
+1. **Five Heartbeats Assessment** — Your starting point.
 2. **3-Day Grounding Journal** — Free. No card required.
 3. **7-Day Rebuild** — This is where the real system is taught. Pricing is shown clearly before you're ever asked to pay.
 4. **Subscription** — After the Rebuild, if you want to keep going, you'll be invited to subscribe. No pressure, no countdown timers, no fake urgency.
 
 ### A few honest things to know:
 
-- **One free trial per person.** We verify this through your email, phone number, and account activity — not to be difficult, but to keep the trial meaningful for everyone, including you. Creating multiple accounts to get multiple trials isn't permitted and may result in account suspension.
 - **You can cancel anytime.** Cancel from your account settings. You'll keep access through the end of your current billing period — we don't cut you off mid-period.
 - **No surprise charges.** You'll always see the price before you're charged, and we'll notify you in advance if pricing ever changes for your plan.
 - **Payments are handled by Stripe**, a trusted third-party payment processor. We don't store your full card number.

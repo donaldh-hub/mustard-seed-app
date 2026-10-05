@@ -49,7 +49,6 @@ function PathsGrid({
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col items-center rounded-2xl border border-stone-200 p-6 text-center">
             <div className="font-semibold text-stone-900">Five Heartbeats Assessment</div>
-            <div className="mt-1 text-xs font-medium text-[#8a6f1f]">Free</div>
             <button
               onClick={onAssessment}
               data-testid="button-path-assessment"
@@ -177,7 +176,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm font-medium text-stone-600">
           <span>Goal-neutral</span>
           <span className="text-stone-300">•</span>
-          <span>Free to start</span>
+          <span>Start with the 3-Day Journal</span>
           <span className="text-stone-300">•</span>
           <span>Built on the Five Heartbeats</span>
           <span className="text-stone-300">•</span>
@@ -357,10 +356,10 @@ export default function LandingPage() {
       {/* CLOSING QUOTE */}
       <section className="px-6 py-20 text-center" style={{ background: "#1a3a2a" }}>
         <p className="mx-auto max-w-2xl text-2xl font-bold leading-snug text-white sm:text-3xl">
-          "You don't pay to try Mustard Seed. You pay to keep growing with it."
+          "The 3-Day Journal is on us. Growing with Jai is what you invest in."
         </p>
         <p className="mx-auto mt-4 max-w-xl text-sm text-stone-300">
-          Whether you've done every free step or none of them, subscribing is always right here
+          Whether you've done the 3-Day Journal or not, subscribing is always right here
           when you're ready.
         </p>
         <div className="mx-auto mt-8 flex max-w-2xl justify-center">

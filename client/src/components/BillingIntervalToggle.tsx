@@ -30,7 +30,7 @@ export function BillingIntervalToggle({
   return (
     <div className={`flex gap-1 rounded-xl bg-amber-100/70 p-1 ${className}`} role="group" aria-label="Billing period">
       {option("month", "Monthly")}
-      {option("year", "Annual", "2 months free")}
+      {option("year", "Annual", "Save 2 months")}
     </div>
   );
 }
