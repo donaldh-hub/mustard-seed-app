@@ -202,9 +202,7 @@ export function registerAuthRoutes(app: Express) {
         authProvider: "email",
         lastLoginAt: new Date(),
         subscriptionTier: "lite",
-        subscriptionState: "PREMIUM_TRIAL_ACTIVE",
-        trialStartedAt: new Date(),
-        trialExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        subscriptionState: "LITE", // no free trial: Premium starts only with a paid subscription
       } as any);
 
       req.session.userId = user.id;
@@ -308,9 +306,7 @@ export function registerAuthRoutes(app: Express) {
             profileImage: picture,
             lastLoginAt: new Date(),
             subscriptionTier: "lite",
-            subscriptionState: "PREMIUM_TRIAL_ACTIVE",
-            trialStartedAt: new Date(),
-            trialExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            subscriptionState: "LITE", // no free trial: Premium starts only with a paid subscription
           } as any);
           await storage.logAuthEvent(user.id, "signup_success", "google");
         }

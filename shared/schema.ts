@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, jsonb, real, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
 export const SUBSCRIPTION_STATES = [
   "LITE",
@@ -61,6 +60,9 @@ export const users = pgTable("users", {
   themePreference: text("theme_preference").notNull().default("light"),
   groundingJournalCompleted: boolean("grounding_journal_completed").notNull().default(false),
   hasCompletedRebuild: boolean("has_completed_rebuild").notNull().default(false),
+  // Set by the Stripe webhook when the one-time Rebuild payment clears
+  // (or by an admin grant). Gates access to the 7-Day Rebuild.
+  hasPaidRebuild: boolean("has_paid_rebuild").notNull().default(false),
   lastRebuildActivityAt: timestamp("last_rebuild_activity_at"),
   lastAssessmentReminderSentAt: timestamp("last_assessment_reminder_sent_at"),
   lastDailyEncouragementSentAt: timestamp("last_daily_encouragement_sent_at"),
@@ -109,7 +111,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
 });
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
 export const passwordResetTokens = pgTable("password_reset_tokens", {
@@ -146,7 +148,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   createdAt: true,
 });
-export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type InsertMessage = typeof messages.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 
 export const photoMemories = pgTable("photo_memories", {
@@ -168,7 +170,7 @@ export const insertPhotoMemorySchema = createInsertSchema(photoMemories).omit({
   id: true,
   createdAt: true,
 });
-export type InsertPhotoMemory = z.infer<typeof insertPhotoMemorySchema>;
+export type InsertPhotoMemory = typeof photoMemories.$inferInsert;
 export type PhotoMemory = typeof photoMemories.$inferSelect;
 
 export const goals = pgTable("goals", {
@@ -203,7 +205,7 @@ export const insertGoalSchema = createInsertSchema(goals).omit({
   id: true,
   createdAt: true,
 });
-export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type InsertGoal = typeof goals.$inferInsert;
 export type Goal = typeof goals.$inferSelect;
 
 export const entries = pgTable("entries", {
@@ -214,6 +216,9 @@ export const entries = pgTable("entries", {
   summary: text("summary").notNull(),
   mood: text("mood").notNull(),
   userTimezone: text("user_timezone"),
+  // Growth-garden water this entry is worth when mood is "happy". 1 for a
+  // normal action; Premium "weighted water" records 2 for courage/recovery.
+  waterUnits: integer("water_units").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -221,7 +226,7 @@ export const insertEntrySchema = createInsertSchema(entries).omit({
   id: true,
   createdAt: true,
 });
-export type InsertEntry = z.infer<typeof insertEntrySchema>;
+export type InsertEntry = typeof entries.$inferInsert;
 export type Entry = typeof entries.$inferSelect;
 
 export const weeklyReviews = pgTable("weekly_reviews", {
@@ -242,7 +247,7 @@ export const insertWeeklyReviewSchema = createInsertSchema(weeklyReviews).omit({
   id: true,
   createdAt: true,
 });
-export type InsertWeeklyReview = z.infer<typeof insertWeeklyReviewSchema>;
+export type InsertWeeklyReview = typeof weeklyReviews.$inferInsert;
 export type WeeklyReview = typeof weeklyReviews.$inferSelect;
 
 export const commitments = pgTable("commitments", {
@@ -260,7 +265,7 @@ export const insertCommitmentSchema = createInsertSchema(commitments).omit({
   id: true,
   createdAt: true,
 });
-export type InsertCommitment = z.infer<typeof insertCommitmentSchema>;
+export type InsertCommitment = typeof commitments.$inferInsert;
 export type Commitment = typeof commitments.$inferSelect;
 
 export const assessments = pgTable("assessments", {
@@ -279,7 +284,7 @@ export const insertAssessmentSchema = createInsertSchema(assessments).omit({
   id: true,
   createdAt: true,
 });
-export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
+export type InsertAssessment = typeof assessments.$inferInsert;
 export type Assessment = typeof assessments.$inferSelect;
 
 // ─── Trust & Safety (Agent 01) ───────────────────────────────────────────────
@@ -315,7 +320,7 @@ export const insertSafetyEventSchema = createInsertSchema(safetyEvents).omit({
   id: true,
   createdAt: true,
 });
-export type InsertSafetyEvent = z.infer<typeof insertSafetyEventSchema>;
+export type InsertSafetyEvent = typeof safetyEvents.$inferInsert;
 export type SafetyEvent = typeof safetyEvents.$inferSelect;
 
 // ─── Jai Quality Supervisor (Agent 02) ───────────────────────────────────────
@@ -337,7 +342,7 @@ export const insertStyleGuideVersionSchema = createInsertSchema(styleGuideVersio
   id: true,
   createdAt: true,
 });
-export type InsertStyleGuideVersion = z.infer<typeof insertStyleGuideVersionSchema>;
+export type InsertStyleGuideVersion = typeof styleGuideVersions.$inferInsert;
 export type StyleGuideVersion = typeof styleGuideVersions.$inferSelect;
 
 export const QUALITY_CHECK_SOURCES = ["jai_sample", "content_repurposing", "curriculum"] as const;
@@ -360,7 +365,7 @@ export const insertQualityCheckSchema = createInsertSchema(qualityChecks).omit({
   id: true,
   createdAt: true,
 });
-export type InsertQualityCheck = z.infer<typeof insertQualityCheckSchema>;
+export type InsertQualityCheck = typeof qualityChecks.$inferInsert;
 export type QualityCheck = typeof qualityChecks.$inferSelect;
 
 // ─── Support & Onboarding Agent (Agent 03) ───────────────────────────────────
@@ -388,7 +393,7 @@ export const insertSupportInquirySchema = createInsertSchema(supportInquiries).o
   id: true,
   createdAt: true,
 });
-export type InsertSupportInquiry = z.infer<typeof insertSupportInquirySchema>;
+export type InsertSupportInquiry = typeof supportInquiries.$inferInsert;
 export type SupportInquiry = typeof supportInquiries.$inferSelect;
 
 // ─── Billing & Subscription Agent (Agent 04) ─────────────────────────────────
@@ -418,7 +423,7 @@ export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
   id: true,
   createdAt: true,
 });
-export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
+export type InsertBillingEvent = typeof billingEvents.$inferInsert;
 export type BillingEvent = typeof billingEvents.$inferSelect;
 
 // ─── Content Repurposing Agent (Agent 05) ────────────────────────────────────
@@ -453,7 +458,7 @@ export const insertContentDraftSchema = createInsertSchema(contentDrafts).omit({
   id: true,
   createdAt: true,
 });
-export type InsertContentDraft = z.infer<typeof insertContentDraftSchema>;
+export type InsertContentDraft = typeof contentDrafts.$inferInsert;
 export type ContentDraft = typeof contentDrafts.$inferSelect;
 
 export const CALENDAR_DRAFT_STATUSES = ["idea", "drafted", "approved"] as const;
@@ -473,7 +478,7 @@ export const insertContentCalendarEntrySchema = createInsertSchema(contentCalend
   id: true,
   createdAt: true,
 });
-export type InsertContentCalendarEntry = z.infer<typeof insertContentCalendarEntrySchema>;
+export type InsertContentCalendarEntry = typeof contentCalendarEntries.$inferInsert;
 export type ContentCalendarEntry = typeof contentCalendarEntries.$inferSelect;
 
 // ─── Retention & Engagement Agent (Agent 06) ─────────────────────────────────
@@ -501,7 +506,7 @@ export const insertRetentionNudgeSchema = createInsertSchema(retentionNudges).om
   id: true,
   createdAt: true,
 });
-export type InsertRetentionNudge = z.infer<typeof insertRetentionNudgeSchema>;
+export type InsertRetentionNudge = typeof retentionNudges.$inferInsert;
 export type RetentionNudge = typeof retentionNudges.$inferSelect;
 
 // ─── Analytics & Reporting Agent (Agent 07) ──────────────────────────────────
@@ -520,7 +525,7 @@ export const insertAnalyticsAnomalySchema = createInsertSchema(analyticsAnomalie
   id: true,
   createdAt: true,
 });
-export type InsertAnalyticsAnomaly = z.infer<typeof insertAnalyticsAnomalySchema>;
+export type InsertAnalyticsAnomaly = typeof analyticsAnomalies.$inferInsert;
 export type AnalyticsAnomaly = typeof analyticsAnomalies.$inferSelect;
 
 // ─── Curriculum Production Agent (Agent 08) ──────────────────────────────────
@@ -555,7 +560,7 @@ export const insertCurriculumDraftSchema = createInsertSchema(curriculumDrafts).
   id: true,
   createdAt: true,
 });
-export type InsertCurriculumDraft = z.infer<typeof insertCurriculumDraftSchema>;
+export type InsertCurriculumDraft = typeof curriculumDrafts.$inferInsert;
 export type CurriculumDraft = typeof curriculumDrafts.$inferSelect;
 
 // ─── Funnel Optimization Agent (Agent 09) ────────────────────────────────────
@@ -586,7 +591,7 @@ export const insertABTestSchema = createInsertSchema(abTests).omit({
   id: true,
   createdAt: true,
 });
-export type InsertABTest = z.infer<typeof insertABTestSchema>;
+export type InsertABTest = typeof abTests.$inferInsert;
 export type ABTest = typeof abTests.$inferSelect;
 
 export const abTestVariants = pgTable("ab_test_variants", {
@@ -605,7 +610,7 @@ export const insertABTestVariantSchema = createInsertSchema(abTestVariants).omit
   id: true,
   createdAt: true,
 });
-export type InsertABTestVariant = z.infer<typeof insertABTestVariantSchema>;
+export type InsertABTestVariant = typeof abTestVariants.$inferInsert;
 export type ABTestVariant = typeof abTestVariants.$inferSelect;
 
 // ─── Technical & Release Ops Agent (Agent 10) ────────────────────────────────
@@ -641,7 +646,7 @@ export const insertReleaseItemSchema = createInsertSchema(releaseItems).omit({
   id: true,
   createdAt: true,
 });
-export type InsertReleaseItem = z.infer<typeof insertReleaseItemSchema>;
+export type InsertReleaseItem = typeof releaseItems.$inferInsert;
 export type ReleaseItem = typeof releaseItems.$inferSelect;
 
 export const changelogEntries = pgTable("changelog_entries", {
@@ -655,5 +660,5 @@ export const insertChangelogEntrySchema = createInsertSchema(changelogEntries).o
   id: true,
   createdAt: true,
 });
-export type InsertChangelogEntry = z.infer<typeof insertChangelogEntrySchema>;
+export type InsertChangelogEntry = typeof changelogEntries.$inferInsert;
 export type ChangelogEntry = typeof changelogEntries.$inferSelect;

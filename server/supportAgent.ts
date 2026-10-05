@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import type { SupportOutcome, SupportEscalationReason } from "@shared/schema";
+import { PRICING, formatUsd } from "@shared/pricing";
 
 // ─── Support & Onboarding Agent (Agent 03) ───────────────────────────────────
 // Answers "how do I..." questions from an approved response library ONLY —
@@ -43,7 +44,7 @@ export const SUPPORT_RESPONSE_LIBRARY: SupportLibraryEntry[] = [
     id: "start-rebuild",
     question: "How do I start the 7-Day Rebuild?",
     patterns: [/start.*rebuild/i, /7.?day rebuild/i, /begin.*rebuild/i],
-    answer: "The 7-Day Rebuild unlocks as a banner on your Home tab once you finish the 3-Day Grounding Journal — tap that banner to begin.",
+    answer: `The 7-Day Rebuild unlocks as a banner on your Home tab once you finish the 3-Day Grounding Journal — tap that banner to begin. It's a one-time ${formatUsd(PRICING.rebuildProgramCents)} purchase, and once you finish all 7 days you can subscribe to Premium at the graduate rate of ${formatUsd(PRICING.rebuildGradMonthlyCents)}/month instead of ${formatUsd(PRICING.standardMonthlyCents)}.`,
   },
   {
     id: "start-grounding-journal",
@@ -67,7 +68,7 @@ export const SUPPORT_RESPONSE_LIBRARY: SupportLibraryEntry[] = [
     id: "subscription-price",
     question: "How much does Mustard Seed cost / what's included in my plan?",
     patterns: [/how much.*(cost|price)/i, /what.*plan.*include/i, /pricing/i, /subscription.*cost/i],
-    answer: "Mustard Seed is $14.99/month after your free assessment and journal. Your Profile tab shows your current plan and status.",
+    answer: `The 3-Day Grounding Journal is free. Premium is ${formatUsd(PRICING.standardMonthlyCents)}/month, and the 7-Day Rebuild is a one-time ${formatUsd(PRICING.rebuildProgramCents)}. Your Profile tab shows your current plan and status.`,
   },
   {
     id: "see-progress",

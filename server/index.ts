@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupSession, registerAuthRoutes } from "./auth";
 import { pool } from "./storage";
+import { checkRebuildPriceConfig } from "./stripePriceCheck";
 
 // Idempotent schema guard — adds missing columns without touching existing data
 async function ensureSchema() {
@@ -35,6 +36,7 @@ async function ensureSchema() {
     await pool.query(`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS has_completed_rebuild BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS has_paid_rebuild BOOLEAN NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS last_rebuild_activity_at TIMESTAMP;
     `);
     await pool.query(`
@@ -50,6 +52,21 @@ async function ensureSchema() {
         created_at TIMESTAMP DEFAULT now()
       );
     `);
+    await pool.query(`
+      ALTER TABLE entries
+        ADD COLUMN IF NOT EXISTS water_units INTEGER NOT NULL DEFAULT 1;
+    `);
+    // Login sessions (connect-pg-simple). Its own createTableIfMissing reads a
+    // table.sql file that isn't in the production bundle, so a fresh database
+    // would fail every login — create the table here instead.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        sid VARCHAR NOT NULL COLLATE "default" PRIMARY KEY,
+        sess JSON NOT NULL,
+        expire TIMESTAMP(6) NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON user_sessions (expire);
+    `);
     console.log("[schema] auto-migration complete");
   } catch (err) {
     console.error("[schema] auto-migration error (non-fatal):", err);
@@ -60,6 +77,11 @@ console.log("deployment refresh");
 
 const app = express();
 const httpServer = createServer(app);
+
+// Replit serves the app over HTTPS through a proxy that forwards plain HTTP.
+// Trusting it lets Express see the original https request, which the
+// secure-only login cookie requires — without this no session cookie is set.
+app.set("trust proxy", 1);
 
 // Must be registered before express.json() — Stripe signature verification
 // requires the raw, unparsed request body.
@@ -112,6 +134,7 @@ registerAuthRoutes(app);
 (async () => {
   await ensureSchema();
   await registerRoutes(httpServer, app);
+  void checkRebuildPriceConfig();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

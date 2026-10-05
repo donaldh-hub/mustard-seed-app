@@ -1,6 +1,5 @@
 import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 import { sql } from "drizzle-orm";
 
 export const conversations = pgTable("conversations", {
@@ -28,7 +27,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 });
 
 export type Conversation = typeof conversations.$inferSelect;
-export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type InsertConversation = typeof conversations.$inferInsert;
 export type Message = typeof messages.$inferSelect;
-export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type InsertMessage = typeof messages.$inferInsert;
 

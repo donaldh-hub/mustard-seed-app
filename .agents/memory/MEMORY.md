@@ -1,0 +1,2 @@
+- [Stable Drizzle toolchain](stable-drizzle-toolchain.md) — Exact stable Drizzle releases need a loader-scoped esbuild override to keep migrations secure.
+- [Auth repair scope](auth-repair-scope.md) — Preserve the existing custom auth and real production user data when repairing signup.

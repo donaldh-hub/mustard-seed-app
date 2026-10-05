@@ -18,9 +18,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
+import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
+import { GraduateRateNote } from "@/components/GraduateRateNote";
 import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
@@ -65,6 +68,14 @@ export default function Profile() {
     enabled: !!userId,
   });
 
+  const hasTrends = user?.featureLimits?.heartbeatTrends === true;
+  const { data: trends } = useQuery({
+    queryKey: ["heartbeat-trends", userId],
+    queryFn: () => api.getHeartbeatTrends(userId!),
+    enabled: !!userId && hasTrends,
+  });
+  const [upgradeFeature, setUpgradeFeature] = useState<string | null>(null);
+
   const signOut = useStore((s) => s.signOut);
 
   const [notificationsOn, setNotificationsOn] = useState(() => {
@@ -76,13 +87,17 @@ export default function Profile() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [stripeConfigured, setStripeConfigured] = useState<boolean | null>(null);
+  const [annualAvailable, setAnnualAvailable] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const [theme, setTheme] = useState<"light" | "dark">(() => getStoredTheme());
   const [dataCleared, setDataCleared] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
-    api.getStripeConfig().then((cfg) => setStripeConfigured(cfg.configured)).catch(() => setStripeConfigured(false));
+    api.getStripeConfig()
+      .then((cfg) => { setStripeConfigured(cfg.configured); setAnnualAvailable(!!cfg.annualAvailable); })
+      .catch(() => setStripeConfigured(false));
   }, []);
 
   const updateSettingsMut = useMutation({
@@ -137,7 +152,7 @@ export default function Profile() {
     setCheckoutError(null);
     setCheckoutLoading(true);
     try {
-      const { url } = await api.createStripeCheckout(userId);
+      const { url } = await api.createStripeCheckout(userId, billingInterval);
       window.location.href = url;
     } catch (err: any) {
       setCheckoutError(err.message?.includes("not configured")
@@ -238,6 +253,50 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {hasTrends ? (
+              trends && trends.length >= 2 ? (
+                <div className="space-y-2 mb-4" data-testid="section-heartbeat-trends">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Heartbeat Trends · {trends.length} check-ins
+                  </p>
+                  {Object.keys(HEARTBEAT_LABELS).map((key) => {
+                    const series = trends.map((t) => t.heartbeatScores?.[key] ?? 0);
+                    const first = series[0];
+                    const latest = series[series.length - 1];
+                    const delta = latest - first;
+                    return (
+                      <div key={key} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-foreground truncate">{HEARTBEAT_LABELS[key]}</span>
+                        <span className="flex items-center gap-2 shrink-0">
+                          <span className="flex items-end gap-0.5 h-4" aria-hidden>
+                            {series.slice(-6).map((v, i) => (
+                              <span key={i} className="w-1.5 rounded-sm bg-primary/60" style={{ height: `${Math.max(15, (v / 5) * 100)}%` }} />
+                            ))}
+                          </span>
+                          <span className={`font-semibold tabular-nums ${delta > 0 ? "text-primary" : delta < 0 ? "text-orange-500" : "text-muted-foreground"}`}>
+                            {first} → {latest}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground mb-4" data-testid="text-trends-empty">
+                  Retake your assessment to start your Heartbeat Trends.
+                </p>
+              )
+            ) : (
+              <button
+                onClick={() => setUpgradeFeature("heartbeat_trends")}
+                className="mb-4 w-full flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-900"
+                data-testid="button-upgrade-trends"
+              >
+                <Crown className="w-4 h-4 shrink-0" />
+                <span>See how each heartbeat moves over time with Premium.</span>
+              </button>
             )}
 
             {assessmentDate && (
@@ -484,7 +543,7 @@ export default function Profile() {
                   {trialDays && trialDays > 0 ? `${trialDays} day${trialDays !== 1 ? "s" : ""} left on Premium trial` : "Upgrade to Premium"}
                 </p>
                 <p className="text-xs text-amber-700/80 mt-0.5 leading-snug">
-                  Unlock deep AI coaching, photo memories, and full heartbeat analytics.
+                  Unlock a second goal, weighted water, Heartbeat Trends, deep weekly reviews, and monthly recalibration.
                 </p>
               </div>
             </div>
@@ -501,6 +560,12 @@ export default function Profile() {
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-700">Payment processing is coming soon. Check back shortly.</p>
               </div>
+            )}
+
+            {user.hasCompletedRebuild && <GraduateRateNote className="mt-3" />}
+
+            {stripeConfigured !== false && annualAvailable && (
+              <BillingIntervalToggle value={billingInterval} onChange={setBillingInterval} className="mt-4" />
             )}
 
             {stripeConfigured !== false && (
@@ -536,6 +601,7 @@ export default function Profile() {
           Sign Out
         </Button>
       </div>
+      <UpgradePrompt feature={upgradeFeature ?? ""} show={!!upgradeFeature} onClose={() => setUpgradeFeature(null)} />
     </div>
   );
 }
