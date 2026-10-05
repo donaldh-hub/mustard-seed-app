@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupSession, registerAuthRoutes } from "./auth";
 import { pool } from "./storage";
+import { checkRebuildPriceConfig } from "./stripePriceCheck";
 
 // Idempotent schema guard — adds missing columns without touching existing data
 async function ensureSchema() {
@@ -133,6 +134,7 @@ registerAuthRoutes(app);
 (async () => {
   await ensureSchema();
   await registerRoutes(httpServer, app);
+  void checkRebuildPriceConfig();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

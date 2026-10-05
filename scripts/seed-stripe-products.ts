@@ -12,7 +12,9 @@ import { PRICING, standardAnnualCents, rebuildGradAnnualCents } from '../shared/
 //   standard_annual  → $179.90/year  → STRIPE_PRICE_ID_ANNUAL
 //   rebuild_annual   → $159.90/year  → STRIPE_PRICE_ID_REBUILD_ANNUAL
 // Mustard Seed 7-Day Rebuild (one-time):
-//   rebuild_program  → $25          → STRIPE_PRICE_ID_REBUILD_PROGRAM
+//   rebuild_program  → $39.99 one-time → STRIPE_PRICE_ID_REBUILD_PROGRAM
+//   (An older $25 price, if one exists, is left active and listed as "other
+//   active price" — archive it in the Stripe dashboard after switching.)
 type PlanSpec = {
   plan: string;
   unitAmount: number;

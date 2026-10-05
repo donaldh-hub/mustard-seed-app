@@ -11,7 +11,7 @@ setting is read.
   **$159.90/year** Rebuild. `scripts/seed-stripe-products.ts` creates exactly
   these four prices. The upgrade screens show a Monthly / Annual toggle once
   `STRIPE_PRICE_ID_ANNUAL` is set; Stripe checkout shows the exact amount.
-- [x] **7-Day Rebuild is $25, one time, for everyone.** Day 1 stays locked
+- [x] **7-Day Rebuild is $39.99, one time, for everyone.** Day 1 stays locked
   until the payment clears. The purchase screen explains the graduate rate.
   All amounts live in `shared/pricing.ts`, the single source of truth.
 - [x] **Graduates only ever see graduate prices** ($15.99/mo, $159.90/yr).
@@ -44,11 +44,12 @@ setting is read.
 | `STRIPE_PRICE_ID` | checkout | Live standard price ID (`price_...`). |
 | `STRIPE_PRICE_ID_REBUILD` | checkout | Live Rebuild-graduate price ID. **Required**: without it, graduates can't subscribe (they never fall back to $17.99). |
 | `STRIPE_PRICE_ID_ANNUAL` | checkout, `/api/stripe/config` | Live $179.90/yr price ID. The annual toggle stays hidden until this **and** `STRIPE_PRICE_ID_REBUILD_ANNUAL` are set. |
-| `STRIPE_PRICE_ID_REBUILD_PROGRAM` | Rebuild checkout, `/api/stripe/config` | Live **$25 one-time** Rebuild price ID. Until set, the Rebuild shows "opens for purchase soon" and nobody can start it (except admin grants). |
+| `STRIPE_PRICE_ID_REBUILD_PROGRAM` | Rebuild checkout, `/api/stripe/config` | Live **$39.99 one-time** Rebuild price ID. Must match `PRICING.rebuildProgramCents`; the server logs a `[CONFIG_WARNING]` at startup if it doesn't. Until set, the Rebuild shows "opens for purchase soon" and nobody can start it (except admin grants). |
 | `STRIPE_PRICE_ID_REBUILD_ANNUAL` | checkout, `/api/stripe/config` | Live $159.90/yr Rebuild price ID. Required for the annual toggle to appear. |
 | `STRIPE_WEBHOOK_SECRET` | `/api/stripe/webhook` | From the **live** webhook endpoint (`whsec_...`). Without it, subscriptions never activate. |
 | `APP_BASE_URL` | checkout/portal return URLs | e.g. `https://mustardseeddap.com`. Falls back to the request host. |
 | `STRIPE_STANDARD_PRICE_CENTS` | `billingAgent.ts` MRR report | Optional; set to `1799`. |
+| `DUNNING_COPY_APPROVED` | `server/billingAgent.ts` | Failed-payment emails stay off until this is `true`. Set it after approving the copy (section 1). |
 
 ### Sign-in, email, storage
 | Variable | Used in | Notes |
@@ -59,10 +60,14 @@ setting is read.
 | `FOUNDER_ALERT_EMAIL` | analytics, trust & safety | Where alerts go. |
 | `PRIVATE_OBJECT_DIR`, `PUBLIC_OBJECT_SEARCH_PATHS` | object storage | Set by Replit Object Storage (photo uploads). |
 
-### Admin and agents (optional)
+### Admin
 | Variable | Used in | Notes |
 |---|---|---|
-| `ADMIN_API_KEY` | admin routes (`x-admin-key` header) | Admin API returns 503 until set. |
+| `ADMIN_API_KEY` | admin routes (`x-admin-key` header) | **REQUIRED for refunds.** A Stripe refund does not remove Rebuild access; revoking it needs this key (section 6). Admin API returns 503 until set. |
+
+### Agents (optional)
+| Variable | Used in | Notes |
+|---|---|---|
 | `GITHUB_TOKEN`, `GITHUB_REPO_FULL_NAME` | `server/releaseOpsAgent.ts` | Release Ops agent only. |
 
 ## 3. Stripe live-mode steps
@@ -72,13 +77,16 @@ setting is read.
 2. With the live `STRIPE_SECRET_KEY` set, run
    `npx tsx scripts/seed-stripe-products.ts`. It creates the product plus the
    Premium product with four prices ($17.99/mo, $15.99/mo, $179.90/yr,
-   $159.90/yr) and the 7-Day Rebuild product ($25 one-time), or reuses them
-   if they exist, and prints the five `STRIPE_PRICE_ID*` values to copy into
+   $159.90/yr) and the 7-Day Rebuild product ($39.99 one-time), or reuses them
+   if they exist. If an older $25 Rebuild price exists, the script lists it as
+   "other active price": archive it in the dashboard. Wait a few minutes
+   between runs (Stripe's product search can lag, which could create a
+   duplicate product). It prints the five `STRIPE_PRICE_ID*` values to copy into
    Replit Secrets. The first line of output says `LIVE` or `test`, so check it.
 3. Add a webhook endpoint: `https://<your domain>/api/stripe/webhook`,
    subscribed to these events (the ones the server handles):
    - `checkout.session.completed` (activates subscriptions **and** records
-     $25 Rebuild purchases)
+     $39.99 Rebuild purchases)
    - `invoice.payment_succeeded`
    - `invoice.payment_failed`
    - `customer.subscription.updated`
@@ -97,7 +105,7 @@ setting is read.
 - [ ] Log a verified action and confirm water and the reward card appear.
 - [ ] Upload a photo and confirm it saves.
 - [ ] Finish the Grounding Journal, open the Rebuild, and confirm Day 1 is
-      locked behind the $25 card with the graduate-rate note.
+      locked behind the $39.99 card with the graduate-rate note.
 - [ ] Buy the Rebuild with a real card. You should land back on the Rebuild
       page, see "Confirming your payment…", then Day 1 unlocks.
 - [ ] Subscribe **monthly** with a real card, then confirm the user shows as
@@ -110,8 +118,12 @@ setting is read.
 
 ## 5. Code health (done in this pass)
 
-- `npm run check` (TypeScript) passes with **0 errors** (was 28).
-- `npm run build` succeeds.
+- `npm run check` (TypeScript) passed with **0 errors** and `npm run build`
+  succeeded on PR #20 alone. **Re-run both on the combined launch branch**
+  (`npx tsc --noEmit && npm run build` in the Replit shell) before merging.
+- Webhook shape tests: `node --experimental-strip-types --test server/stripeShapes.test.ts`
+  (no install needed). They cover old and new Stripe API shapes for the
+  subscription period end and the invoice's subscription.
 - Unused Replit scaffolding (`server/replit_integrations/{audio,batch,chat,image}`)
   is excluded from type-checking. Nothing imports it, and `chat/storage.ts`
   references a `db` module and `conversations` table that don't exist. It can

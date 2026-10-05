@@ -60,7 +60,7 @@ export const users = pgTable("users", {
   themePreference: text("theme_preference").notNull().default("light"),
   groundingJournalCompleted: boolean("grounding_journal_completed").notNull().default(false),
   hasCompletedRebuild: boolean("has_completed_rebuild").notNull().default(false),
-  // Set by the Stripe webhook when the one-time $25 Rebuild payment clears
+  // Set by the Stripe webhook when the one-time Rebuild payment clears
   // (or by an admin grant). Gates access to the 7-Day Rebuild.
   hasPaidRebuild: boolean("has_paid_rebuild").notNull().default(false),
   lastRebuildActivityAt: timestamp("last_rebuild_activity_at"),

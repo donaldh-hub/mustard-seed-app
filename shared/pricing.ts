@@ -2,7 +2,7 @@
 // Stripe seed script to create prices and by the UI to describe them.
 // Stripe price IDs live in env vars; these amounts must match those prices.
 export const PRICING = {
-  rebuildProgramCents: 2500, // 7-Day Rebuild, one-time
+  rebuildProgramCents: 3999, // 7-Day Rebuild, one-time ($39.99)
   standardMonthlyCents: 1799,
   rebuildGradMonthlyCents: 1599, // Premium rate after completing the Rebuild
   annualMonths: 10, // annual = 10 × monthly (two months free)

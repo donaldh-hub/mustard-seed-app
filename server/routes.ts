@@ -26,6 +26,7 @@ import { analyzePhoto } from "./visionAnalysis";
 import { assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
+import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -346,7 +347,7 @@ export function registerStripeWebhook(app: Express) {
           case "checkout.session.completed": {
             const session = event.data.object;
 
-            // One-time 7-Day Rebuild purchase ($25) — grants Rebuild access, no subscription.
+            // One-time 7-Day Rebuild purchase (PRICING.rebuildProgramCents) — grants Rebuild access, no subscription.
             if (session.mode === "payment" && session.metadata?.purchase === "rebuild") {
               const buyerId = session.client_reference_id || session.metadata?.userId;
               if (!buyerId) {
@@ -379,7 +380,11 @@ export function registerStripeWebhook(app: Express) {
             if (!user) break;
 
             const subscription: any = await stripe.subscriptions.retrieve(session.subscription as string);
-            const periodEnd = new Date(subscription.current_period_end * 1000);
+            const periodEnd = getSubscriptionPeriodEnd(subscription);
+            if (!periodEnd) {
+              console.error(`[STRIPE_ACTION_NEEDED] checkout.session.completed: no valid period end on subscription ${subscription?.id}; user ${userId.slice(0, 8)}*** paid but was NOT activated`);
+              break;
+            }
             const productId = subscription.items?.data?.[0]?.price?.id;
 
             const transition = computeStateTransition(user.subscriptionState as any, {
@@ -409,8 +414,17 @@ export function registerStripeWebhook(app: Express) {
             const user = await storage.getUserByStripeCustomerId(invoice.customer as string);
             if (!user) break;
 
-            const subscription: any = await stripe.subscriptions.retrieve(invoice.subscription as string);
-            const periodEnd = new Date(subscription.current_period_end * 1000);
+            const subscriptionId = getInvoiceSubscriptionId(invoice);
+            if (!subscriptionId) {
+              console.error(`[STRIPE_ACTION_NEEDED] invoice.payment_succeeded: no subscription on invoice ${invoice?.id}; renewal NOT recorded for user ${user.id.slice(0, 8)}***`);
+              break;
+            }
+            const subscription: any = await stripe.subscriptions.retrieve(subscriptionId);
+            const periodEnd = getSubscriptionPeriodEnd(subscription);
+            if (!periodEnd) {
+              console.error(`[STRIPE_ACTION_NEEDED] invoice.payment_succeeded: no valid period end on subscription ${subscriptionId}; renewal NOT recorded for user ${user.id.slice(0, 8)}***`);
+              break;
+            }
 
             const transition = computeStateTransition(user.subscriptionState as any, {
               platform: "STRIPE",
@@ -450,7 +464,11 @@ export function registerStripeWebhook(app: Express) {
             const user = await storage.getUserByStripeCustomerId(subscription.customer as string);
             if (!user) break;
 
-            const periodEnd = new Date(subscription.current_period_end * 1000);
+            const periodEnd = getSubscriptionPeriodEnd(subscription);
+            if (!periodEnd) {
+              console.error(`[STRIPE_ACTION_NEEDED] customer.subscription.updated: no valid period end on subscription ${subscription?.id}; change NOT recorded for user ${user.id.slice(0, 8)}***`);
+              break;
+            }
 
             if (subscription.cancel_at_period_end) {
               const transition = computeStateTransition(user.subscriptionState as any, {
@@ -3211,7 +3229,7 @@ export async function registerRoutes(
     return res.json({ configured, annualAvailable, rebuildPurchaseAvailable });
   });
 
-  // One-time $25 purchase of the 7-Day Rebuild (Stripe "payment" mode).
+  // One-time purchase of the 7-Day Rebuild (price: shared/pricing.ts) (Stripe "payment" mode).
   // Access is granted by the webhook (checkout.session.completed), never here.
   app.post("/api/users/:userId/stripe/create-rebuild-checkout", async (req, res) => {
     const userId = req.params.userId;
@@ -3653,7 +3671,7 @@ export async function registerRoutes(
   // Checked lazily on every GET so no cron/scheduler is needed.
   const REBUILD_UNLOCK_HOURS = 24;
 
-  // Paid access gate: everyone pays $25 once. Users who already finished the
+  // Paid access gate: everyone pays the one-time Rebuild price once. Users who already finished the
   // Rebuild before it was paid keep access (grandfathered).
   function hasRebuildAccess(user: { hasPaidRebuild?: boolean | null; hasCompletedRebuild?: boolean | null }): boolean {
     return !!(user.hasPaidRebuild || user.hasCompletedRebuild);
