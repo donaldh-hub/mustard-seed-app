@@ -320,7 +320,7 @@ export const insertSafetyEventSchema = createInsertSchema(safetyEvents).omit({
   id: true,
   createdAt: true,
 });
-export type InsertSafetyEvent = z.infer<typeof insertSafetyEventSchema>;
+export type InsertSafetyEvent = typeof safetyEvents.$inferInsert;
 export type SafetyEvent = typeof safetyEvents.$inferSelect;
 
 // ─── Jai Quality Supervisor (Agent 02) ───────────────────────────────────────
@@ -342,7 +342,7 @@ export const insertStyleGuideVersionSchema = createInsertSchema(styleGuideVersio
   id: true,
   createdAt: true,
 });
-export type InsertStyleGuideVersion = z.infer<typeof insertStyleGuideVersionSchema>;
+export type InsertStyleGuideVersion = typeof styleGuideVersions.$inferInsert;
 export type StyleGuideVersion = typeof styleGuideVersions.$inferSelect;
 
 export const QUALITY_CHECK_SOURCES = ["jai_sample", "content_repurposing", "curriculum"] as const;
@@ -365,7 +365,7 @@ export const insertQualityCheckSchema = createInsertSchema(qualityChecks).omit({
   id: true,
   createdAt: true,
 });
-export type InsertQualityCheck = z.infer<typeof insertQualityCheckSchema>;
+export type InsertQualityCheck = typeof qualityChecks.$inferInsert;
 export type QualityCheck = typeof qualityChecks.$inferSelect;
 
 // ─── Support & Onboarding Agent (Agent 03) ───────────────────────────────────
@@ -393,7 +393,7 @@ export const insertSupportInquirySchema = createInsertSchema(supportInquiries).o
   id: true,
   createdAt: true,
 });
-export type InsertSupportInquiry = z.infer<typeof insertSupportInquirySchema>;
+export type InsertSupportInquiry = typeof supportInquiries.$inferInsert;
 export type SupportInquiry = typeof supportInquiries.$inferSelect;
 
 // ─── Billing & Subscription Agent (Agent 04) ─────────────────────────────────
@@ -423,7 +423,7 @@ export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({
   id: true,
   createdAt: true,
 });
-export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
+export type InsertBillingEvent = typeof billingEvents.$inferInsert;
 export type BillingEvent = typeof billingEvents.$inferSelect;
 
 // ─── Content Repurposing Agent (Agent 05) ────────────────────────────────────
@@ -458,7 +458,7 @@ export const insertContentDraftSchema = createInsertSchema(contentDrafts).omit({
   id: true,
   createdAt: true,
 });
-export type InsertContentDraft = z.infer<typeof insertContentDraftSchema>;
+export type InsertContentDraft = typeof contentDrafts.$inferInsert;
 export type ContentDraft = typeof contentDrafts.$inferSelect;
 
 export const CALENDAR_DRAFT_STATUSES = ["idea", "drafted", "approved"] as const;
@@ -478,7 +478,7 @@ export const insertContentCalendarEntrySchema = createInsertSchema(contentCalend
   id: true,
   createdAt: true,
 });
-export type InsertContentCalendarEntry = z.infer<typeof insertContentCalendarEntrySchema>;
+export type InsertContentCalendarEntry = typeof contentCalendarEntries.$inferInsert;
 export type ContentCalendarEntry = typeof contentCalendarEntries.$inferSelect;
 
 // ─── Retention & Engagement Agent (Agent 06) ─────────────────────────────────
@@ -506,7 +506,7 @@ export const insertRetentionNudgeSchema = createInsertSchema(retentionNudges).om
   id: true,
   createdAt: true,
 });
-export type InsertRetentionNudge = z.infer<typeof insertRetentionNudgeSchema>;
+export type InsertRetentionNudge = typeof retentionNudges.$inferInsert;
 export type RetentionNudge = typeof retentionNudges.$inferSelect;
 
 // ─── Analytics & Reporting Agent (Agent 07) ──────────────────────────────────
@@ -525,7 +525,7 @@ export const insertAnalyticsAnomalySchema = createInsertSchema(analyticsAnomalie
   id: true,
   createdAt: true,
 });
-export type InsertAnalyticsAnomaly = z.infer<typeof insertAnalyticsAnomalySchema>;
+export type InsertAnalyticsAnomaly = typeof analyticsAnomalies.$inferInsert;
 export type AnalyticsAnomaly = typeof analyticsAnomalies.$inferSelect;
 
 // ─── Curriculum Production Agent (Agent 08) ──────────────────────────────────
@@ -560,7 +560,7 @@ export const insertCurriculumDraftSchema = createInsertSchema(curriculumDrafts).
   id: true,
   createdAt: true,
 });
-export type InsertCurriculumDraft = z.infer<typeof insertCurriculumDraftSchema>;
+export type InsertCurriculumDraft = typeof curriculumDrafts.$inferInsert;
 export type CurriculumDraft = typeof curriculumDrafts.$inferSelect;
 
 // ─── Funnel Optimization Agent (Agent 09) ────────────────────────────────────
@@ -591,7 +591,7 @@ export const insertABTestSchema = createInsertSchema(abTests).omit({
   id: true,
   createdAt: true,
 });
-export type InsertABTest = z.infer<typeof insertABTestSchema>;
+export type InsertABTest = typeof abTests.$inferInsert;
 export type ABTest = typeof abTests.$inferSelect;
 
 export const abTestVariants = pgTable("ab_test_variants", {
@@ -610,7 +610,7 @@ export const insertABTestVariantSchema = createInsertSchema(abTestVariants).omit
   id: true,
   createdAt: true,
 });
-export type InsertABTestVariant = z.infer<typeof insertABTestVariantSchema>;
+export type InsertABTestVariant = typeof abTestVariants.$inferInsert;
 export type ABTestVariant = typeof abTestVariants.$inferSelect;
 
 // ─── Technical & Release Ops Agent (Agent 10) ────────────────────────────────
@@ -646,7 +646,7 @@ export const insertReleaseItemSchema = createInsertSchema(releaseItems).omit({
   id: true,
   createdAt: true,
 });
-export type InsertReleaseItem = z.infer<typeof insertReleaseItemSchema>;
+export type InsertReleaseItem = typeof releaseItems.$inferInsert;
 export type ReleaseItem = typeof releaseItems.$inferSelect;
 
 export const changelogEntries = pgTable("changelog_entries", {
@@ -660,5 +660,5 @@ export const insertChangelogEntrySchema = createInsertSchema(changelogEntries).o
   id: true,
   createdAt: true,
 });
-export type InsertChangelogEntry = z.infer<typeof insertChangelogEntrySchema>;
+export type InsertChangelogEntry = typeof changelogEntries.$inferInsert;
 export type ChangelogEntry = typeof changelogEntries.$inferSelect;
