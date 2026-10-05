@@ -1,0 +1,1 @@
+- [Auth repair scope](auth-repair-scope.md) — Preserve the existing custom auth and real production user data when repairing signup.
