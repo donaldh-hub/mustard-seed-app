@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Crown } from "lucide-react";
 import { useLocation } from "wouter";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 
 const QUESTIONS = [
   "I have a clear picture of what I want to achieve right now.",
@@ -45,6 +46,20 @@ export default function Assessment() {
   const userId = useStore((s) => s.userId);
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const qc = useQueryClient();
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const { data: existingAssessment } = useQuery({
+    queryKey: ["assessment", userId],
+    queryFn: () => api.getAssessment(userId!),
+    enabled: !!userId,
+  });
+  const { data: user } = useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => api.getUser(userId!),
+    enabled: !!userId,
+  });
+  // First assessment is free; retaking it (Monthly Recalibration) is Premium.
+  const retakeLocked = !!existingAssessment && user?.featureLimits?.monthlyRecalibration === false;
 
   const allAnswered = answers.every((a) => a !== null);
 
@@ -124,6 +139,30 @@ export default function Assessment() {
             Retake Assessment
           </Button>
         </motion.div>
+      </div>
+    );
+  }
+
+
+  if (retakeLocked) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-8 bg-background">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-border/50 p-8 text-center space-y-4" data-testid="recalibration-locked">
+          <Crown className="w-8 h-8 mx-auto text-amber-500" />
+          <h2 className="text-xl font-serif font-semibold text-foreground">Monthly Recalibration</h2>
+          <p className="text-sm text-muted-foreground">
+            You've already taken your Five Heartbeats assessment. Retaking it to see how each heartbeat has moved is part of Premium.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button className="rounded-full" onClick={() => setShowUpgrade(true)} data-testid="button-upgrade-recalibration">
+              See Premium
+            </Button>
+            <Button variant="ghost" className="rounded-full" onClick={() => setLocation("/home")}>
+              Back to Home
+            </Button>
+          </div>
+        </div>
+        <UpgradePrompt feature="monthly_recalibration" show={showUpgrade} onClose={() => setShowUpgrade(false)} />
       </div>
     );
   }

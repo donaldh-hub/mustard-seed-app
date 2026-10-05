@@ -59,6 +59,7 @@ export interface IStorage {
   updateGoal(id: string, data: Partial<InsertGoal>): Promise<Goal | undefined>;
 
   getLatestAssessment(userId: string): Promise<Assessment | undefined>;
+  getAssessments(userId: string): Promise<Assessment[]>;
   createAssessment(data: InsertAssessment): Promise<Assessment>;
 
   getWeeklyReviewStatus(userId: string): Promise<{ pending: boolean; review?: WeeklyReview; daysSinceCycleStart?: number }>;
@@ -261,6 +262,10 @@ export class DatabaseStorage implements IStorage {
   async getLatestAssessment(userId: string): Promise<Assessment | undefined> {
     const [assessment] = await db.select().from(assessments).where(eq(assessments.userId, userId)).orderBy(desc(assessments.createdAt)).limit(1);
     return assessment;
+  }
+
+  async getAssessments(userId: string): Promise<Assessment[]> {
+    return db.select().from(assessments).where(eq(assessments.userId, userId)).orderBy(asc(assessments.createdAt));
   }
 
   async createAssessment(data: InsertAssessment): Promise<Assessment> {
