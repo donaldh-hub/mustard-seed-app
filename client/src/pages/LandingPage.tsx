@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_56_37_PM_1772938650664.png";
-import jaiPodcast from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import jaiPodcast from "@assets/ChatGPT_Image_Jun_17,_2026,_08_22_26_PM(2)_1787620780738.png";
 import jaiArmsCrossed from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
+import mustardSeedLogo from "@assets/ChatGPT_Image_Jun_4,_2026,_09_21_58_PM_1787613705475.png";
 import { REBUILD_INSTANCES } from "@/content/rebuildContent";
 
 const HEARTBEATS = [
@@ -11,6 +12,18 @@ const HEARTBEATS = [
   { title: "Feedback & Adaptation", desc: "Review what happened, adjust what's needed, and keep moving forward." },
   { title: "Courageous Action", desc: "Act even when it's uncomfortable, uncertain, or inconvenient." },
 ];
+
+function MustardSeedMark({ className = "" }: { className?: string }) {
+  return (
+    <span className={`relative inline-block overflow-hidden ${className}`} aria-hidden="true">
+      <img
+        src={mustardSeedLogo}
+        alt=""
+        className="absolute left-[-30%] top-[-8%] h-[160%] w-[160%] max-w-none"
+      />
+    </span>
+  );
+}
 
 function PathsGrid({
   onAssessment,
@@ -93,24 +106,22 @@ export default function LandingPage() {
 
   return (
     <div className="w-full overflow-x-hidden bg-[#f9f6ef] text-stone-900">
-      {/* NAV */}
-      <nav className="flex items-center justify-between px-6 py-4 bg-[#1a3a2a]">
-        <span className="font-serif text-xl font-bold text-[#f9f6ef]">Mustard Seed</span>
-        <button
-          onClick={goToSignup}
-          data-testid="button-nav-cta"
-          className="rounded-full bg-[#c8a84b] px-5 py-2 text-sm font-bold text-stone-900 transition-transform hover:scale-105 active:scale-95"
-        >
-          Start Free Journal
-        </button>
-      </nav>
-
       {/* HERO */}
       <section
         className="px-6 py-16 md:py-24"
         style={{ background: "linear-gradient(180deg, #1a3a2a 0%, #2d5a3d 100%)" }}
       >
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row md:items-center md:justify-between">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-10 flex justify-center md:mb-12">
+            <div className="rounded-3xl border-2 border-[#c8a84b] bg-[#f9f6ef] p-3 shadow-2xl">
+              <img
+                src={mustardSeedLogo}
+                alt="Mustard Seed App"
+                className="h-36 w-36 rounded-2xl object-contain md:h-48 md:w-48"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-10 md:flex-row md:items-center md:justify-between">
           <div className="max-w-md text-center md:text-left">
             <span className="inline-block rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#e8c76a]">
               🌱 Digital Accountability Partner
@@ -157,6 +168,7 @@ export default function LandingPage() {
               <div className="mt-1 text-xs font-semibold text-stone-500">— Jai, your coach</div>
             </div>
           </div>
+          </div>
         </div>
       </section>
 
@@ -183,29 +195,43 @@ export default function LandingPage() {
       {/* MEET JAI */}
       <section className="bg-white px-6 py-16">
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row">
-          <img
-            src={jaiPodcast}
-            alt="Jai, your AI accountability partner"
-            className="w-64 rounded-2xl object-cover shadow-md"
-          />
+          <div className="relative">
+            <img
+              src={jaiPodcast}
+              alt="Jai, your AI accountability partner, holding the Mustard Seed book"
+              className="w-72 rounded-2xl object-cover shadow-md"
+            />
+          </div>
           <div className="max-w-md text-center md:text-left">
             <h2 className="text-3xl font-bold text-stone-900">
-              Not a chatbot. An accountability partner.
+              Hi. I'm Jai — your digital accountability partner.
             </h2>
-            <ul className="mt-6 space-y-4 text-stone-600">
+            <p className="mt-4 leading-relaxed text-stone-600">
+              I'm not here to hype you up. I'm here to remember your goal, ask for real proof
+              you're moving toward it, and walk with you when you slip — no shame, no excuses
+              either.
+            </p>
+            <p className="mt-5 font-semibold text-stone-900">Here's what I stand for:</p>
+            <ul className="mt-3 space-y-4 text-stone-600">
               <li>
-                <span className="font-semibold text-stone-900">Memory-aware coaching</span> — Jai
-                remembers your goals and your history with you.
+                <span className="font-semibold text-stone-900">I remember you.</span> Every goal,
+                every step, every setback — still in view when you come back.
               </li>
               <li>
-                <span className="font-semibold text-stone-900">Goal-neutral by design</span> —
-                fitness, business, faith, relationships, anything you're building.
+                <span className="font-semibold text-stone-900">I ask for proof, not promises.</span>
               </li>
               <li>
-                <span className="font-semibold text-stone-900">Grace without excuses</span> —
-                honest accountability, never shame.
+                <span className="font-semibold text-stone-900">Your score is never shame.</span> It's
+                soil.
               </li>
             </ul>
+            <p className="mt-6 font-semibold text-stone-900">You do the honest work once. I carry it forward.</p>
+            <Link
+              href="/auth?view=register"
+              className="mt-4 inline-block text-sm font-semibold text-[#8a6f1f] underline-offset-4 hover:underline"
+            >
+              Learn more about how this works in the app.
+            </Link>
           </div>
         </div>
       </section>
@@ -298,6 +324,11 @@ export default function LandingPage() {
           </ol>
 
           <div className="flex-1 rounded-2xl bg-white p-8 text-center shadow-md">
+            <img
+              src={mustardSeedLogo}
+              alt="Mustard Seed App"
+              className="mx-auto h-16 w-16 rounded-xl object-contain"
+            />
             <h3 className="text-xl font-bold text-stone-900">Ready to get grounded?</h3>
             <p className="mt-2 text-sm text-stone-600">
               Three short sessions with Jai. No pressure, just clarity.
@@ -332,10 +363,19 @@ export default function LandingPage() {
           Whether you've done every free step or none of them, subscribing is always right here
           when you're ready.
         </p>
+        <div className="mx-auto mt-8 flex max-w-2xl justify-center">
+          <div className="rounded-2xl border border-[#c8a84b]/60 bg-[#f9f6ef] p-2 shadow-xl">
+            <img
+              src={mustardSeedLogo}
+              alt="Mustard Seed App"
+              className="h-24 w-24 rounded-xl object-contain"
+            />
+          </div>
+        </div>
         <button
           onClick={goToSubscribe}
           data-testid="button-closing-cta"
-          className="mt-8 rounded-full px-8 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
+          className="mt-6 rounded-full px-8 py-4 text-lg font-bold text-stone-900 shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
           style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)" }}
         >
           Subscribe Now
@@ -351,7 +391,10 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer className="bg-black px-6 py-10 text-center">
-        <div className="font-serif text-lg font-bold text-white">Mustard Seed</div>
+        <div className="flex items-center justify-center gap-3">
+          <MustardSeedMark className="h-14 w-14 rounded-lg border border-[#c8a84b]/70 bg-[#f9f6ef]" />
+          <div className="font-serif text-lg font-bold text-white">Mustard Seed</div>
+        </div>
         <p className="mt-2 text-sm text-stone-400">Your digital accountability partner.</p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-stone-400">
           <Link href="/privacy-policy" className="hover:text-stone-200 hover:underline" data-testid="link-footer-privacy">
