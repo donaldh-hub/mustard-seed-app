@@ -66,7 +66,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.545.0",
     "memorystore": "^1.6.7",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
     "next-themes": "^0.4.6",
     "openai": "^6.22.0",
     "p-limit": "^7.3.0",
@@ -81,7 +81,7 @@
     "react-resizable-panels": "^2.1.9",
     "recharts": "^2.15.4",
     "resend": "^6.12.3",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "sonner": "^2.0.7",
     "stripe": "^22.1.1",
     "tailwind-merge": "^3.3.1",
@@ -127,15 +127,15 @@
     },
     "@tootallnate/once": "2.0.1",
     "body-parser": "2.3.0",
-    "brace-expansion": "2.1.4",
+    "brace-expansion": "2.1.7",
     "fast-xml-parser": "5.11.0",
     "form-data": "2.5.6",
-    "ip-address": "10.5.0",
+    "ip-address": "10.7.3",
     "lodash": "4.18.1",
     "minimatch": "9.0.7",
     "path-to-regexp": "8.4.2",
     "picomatch": "4.0.5",
-    "qs": "6.15.3",
+    "qs": "6.16.0",
     "rollup": "4.62.4",
     "uuid": "11.1.1",
     "@uppy/core": {
@@ -146,6 +146,7 @@
     },
     "@uppy/provider-views": {
       "nanoid": "5.1.16"
-    }
+    },
+    "proxy-addr": "2.0.8"
   }
 }
