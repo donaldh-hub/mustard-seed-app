@@ -1,3 +1,4 @@
+import { HEARTBEAT_NAMES } from "./titan";
 type HeartbeatModule = {
   id: string;
   title: string;
@@ -382,16 +383,16 @@ const STAGE_LINES: Record<string, string[]> = {
 // Q10 (proud of showing up) → Courage
 
 const QUESTION_HEARTBEAT_MAP: { heartbeat: string; label: string }[] = [
-  { heartbeat: "clarity", label: "Clarity" },
-  { heartbeat: "consistency", label: "Consistency" },
-  { heartbeat: "consistency", label: "Consistency" },
-  { heartbeat: "mindset", label: "Mindset" },
-  { heartbeat: "adaptation", label: "Adaptation" },
-  { heartbeat: "courage", label: "Courage" },
-  { heartbeat: "mindset", label: "Mindset" },
-  { heartbeat: "adaptation", label: "Adaptation" },
-  { heartbeat: "consistency", label: "Consistency" },
-  { heartbeat: "courage", label: "Courage" },
+  { heartbeat: "clarity", label: HEARTBEAT_NAMES.clarity },
+  { heartbeat: "consistency", label: HEARTBEAT_NAMES.consistency },
+  { heartbeat: "consistency", label: HEARTBEAT_NAMES.consistency },
+  { heartbeat: "mindset", label: HEARTBEAT_NAMES.mindset },
+  { heartbeat: "adaptation", label: HEARTBEAT_NAMES.adaptation },
+  { heartbeat: "courage", label: HEARTBEAT_NAMES.courage },
+  { heartbeat: "mindset", label: HEARTBEAT_NAMES.mindset },
+  { heartbeat: "adaptation", label: HEARTBEAT_NAMES.adaptation },
+  { heartbeat: "consistency", label: HEARTBEAT_NAMES.consistency },
+  { heartbeat: "courage", label: HEARTBEAT_NAMES.courage },
 ];
 
 export function computeHeartbeatScores(answers: number[]): Record<string, number> {
@@ -422,7 +423,7 @@ export function getWeakestHeartbeat(answers: number[]): { heartbeat: string; lab
     totals[mapping.heartbeat].count++;
   }
 
-  let weakest = { heartbeat: "clarity", label: "Clarity", score: 5 };
+  let weakest = { heartbeat: "clarity", label: HEARTBEAT_NAMES.clarity, score: 5 };
   for (const [key, val] of Object.entries(totals)) {
     const avg = val.sum / val.count;
     if (avg < weakest.score) {
@@ -453,7 +454,7 @@ function buildDataLine(ctx: UserContext, weakLabel: string): string {
     const cap = ctx.stage.charAt(0).toUpperCase() + ctx.stage.slice(1);
     parts.push(`${cap} stage`);
   }
-  if (weakLabel) parts.push(`focus: ${weakLabel.toLowerCase()}`);
+  if (weakLabel) parts.push(`focus: ${weakLabel}`);
   if (ctx.goal) parts.push(`goal: "${ctx.goal}"`);
   if (ctx.streak > 1) parts.push(`${ctx.streak}-day streak`);
   if (ctx.obstacle && parts.length < 3) parts.push(`obstacle: "${ctx.obstacle}"`);
@@ -463,7 +464,7 @@ function buildDataLine(ctx: UserContext, weakLabel: string): string {
 
 function fillTemplate(template: string, ctx: UserContext, weakLabel: string): string {
   return template
-    .replace(/\{weak\}/g, weakLabel.toLowerCase())
+    .replace(/\{weak\}/g, weakLabel)
     .replace(/\{goal\}/g, ctx.goal)
     .replace(/\{obs\}/g, ctx.obstacle)
     .replace(/\{streak\}/g, String(ctx.streak))
@@ -784,7 +785,7 @@ export function generateJaeResponse(userText: string, ctx: UserContext): { text:
   const lowerText = userText.toLowerCase();
   const n = ctx.name ? `${ctx.name}, ` : "";
   const stage = ctx.stage || "";
-  const weakLabel = ctx.weakestHeartbeat ? ctx.weakestHeartbeat.charAt(0).toUpperCase() + ctx.weakestHeartbeat.slice(1) : "";
+  const weakLabel = ctx.weakestHeartbeat ? ((HEARTBEAT_NAMES as Record<string, string>)[ctx.weakestHeartbeat] ?? ctx.weakestHeartbeat) : "";
   const dataLine = buildDataLine(ctx, weakLabel);
   const f = (t: string) => fillTemplate(t, ctx, weakLabel);
 

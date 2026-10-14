@@ -726,7 +726,7 @@ export default function GroundingJournal() {
                       className="w-full rounded-xl h-12"
                       onClick={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
                     >
-                      I'm ready — start the reflection
+                      {(journalData?.entries ?? []).some((e: any) => e.session !== "intention") ? "Continue" : "I'm ready — start the reflection"}
                       <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                   </div>
