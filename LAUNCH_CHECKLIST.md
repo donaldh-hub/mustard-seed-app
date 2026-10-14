@@ -17,9 +17,11 @@ setting is read.
 - [x] **Graduates only ever see graduate prices** ($15.99/mo, $159.90/yr).
   Checkout never falls back to the $17.99/$179.90 price for a graduate. If
   a graduate price isn't configured, checkout errors instead of overcharging.
-- [ ] **Rebuild refund policy.** Not written yet. Donald picks A
-  (non-refundable once Day 1 unlocks) or B (refundable within 48 hours if
-  Day 2 isn't started), then sends it to legal before it goes in the Terms.
+- [ ] **Rebuild refund policy.** Donald chose Option B: refundable within
+  48 hours of purchase if Day 2 hasn't been started. With legal for wording;
+  goes into the Terms after §5.5 word for word once approved. Enforcing it
+  needs the purchase time (not stored yet; Stripe has it) and whether Day 2
+  has started (`GET /api/admin/users/<userId>/rebuild-progress`, §6).
 - [x] **Legal review.** Legal confirmed the Terms, Privacy Policy, and
   Subscription Explainer on Oct 13, 2026. The "operational draft" footers
   were removed from the Terms and Privacy Policy.
