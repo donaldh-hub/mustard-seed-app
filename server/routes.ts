@@ -27,6 +27,7 @@ import { assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
+import { summarizeRebuildProgress } from "./rebuildProgress";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -3949,6 +3950,31 @@ export async function registerRoutes(
       return res.json({ userId, hasPaidRebuild: granted });
     } catch (err) {
       return res.status(500).json({ message: "Rebuild access update failed" });
+    }
+  });
+
+  // ─── 7-Day Rebuild progress — founder-only, read-only ──────────────────────
+  // Where a user is in the Rebuild (current day, completed days, whether Day 2
+  // has started). Unlike GET /api/users/:userId/rebuild, this never creates
+  // rows, applies the unlock gate, or touches lastRebuildActivityAt.
+  // The purchase date isn't stored on the user; check Stripe for it.
+  app.get("/api/admin/users/:userId/rebuild-progress", requireAdminKey, async (req, res) => {
+    try {
+      const userId = String(req.params.userId);
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const instances = await storage.getRebuildInstances(userId);
+      return res.json({
+        userId,
+        hasPaidRebuild: (user as any).hasPaidRebuild ?? false,
+        hasRebuildAccess: hasRebuildAccess(user),
+        hasCompletedRebuild: (user as any).hasCompletedRebuild ?? false,
+        lastRebuildActivityAt: (user as any).lastRebuildActivityAt ?? null,
+        unlockHours: REBUILD_UNLOCK_HOURS,
+        ...summarizeRebuildProgress(instances, new Date(), REBUILD_UNLOCK_HOURS),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: "Rebuild progress lookup failed" });
     }
   });
 

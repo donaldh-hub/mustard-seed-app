@@ -139,6 +139,16 @@ curl -X POST https://<your domain>/api/admin/users/<userId>/rebuild-access \
   -d '{"granted": true}'      # false to revoke (e.g. after a refund)
 ```
 
-Refunding in Stripe does **not** remove access automatically. Revoke it with
-the call above. Users who already finished the Rebuild before it became paid
+See where a user is in the Rebuild (read-only: current day, completed days,
+whether Day 2 has started, when the next day unlocks):
+
+```
+curl https://<your domain>/api/admin/users/<userId>/rebuild-progress \
+  -H "x-admin-key: $ADMIN_API_KEY"
+```
+
+The purchase date isn't stored in the app. Look it up in Stripe.
+
+Refunding in Stripe does **not** remove access automatically. Revoke it with the
+`rebuild-access` call above. Users who already finished the Rebuild before it became paid
 keep access.
