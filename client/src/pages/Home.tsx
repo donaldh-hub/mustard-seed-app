@@ -64,6 +64,37 @@ function focusMessage(weakest: string): string {
   return map[weakest] || "Keep showing up. Consistency compounds.";
 }
 
+// Where the user is in the 3-Day Grounding Journal, for the Home card.
+const JOURNAL_SESSIONS: Array<{ day: 1 | 2 | 3; session: "morning" | "evening" }> = [
+  { day: 1, session: "morning" }, { day: 1, session: "evening" },
+  { day: 2, session: "morning" }, { day: 2, session: "evening" },
+  { day: 3, session: "morning" }, { day: 3, session: "evening" },
+];
+
+function journalCardText(journal: any): { title: string; subtitle: string } {
+  const entries: any[] = journal?.entries ?? [];
+  const done = (day: number, session: string) => entries.some((e) => e.dayNumber === day && e.session === session);
+  const next = JOURNAL_SESSIONS.find((s) => !done(s.day, s.session));
+  const started = entries.some((e) => e.session !== "intention");
+  if (!started) {
+    return { title: "Start Your 3-Day Grounding Journal", subtitle: "Your first conversation with Jai begins here." };
+  }
+  if (!next) {
+    return { title: "Continue: Your Grounding Statement", subtitle: "The last step of your 3-Day Grounding Journal." };
+  }
+  const label = `Day ${next.day} ${next.session === "morning" ? "Morning" : "Evening"}`;
+  const locked = journal?.lockedSession;
+  const unlocksAt = journal?.unlocksAt ? new Date(journal.unlocksAt) : null;
+  if (locked && locked.day === next.day && locked.session === next.session && unlocksAt && unlocksAt.getTime() > Date.now()) {
+    const sameDay = unlocksAt.toDateString() === new Date().toDateString();
+    const when = sameDay
+      ? unlocksAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+      : unlocksAt.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" });
+    return { title: `${label} opens at ${when}`, subtitle: "Your 3-Day Grounding Journal. Live a little of the day first." };
+  }
+  return { title: `Continue: ${label}`, subtitle: "Your 3-Day Grounding Journal is waiting for you." };
+}
+
 export default function Home() {
   const userId = useStore((s) => s.userId);
   const progressSyncing = useStore((s) => s.progressSyncing);
@@ -123,6 +154,11 @@ export default function Home() {
   });
 
   const groundingJournalDone = !!(user as any)?.groundingJournalCompleted;
+  const { data: journal } = useQuery({
+    queryKey: ["grounding-journal", userId],
+    queryFn: () => api.getGroundingJournal(userId!),
+    enabled: !!userId && !groundingJournalDone,
+  });
   const { data: rebuild } = useQuery({
     queryKey: ["rebuild", userId],
     queryFn: () => api.getRebuild(userId!),
@@ -150,6 +186,9 @@ export default function Home() {
   if (!assessment) return null;
 
   const userName = user?.name || "there";
+  // Google display names can carry suffixes and credentials ("Donald Hardaway,
+  // Jr. MSL, LSSBB") — the report title uses the first name only.
+  const firstName = (user?.name || "").trim().split(/[\s,]+/)[0] || "Your";
   const stage = assessment.stage
     ? assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)
     : "Seed";
@@ -193,7 +232,7 @@ export default function Home() {
     <div className="h-full flex flex-col bg-background">
       <div className="flex-1 overflow-y-auto pb-24">
         <header className="p-5 pb-3 bg-gradient-to-b from-primary/5 to-transparent">
-          <h1 className="font-serif font-semibold text-xl" data-testid="text-user-name">{userName}'s Report</h1>
+          <h1 className="font-serif font-semibold text-xl" data-testid="text-user-name">{firstName === "Your" ? "Your Report" : `${firstName}'s Report`}</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-sm font-medium text-primary" data-testid="text-stage">
               {emoji} {stage}
@@ -245,8 +284,8 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-semibold text-emerald-900">Start Your 3-Day Grounding Journal</p>
-                    <p className="text-xs text-emerald-700/70 mt-0.5">Your first conversation with Jai begins here.</p>
+                    <p className="text-sm font-semibold text-emerald-900" data-testid="text-journal-card-title">{journalCardText(journal).title}</p>
+                    <p className="text-xs text-emerald-700/70 mt-0.5">{journalCardText(journal).subtitle}</p>
                   </>
                 )}
               </div>
@@ -400,7 +439,7 @@ export default function Home() {
               <Target className="w-4 h-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Focus Area</h2>
             </div>
-            <p className="text-base font-medium capitalize" data-testid="text-weakest-heartbeat">{weakest || "—"}</p>
+            <p className="text-base font-medium" data-testid="text-weakest-heartbeat">{weakest ? (HEARTBEAT_LABELS[weakest] ?? weakest) : "—"}</p>
             <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-weakest-score">Score: {weakestScore} / 5</p>
             <p className="text-sm text-foreground/80 mt-2 leading-relaxed" data-testid="text-focus-message">{focusMessage(weakest)}</p>
             <Button

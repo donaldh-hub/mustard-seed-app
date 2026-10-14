@@ -715,7 +715,7 @@ export async function registerRoutes(
           const emoji = stageEmoji[assessment.stage] || "";
           const weakest = getWeakestHeartbeat(answers);
 
-          const wl = weakest.label.toLowerCase();
+          const wl = weakest.label;
           const ws = weakest.score.toFixed(1);
 
           if (asksStage) {
@@ -2296,13 +2296,7 @@ export async function registerRoutes(
         const prevScore = previousAssessment.totalScore;
         const scoreDelta = totalScore - prevScore;
         const prevScores = (previousAssessment.heartbeatScores as Record<string, number>) || {};
-        const HB_LABELS: Record<string, string> = {
-          clarity: "Clarity of Vision",
-          consistency: "Consistency",
-          mindset: "Mindset",
-          adaptation: "Adaptation",
-          courage: "Courageous Action",
-        };
+        const HB_LABELS: Record<string, string> = HEARTBEAT_NAMES;
         const improvements = Object.entries(heartbeatScores)
           .filter(([k, v]) => prevScores[k] !== undefined && v > prevScores[k])
           .map(([k, v]) => `${HB_LABELS[k] ?? k} (${prevScores[k]} → ${v})`);
