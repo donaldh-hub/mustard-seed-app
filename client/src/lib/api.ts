@@ -131,14 +131,21 @@ export const api = {
     fetchJson<{ url: string }>(`/users/${userId}/stripe/create-portal-session`, { method: "POST" }),
 
   getGroundingJournal: (userId: string) =>
-    fetchJson<{ entries: any[]; completed: boolean; lockedDay: 2 | 3 | null; nextDayUnlocksAt: string | null }>(`/users/${userId}/grounding-journal`),
+    fetchJson<{
+      entries: any[];
+      completed: boolean;
+      // First session that can't be started yet (evening waits 8h after
+      // morning; next day opens 4 AM local), and when it opens.
+      lockedSession: { day: 1 | 2 | 3; session: "morning" | "evening" } | null;
+      unlocksAt: string | null;
+    }>(`/users/${userId}/grounding-journal?tz=${encodeURIComponent(getUserTimezone())}`),
   submitJournalEntry: (
     userId: string,
     data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[]; localDate?: string }
   ) =>
     fetchJson<{ entry: any; jae: any }>(`/users/${userId}/grounding-journal/entry`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, userTimezone: getUserTimezone() }),
     }),
   saveJournalFollowUp: (userId: string, entryId: string, followUpResponse: string) =>
     fetchJson<any>(`/users/${userId}/grounding-journal/follow-up`, {

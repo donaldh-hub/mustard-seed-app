@@ -28,6 +28,7 @@ import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User }
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
 import { summarizeRebuildProgress } from "./rebuildProgress";
+import { computeJournalGate, isEntryBlocked, isValidTimeZone } from "./journalPacing";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -3466,54 +3467,49 @@ export async function registerRoutes(
 
   // --- 3-Day Grounding Journal ---
 
-  // 24-hour pacing gate: Day N (N>1) stays locked until 24h after Day N-1's
-  // evening entry, so the 3-Day Journal can't be finished in one sitting.
-  const GROUNDING_JOURNAL_UNLOCK_HOURS = 24;
-
-  function computeJournalDayGate(entries: { dayNumber: number; session: string; createdAt: Date | string | null }[]): { lockedDay: 2 | 3 | null; unlocksAt: string | null } {
-    for (const day of [2, 3] as const) {
-      const prevEvening = entries.find((e) => e.dayNumber === day - 1 && e.session === "evening");
-      if (!prevEvening || !prevEvening.createdAt) return { lockedDay: day, unlocksAt: null };
-      const unlocksAtMs = new Date(prevEvening.createdAt).getTime() + GROUNDING_JOURNAL_UNLOCK_HOURS * 60 * 60 * 1000;
-      if (Date.now() < unlocksAtMs) {
-        return { lockedDay: day, unlocksAt: new Date(unlocksAtMs).toISOString() };
-      }
-    }
-    return { lockedDay: null, unlocksAt: null };
+  // Pacing gate (server/journalPacing.ts): evening opens 8h after that day's
+  // morning; the next day's morning opens at 4 AM local the day after the
+  // previous evening. The browser sends its IANA time zone; fall back to the
+  // user's stored one, then UTC.
+  async function journalTimeZone(userId: string, sent: unknown): Promise<string> {
+    if (isValidTimeZone(sent)) return sent;
+    const user = await storage.getUser(userId);
+    const stored = (user as any)?.userTimezone;
+    return isValidTimeZone(stored) ? stored : "UTC";
   }
 
   app.get("/api/users/:userId/grounding-journal", async (req, res) => {
     const entries = await storage.getGroundingJournalEntries(req.params.userId);
     const user = await storage.getUser(req.params.userId);
-    const gate = computeJournalDayGate(entries);
+    const gate = computeJournalGate(entries, new Date(), await journalTimeZone(req.params.userId, req.query.tz));
     return res.json({
       entries,
       completed: user?.groundingJournalCompleted ?? false,
-      lockedDay: gate.lockedDay,
-      nextDayUnlocksAt: gate.unlocksAt,
+      lockedSession: gate.locked,
+      unlocksAt: gate.unlocksAt,
     });
   });
 
   app.post("/api/users/:userId/grounding-journal/entry", async (req, res) => {
     try {
       const userId = req.params.userId;
-      const { dayNumber, session, prompts, localDate } = req.body as {
+      const { dayNumber, session, prompts, localDate, userTimezone } = req.body as {
         dayNumber: 1 | 2 | 3;
         session: "intention" | "morning" | "evening" | "grounding_statement";
         prompts: { prompt: string; response: string }[];
         localDate?: string;
+        userTimezone?: string;
       };
 
-      if (dayNumber > 1) {
-        const existingEntries = await storage.getGroundingJournalEntries(userId);
-        const gate = computeJournalDayGate(existingEntries);
-        if (gate.lockedDay !== null && dayNumber >= gate.lockedDay) {
-          return res.status(403).json({
-            message: "This day isn't unlocked yet. Come back after the 24-hour pacing window.",
-            code: "DAY_LOCKED",
-            unlocksAt: gate.unlocksAt,
-          });
-        }
+      const existingEntries = await storage.getGroundingJournalEntries(userId);
+      const gate = computeJournalGate(existingEntries, new Date(), await journalTimeZone(userId, userTimezone));
+      if (isEntryBlocked(gate, dayNumber, session)) {
+        return res.status(403).json({
+          message: "This session isn't open yet.",
+          code: "SESSION_LOCKED",
+          lockedSession: gate.locked,
+          unlocksAt: gate.unlocksAt,
+        });
       }
 
       const user = await storage.getUser(userId);

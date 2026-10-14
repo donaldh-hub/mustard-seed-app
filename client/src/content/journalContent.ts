@@ -26,21 +26,24 @@ function timedSync(day: string, clipCount: number, slides: SlideTiming[]): Audio
 
 // Day 1 — RESET (real clip timings, measured with ffprobe against the
 // downloaded ElevenLabs clips — see "Day 1 Reset - Voice Script.md").
-// Actual total narration runtime: 78.4s. Video runs 94.8s — comfortable
-// margin, nothing gets cut off.
+// Actual total narration runtime: 78.4s. Video runs 94.8s.
+// startSec is when each slide actually appears in day1-video.mp4 (read off a
+// 1-fps frame sheet), plus ~0.5s to let it settle. Earlier values chained the
+// clips back to back, so narration ran up to ~15s ahead of the visuals with no
+// pauses between lines. Every clip still ends before the next one starts.
 export const DAY1_SLIDES: SlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 4.7, onScreenText: "Day 1 — Reset", narrationText: "Hi, it's Jai. Welcome to Day 1 of your 3-Day Grounding Journal. Today, we reset." },
-  { slideNumber: 2, startSec: 4.7, durationSec: 6.9, onScreenText: "Find your footing. Regain your focus. Rebuild your calm.", narrationText: "Three days to find your footing, regain your focus, and rebuild your calm. This is where your Mustard Seed story starts." },
-  { slideNumber: 3, startSec: 11.6, durationSec: 5.7, onScreenText: "This isn't a test. It's a mirror.", narrationText: "This isn't a test, and there's no score today. It's a mirror — you're just here to notice, not to perform." },
-  { slideNumber: 4, startSec: 17.3, durationSec: 8.2, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild.", narrationText: "Everything we do together runs on the same rhythm: pause, notice, reflect, choose, rebuild. Today, we practice the first two." },
-  { slideNumber: 5, startSec: 25.5, durationSec: 7.6, onScreenText: "Today isn't about fixing everything.", narrationText: "Today isn't about fixing everything in your life. It's about noticing where you are right now, and choosing where your attention goes." },
-  { slideNumber: 6, startSec: 33.1, durationSec: 5.4, onScreenText: "What's one thing I can give my attention to today? / How can I move through today with calm and purpose?", narrationText: "This morning, I'll ask you two honest questions — what deserves your attention today, and how you want to move through it." },
-  { slideNumber: 7, startSec: 38.5, durationSec: 6.5, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Answer those two questions in your own words — there's no wrong answer, just your real answer." },
-  { slideNumber: 8, startSec: 45.0, durationSec: 8.3, onScreenText: "I'll reflect back what I hear — not judge it.", narrationText: "Whatever you write, I'll reflect it back to you — not judge it. Then I'll ask one honest follow-up question, just one, so we go a little deeper together." },
-  { slideNumber: 9, startSec: 53.3, durationSec: 5.6, onScreenText: "When did I feel most present today? / What moment taught me something about my pace or patience?", narrationText: "Tonight, we'll come back together. I'll ask what moment today you felt most present, and what your pace taught you." },
-  { slideNumber: 10, startSec: 58.9, durationSec: 6.1, onScreenText: "Awareness is progress. Showing up counts.", narrationText: "You don't have to have a perfect day for this to work. Awareness is progress. Showing up today, honestly, is enough." },
-  { slideNumber: 11, startSec: 65.0, durationSec: 6.5, onScreenText: "I remember what you tell me.", narrationText: "Everything you tell me today, I remember — for tomorrow, for Day 3, and for whenever you're ready to build something out of it." },
-  { slideNumber: 12, startSec: 71.5, durationSec: 6.9, onScreenText: "Day 1: Reset. Let's begin.", narrationText: "Whenever you're ready — phone, laptop, doesn't matter — open Mustard Seed and start Day 1 with me. Let's reset, together." },
+  { slideNumber: 2, startSec: 6.0, durationSec: 6.9, onScreenText: "Find your footing. Regain your focus. Rebuild your calm.", narrationText: "Three days to find your footing, regain your focus, and rebuild your calm. This is where your Mustard Seed story starts." },
+  { slideNumber: 3, startSec: 15.5, durationSec: 5.7, onScreenText: "This isn't a test. It's a mirror.", narrationText: "This isn't a test, and there's no score today. It's a mirror — you're just here to notice, not to perform." },
+  { slideNumber: 4, startSec: 22.0, durationSec: 8.2, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild.", narrationText: "Everything we do together runs on the same rhythm: pause, notice, reflect, choose, rebuild. Today, we practice the first two." },
+  { slideNumber: 5, startSec: 31.5, durationSec: 7.6, onScreenText: "Today isn't about fixing everything.", narrationText: "Today isn't about fixing everything in your life. It's about noticing where you are right now, and choosing where your attention goes." },
+  { slideNumber: 6, startSec: 40.5, durationSec: 5.4, onScreenText: "What's one thing I can give my attention to today? / How can I move through today with calm and purpose?", narrationText: "This morning, I'll ask you two honest questions — what deserves your attention today, and how you want to move through it." },
+  { slideNumber: 7, startSec: 46.5, durationSec: 6.5, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Answer those two questions in your own words — there's no wrong answer, just your real answer." },
+  { slideNumber: 8, startSec: 55.5, durationSec: 8.3, onScreenText: "I'll reflect back what I hear — not judge it.", narrationText: "Whatever you write, I'll reflect it back to you — not judge it. Then I'll ask one honest follow-up question, just one, so we go a little deeper together." },
+  { slideNumber: 9, startSec: 65.0, durationSec: 5.6, onScreenText: "When did I feel most present today? / What moment taught me something about my pace or patience?", narrationText: "Tonight, we'll come back together. I'll ask what moment today you felt most present, and what your pace taught you." },
+  { slideNumber: 10, startSec: 72.0, durationSec: 6.1, onScreenText: "Awareness is progress. Showing up counts.", narrationText: "You don't have to have a perfect day for this to work. Awareness is progress. Showing up today, honestly, is enough." },
+  { slideNumber: 11, startSec: 79.5, durationSec: 6.5, onScreenText: "I remember what you tell me.", narrationText: "Everything you tell me today, I remember — for tomorrow, for Day 3, and for whenever you're ready to build something out of it." },
+  { slideNumber: 12, startSec: 87.5, durationSec: 6.9, onScreenText: "Day 1: Reset. Let's begin.", narrationText: "Whenever you're ready — phone, laptop, doesn't matter — open Mustard Seed and start Day 1 with me. Let's reset, together." },
 ];
 
 // Day 2 — REFOCUS (real clip timings, measured with ffprobe — see

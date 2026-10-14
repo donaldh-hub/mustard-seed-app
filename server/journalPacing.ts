@@ -1,0 +1,110 @@
+// Pacing gate for the 3-Day Grounding Journal. Kept free of imports so
+// `node --test` can run journalPacing.test.ts without dependencies.
+//
+//   - Evening opens EVENING_DELAY_HOURS after that day's morning entry, so a
+//     day's reflection follows a day actually lived.
+//   - The next day's morning opens at NEXT_DAY_OPENS_HOUR (local time) on the
+//     calendar day after the previous evening entry, so a 9 PM reflection
+//     still leaves tomorrow's morning session open in the morning.
+//
+// Sessions run in order: day1 morning → day1 evening → day2 morning → … →
+// day3 evening → grounding statement. The gate reports the first session
+// that can't be started yet; it and everything after it are locked.
+
+export const EVENING_DELAY_HOURS = 8;
+export const NEXT_DAY_OPENS_HOUR = 4;
+
+export type JournalSession = "morning" | "evening";
+
+export interface JournalEntryLike {
+  dayNumber: number;
+  session: string;
+  createdAt: Date | string | null;
+}
+
+export interface JournalGate {
+  // The first session that can't be started yet, or null when nothing is locked.
+  locked: { day: 1 | 2 | 3; session: JournalSession } | null;
+  // When it opens. null when it's waiting on an earlier session instead.
+  unlocksAt: string | null;
+}
+
+const ORDER: Array<{ day: 1 | 2 | 3; session: JournalSession }> = [
+  { day: 1, session: "morning" },
+  { day: 1, session: "evening" },
+  { day: 2, session: "morning" },
+  { day: 2, session: "evening" },
+  { day: 3, session: "morning" },
+  { day: 3, session: "evening" },
+];
+
+export function isValidTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== "string" || !tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Offset (ms) of `timeZone` from UTC at `instant`: local wall time minus UTC.
+function tzOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+// The instant that is `hour`:00 local time on the calendar day after `from`'s
+// local date in `timeZone`. Re-checks the offset once so DST changes land right.
+export function nextLocalDayAt(from: Date, hour: number, timeZone: string): Date {
+  const local = new Date(from.getTime() + tzOffsetMs(from, timeZone));
+  const wallMs = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 1, hour);
+  let guess = wallMs - tzOffsetMs(new Date(wallMs), timeZone);
+  guess = wallMs - tzOffsetMs(new Date(guess), timeZone);
+  return new Date(guess);
+}
+
+function earliest(entries: JournalEntryLike[], day: number, session: string): Date | null {
+  let best: Date | null = null;
+  for (const e of entries) {
+    if (e.dayNumber !== day || e.session !== session || !e.createdAt) continue;
+    const t = new Date(e.createdAt);
+    if (Number.isNaN(t.getTime())) continue;
+    if (!best || t < best) best = t;
+  }
+  return best;
+}
+
+export function computeJournalGate(entries: JournalEntryLike[], now: Date, timeZone: string): JournalGate {
+  const tz = isValidTimeZone(timeZone) ? timeZone : "UTC";
+  for (let i = 1; i < ORDER.length; i++) {
+    const step = ORDER[i];
+    const prev = ORDER[i - 1];
+    const prevDoneAt = earliest(entries, prev.day, prev.session);
+    if (!prevDoneAt) return { locked: step, unlocksAt: null };
+    const opensAt = step.session === "evening"
+      ? new Date(prevDoneAt.getTime() + EVENING_DELAY_HOURS * 60 * 60 * 1000)
+      : nextLocalDayAt(prevDoneAt, NEXT_DAY_OPENS_HOUR, tz);
+    if (now < opensAt) return { locked: step, unlocksAt: opensAt.toISOString() };
+  }
+  return { locked: null, unlocksAt: null };
+}
+
+// Whether a new entry for (day, session) is blocked by the gate. The opening
+// intention and day 1 morning are never blocked; the grounding statement
+// (sent as day 3) waits until all six sessions are open.
+export function isEntryBlocked(gate: JournalGate, day: number, session: string): boolean {
+  if (!gate.locked) return false;
+  if (session === "intention") return false;
+  const lockedIdx = ORDER.findIndex((s) => s.day === gate.locked!.day && s.session === gate.locked!.session);
+  if (session === "grounding_statement") return true;
+  const idx = ORDER.findIndex((s) => s.day === day && s.session === session);
+  return idx === -1 ? false : idx >= lockedIdx;
+}
