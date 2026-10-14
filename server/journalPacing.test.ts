@@ -1,7 +1,7 @@
 // Run: node --experimental-strip-types --test server/journalPacing.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeJournalGate, isEntryBlocked, nextLocalDayAt } from "./journalPacing.ts";
+import { computeJournalGate, isEntryBlocked, nextLocalDayAt, reflectionChoices, isCommitmentKept, isPacingTester } from "./journalPacing.ts";
 
 const NY = "America/New_York";
 const e = (dayNumber: number, session: string, createdAt: string) => ({ dayNumber, session, createdAt });
@@ -115,4 +115,24 @@ test("morning at 9:12 PM: evening open right away", () => {
   const entries = [e(1, "morning", "2026-10-15T01:12:00Z")]; // 9:12 PM Oct 14 New York
   const g = computeJournalGate(entries, new Date("2026-10-15T01:13:00Z"), NY);
   assert.equal(isEntryBlocked(g, 1, "evening"), false);
+});
+
+test("reflection choices: opening time rounded up to the quarter hour, then +1h, +2h", () => {
+  const c = reflectionChoices(new Date("2026-10-14T19:12:00Z")).map((d) => d.toISOString());
+  assert.deepEqual(c, ["2026-10-14T19:15:00.000Z", "2026-10-14T20:15:00.000Z", "2026-10-14T21:15:00.000Z"]);
+  assert.equal(reflectionChoices(new Date("2026-10-15T01:00:00Z"))[0].toISOString(), "2026-10-15T01:00:00.000Z");
+});
+
+test("commitment kept: by the chosen time plus a 60-minute grace", () => {
+  const planned = "2026-10-14T23:00:00Z";
+  assert.equal(isCommitmentKept(planned, new Date("2026-10-14T22:30:00Z")), true);
+  assert.equal(isCommitmentKept(planned, new Date("2026-10-15T00:00:00Z")), true);
+  assert.equal(isCommitmentKept(planned, new Date("2026-10-15T00:01:00Z")), false);
+  assert.equal(isCommitmentKept(null, new Date("2026-10-14T22:30:00Z")), false);
+});
+
+test("tester list matches emails case-insensitively", () => {
+  assert.equal(isPacingTester("DonaldH@HardawayAI.com", " donaldh@hardawayai.com , qa@example.com"), true);
+  assert.equal(isPacingTester("someone@example.com", "donaldh@hardawayai.com"), false);
+  assert.equal(isPacingTester("donaldh@hardawayai.com", undefined), false);
 });

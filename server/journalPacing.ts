@@ -91,6 +91,45 @@ function earliest(entries: JournalEntryLike[], day: number, session: string): Da
   return best;
 }
 
+export function eveningOpensAt(morningAt: Date, timeZone: string): Date {
+  const tz = isValidTimeZone(timeZone) ? timeZone : "UTC";
+  return new Date(Math.min(
+    morningAt.getTime() + EVENING_DELAY_HOURS * 60 * 60 * 1000,
+    localDayAt(morningAt, 0, EVENING_OPENS_BY_HOUR, tz).getTime(),
+  ));
+}
+
+// ── Reflection commitment ────────────────────────────────────────────────────
+// After the morning, the user picks when they'll come back: the time the
+// evening opens (rounded up to the quarter hour), or one or two hours later.
+// Reflecting by the chosen time + KEPT_GRACE_MINUTES keeps the commitment and
+// earns a bonus water entry.
+
+export const REFLECTION_CHOICE_COUNT = 3;
+export const KEPT_GRACE_MINUTES = 60;
+
+export function reflectionChoices(opensAt: Date): Date[] {
+  const quarter = 15 * 60 * 1000;
+  const first = Math.ceil(opensAt.getTime() / quarter) * quarter;
+  return Array.from({ length: REFLECTION_CHOICE_COUNT }, (_, i) => new Date(first + i * 60 * 60 * 1000));
+}
+
+export function isCommitmentKept(plannedAt: Date | string | null, eveningAt: Date): boolean {
+  if (!plannedAt) return false;
+  const planned = new Date(plannedAt).getTime();
+  if (Number.isNaN(planned)) return false;
+  return eveningAt.getTime() <= planned + KEPT_GRACE_MINUTES * 60 * 1000;
+}
+
+// Test accounts (comma-separated emails in JOURNAL_PACING_SKIP_EMAILS) still
+// see every wait screen but may skip past it, so a full walkthrough doesn't
+// take three days.
+export function isPacingTester(email: string | null | undefined, list: string | undefined): boolean {
+  if (!email || !list) return false;
+  const wanted = email.trim().toLowerCase();
+  return list.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).includes(wanted);
+}
+
 export function computeJournalGate(entries: JournalEntryLike[], now: Date, timeZone: string): JournalGate {
   const tz = isValidTimeZone(timeZone) ? timeZone : "UTC";
   for (let i = 1; i < ORDER.length; i++) {
@@ -99,10 +138,7 @@ export function computeJournalGate(entries: JournalEntryLike[], now: Date, timeZ
     const prevDoneAt = earliest(entries, prev.day, prev.session);
     if (!prevDoneAt) return { locked: step, unlocksAt: null };
     const opensAt = step.session === "evening"
-      ? new Date(Math.min(
-          prevDoneAt.getTime() + EVENING_DELAY_HOURS * 60 * 60 * 1000,
-          localDayAt(prevDoneAt, 0, EVENING_OPENS_BY_HOUR, tz).getTime(),
-        ))
+      ? eveningOpensAt(prevDoneAt, tz)
       : nextLocalDayAt(prevDoneAt, NEXT_DAY_OPENS_HOUR, tz);
     if (now < opensAt) return { locked: step, unlocksAt: opensAt.toISOString() };
   }
