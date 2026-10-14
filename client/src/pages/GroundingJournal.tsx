@@ -191,6 +191,11 @@ export default function GroundingJournal() {
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
   const [intention, setIntention] = useState("");
   const [videoAcknowledged, setVideoAcknowledged] = useState<Set<string>>(new Set());
+  // Tester accounts can step past a wait screen; holds the step index skipped.
+  const [skippedLockIndex, setSkippedLockIndex] = useState<number | null>(null);
+  const [planSaving, setPlanSaving] = useState(false);
+  // Evening steps where the user came back by the time they chose (+1 water).
+  const [keptCommitments, setKeptCommitments] = useState<Record<string, string>>({});
 
   const hasResumed = useRef(false);
 
@@ -310,6 +315,9 @@ export default function GroundingJournal() {
 
       const result = await api.submitJournalEntry(userId, { dayNumber: day, session, prompts, localDate: getLocalDateStr() });
       setJaeData((prev) => ({ ...prev, [stepId]: result.jae }));
+      if (result.commitmentKept) {
+        setKeptCommitments((prev) => ({ ...prev, [stepId]: result.commitmentKept!.plannedAt }));
+      }
       setCurrentEntryId(result.entry.id);
       // Refresh the pacing gate now, not just at final completion — otherwise
       // a user could click straight from morning into evening in one sitting
@@ -463,13 +471,14 @@ export default function GroundingJournal() {
   }
 
   // ── Locked view (pacing gate) ──────────────────────────────────────────────
-  // Evening opens 8 hours after that day's morning; the next day's morning
-  // opens at 4 AM local time the day after the previous evening. Everything
+  // Evening opens 8 hours after that day's morning or at 9 PM local, whichever
+  // is first; the next day's morning opens at 4 AM local the day after the
+  // previous evening (server/journalPacing.ts). Everything
   // from the locked session onward waits; reflections already earned stay open.
 
   const locked = journalData?.lockedSession ?? null;
   const lockedStepIndex = locked ? STEP_ORDER.indexOf(`day${locked.day}-${locked.session}` as StepId) : -1;
-  const isSessionLocked = lockedStepIndex !== -1 && stepIndex >= lockedStepIndex;
+  const isSessionLocked = lockedStepIndex !== -1 && stepIndex >= lockedStepIndex && skippedLockIndex !== lockedStepIndex;
 
   if (!journalLoading && locked && isSessionLocked) {
     const unlocksAt = journalData?.unlocksAt ? new Date(journalData.unlocksAt) : null;
@@ -517,7 +526,7 @@ export default function GroundingJournal() {
               <p className="text-sm text-foreground leading-relaxed">
                 {timeText
                   ? <>Your evening reflection opens at <strong>{timeText}</strong>. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>
-                  : <>Your evening reflection opens 8 hours after your morning focus. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>}
+                  : <>Your evening reflection opens later today. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>}
               </p>
             </div>
           ) : (
@@ -531,11 +540,54 @@ export default function GroundingJournal() {
             </div>
           )}
 
+          {isEvening && (journalData?.reflectionChoices?.length ?? 0) > 0 && (
+            <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-3" data-testid="card-reflection-plan">
+              <p className="text-sm font-semibold text-foreground">When will you come back to reflect?</p>
+              <p className="text-xs text-muted-foreground">Pick a time and keep it. Show up by then and you'll earn a bonus drop of water.</p>
+              <div className="grid grid-cols-3 gap-2">
+                {journalData!.reflectionChoices.map((iso) => {
+                  const selected = journalData?.reflectionPlannedAt
+                    ? new Date(journalData.reflectionPlannedAt).getTime() === new Date(iso).getTime()
+                    : false;
+                  return (
+                    <button
+                      key={iso}
+                      disabled={planSaving}
+                      onClick={async () => {
+                        if (!userId) return;
+                        setPlanSaving(true);
+                        try {
+                          await api.planJournalReflection(userId, locked.day, iso);
+                          await queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
+                        } catch (err) {
+                          console.error("[JOURNAL] plan error", err);
+                        } finally {
+                          setPlanSaving(false);
+                        }
+                      }}
+                      className={`h-11 rounded-xl border text-sm font-medium transition-colors ${
+                        selected ? "bg-primary text-primary-foreground border-primary" : "bg-white text-foreground border-border hover:bg-muted/40"
+                      }`}
+                      data-testid="btn-reflection-choice"
+                    >
+                      {new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </button>
+                  );
+                })}
+              </div>
+              {journalData?.reflectionPlannedAt && (
+                <p className="text-xs text-primary" data-testid="text-reflection-planned">
+                  You're coming back at {new Date(journalData.reflectionPlannedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}. Jai will be here.
+                </p>
+              )}
+            </div>
+          )}
+
           {unlocksAt && unlocksAt.getTime() > Date.now() && (
             <Button
               variant="outline"
               className="w-full rounded-xl h-12"
-              onClick={() => downloadReminder(unlocksAt, isEvening ? `Day ${locked.day} evening reflection is open` : `Day ${locked.day} of your Grounding Journal is open`)}
+              onClick={() => downloadReminder(isEvening && journalData?.reflectionPlannedAt ? new Date(journalData.reflectionPlannedAt) : unlocksAt, isEvening ? `Day ${locked.day} evening reflection is open` : `Day ${locked.day} of your Grounding Journal is open`)}
               data-testid="btn-add-reminder"
             >
               Add a reminder to my calendar
@@ -544,6 +596,15 @@ export default function GroundingJournal() {
           <Button className="w-full rounded-xl h-12" onClick={() => setLocation("/home")}>
             Back to Home
           </Button>
+          {journalData?.canSkipWait && (
+            <button
+              className="w-full text-xs text-muted-foreground underline"
+              onClick={() => setSkippedLockIndex(lockedStepIndex)}
+              data-testid="btn-tester-skip-wait"
+            >
+              Skip the wait (tester)
+            </button>
+          )}
         </div>
       </div>
     );
@@ -735,6 +796,18 @@ export default function GroundingJournal() {
                       <p className="text-xs text-muted-foreground">Day {day} — {DAY_THEMES[day - 1]}</p>
                     </div>
                   </div>
+
+                  {keptCommitments[sourceStep] && (
+                    <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200 text-sm text-blue-900" data-testid="banner-commitment-kept">
+                      <p className="font-semibold">You kept your word. +1 water 💧</p>
+                      <p className="text-blue-800/80 mt-0.5">
+                        You said {new Date(keptCommitments[sourceStep]).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}, and you showed up. That's discipline.
+                      </p>
+                      <p className="text-xs text-blue-800/70 mt-2" data-testid="text-rebuild-water-teaser">
+                        This 3-day journal is a taste. The 7-Day Rebuild and Premium give you the full experience: a real goal you water every day, cups that fill, and a seed you watch grow.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
                     <p className="text-sm text-foreground leading-relaxed">{jae?.reflection}</p>

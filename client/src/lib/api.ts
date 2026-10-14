@@ -134,16 +134,27 @@ export const api = {
     fetchJson<{
       entries: any[];
       completed: boolean;
-      // First session that can't be started yet (evening waits 8h after
-      // morning; next day opens 4 AM local), and when it opens.
+      // First session that can't be started yet (evening: 8h after morning or
+      // 9 PM local, whichever is first; next day: 4 AM local), and when it opens.
       lockedSession: { day: 1 | 2 | 3; session: "morning" | "evening" } | null;
       unlocksAt: string | null;
+      // While an evening is waiting: the times the user can commit to coming
+      // back, and the one they picked (if any).
+      reflectionChoices: string[];
+      reflectionPlannedAt: string | null;
+      // Accounts on the JOURNAL_PACING_SKIP_EMAILS tester list.
+      canSkipWait: boolean;
     }>(`/users/${userId}/grounding-journal?tz=${encodeURIComponent(getUserTimezone())}`),
+  planJournalReflection: (userId: string, dayNumber: number, plannedAt: string) =>
+    fetchJson<{ reflectionPlannedAt: string }>(`/users/${userId}/grounding-journal/reflection-plan`, {
+      method: "PATCH",
+      body: JSON.stringify({ dayNumber, plannedAt, userTimezone: getUserTimezone() }),
+    }),
   submitJournalEntry: (
     userId: string,
     data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[]; localDate?: string }
   ) =>
-    fetchJson<{ entry: any; jae: any }>(`/users/${userId}/grounding-journal/entry`, {
+    fetchJson<{ entry: any; jae: any; commitmentKept?: { plannedAt: string } }>(`/users/${userId}/grounding-journal/entry`, {
       method: "POST",
       body: JSON.stringify({ ...data, userTimezone: getUserTimezone() }),
     }),
