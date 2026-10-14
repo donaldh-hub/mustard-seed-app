@@ -17,6 +17,39 @@ import { JOURNAL_VIDEOS, JOURNAL_AUDIO_SYNC } from "@/content/journalContent";
 
 const DAY_THEMES = ["RESET", "REFOCUS", "REBUILD"] as const;
 
+// Builds a one-event .ics file and hands it to the browser, which offers to
+// add it to the user's calendar (iPhone, Android, and desktop all accept it).
+// No server, email, or push setup needed.
+function downloadReminder(at: Date, title: string) {
+  const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const url = `${window.location.origin}/journal`;
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Mustard Seed//Grounding Journal//EN",
+    "BEGIN:VEVENT",
+    `UID:${at.getTime()}-journal@mustardseeddap.com`,
+    `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART:${stamp(at)}`,
+    `DTEND:${stamp(new Date(at.getTime() + 15 * 60 * 1000))}`,
+    `SUMMARY:Mustard Seed: ${title}`,
+    `DESCRIPTION:Come back and reflect with Jai. ${url}`,
+    `URL:${url}`,
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:Mustard Seed: ${title}`,
+    "TRIGGER:PT0M",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+  link.download = "mustard-seed-reminder.ics";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 const MORNING_PROMPTS: Record<number, string[]> = {
   1: [
     "What's one thing I can give my attention to today?",
@@ -278,13 +311,16 @@ export default function GroundingJournal() {
       const result = await api.submitJournalEntry(userId, { dayNumber: day, session, prompts, localDate: getLocalDateStr() });
       setJaeData((prev) => ({ ...prev, [stepId]: result.jae }));
       setCurrentEntryId(result.entry.id);
-      // Refresh the 24-hour pacing gate now, not just at final completion —
-      // otherwise a user could click straight through Day 2 into Day 3 in
-      // one sitting before the next mount ever re-fetches lockedDay.
+      // Refresh the pacing gate now, not just at final completion — otherwise
+      // a user could click straight from morning into evening in one sitting
+      // before the next mount ever re-fetches lockedSession.
       queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
       advance();
     } catch (err) {
       console.error("[JOURNAL] submit error", err);
+      // A pacing-gate rejection re-fetches the gate, which swaps in the
+      // "not yet" screen; anything else is a real failure.
+      queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
       setSubmitError("Something went wrong. Please try again.");
     } finally {
       setSaving(false);
@@ -426,13 +462,29 @@ export default function GroundingJournal() {
     );
   }
 
-  // ── Day-locked view (24-hour pacing gate) ──────────────────────────────────
+  // ── Locked view (pacing gate) ──────────────────────────────────────────────
+  // Evening opens 8 hours after that day's morning; the next day's morning
+  // opens at 4 AM local time the day after the previous evening. Everything
+  // from the locked session onward waits; reflections already earned stay open.
 
-  const currentStepDay = dayOf(stepId);
-  const isDayLocked = journalData?.lockedDay != null && currentStepDay >= journalData.lockedDay;
+  const locked = journalData?.lockedSession ?? null;
+  const lockedStepIndex = locked ? STEP_ORDER.indexOf(`day${locked.day}-${locked.session}` as StepId) : -1;
+  const isSessionLocked = lockedStepIndex !== -1 && stepIndex >= lockedStepIndex;
 
-  if (!journalLoading && isDayLocked) {
-    const unlocksAt = journalData?.nextDayUnlocksAt ? new Date(journalData.nextDayUnlocksAt) : null;
+  if (!journalLoading && locked && isSessionLocked) {
+    const unlocksAt = journalData?.unlocksAt ? new Date(journalData.unlocksAt) : null;
+    const isEvening = locked.session === "evening";
+    const timeText = unlocksAt?.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    const dayText = unlocksAt?.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" });
+
+    // Hand the user's own morning answer back to them — the thing they said
+    // they'd give their attention to is what they're accountable to today.
+    const morningEntry = isEvening
+      ? (journalData?.entries ?? []).find((e: any) => e.dayNumber === locked.day && e.session === "morning")
+      : null;
+    const morningFocus: string | null =
+      morningEntry?.prompts?.find((p: any) => (p?.response ?? "").trim())?.response?.trim() ?? null;
+
     return (
       <div className="h-full overflow-y-auto bg-background">
         <div className="max-w-lg mx-auto px-5 py-8 pb-24 space-y-6">
@@ -441,20 +493,54 @@ export default function GroundingJournal() {
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
             <div>
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider">3-Day Grounding Journal</p>
-              <h1 className="font-serif text-xl font-bold text-foreground">Day {journalData?.lockedDay} — Not yet</h1>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider">
+                3-Day Grounding Journal · Day {locked.day}
+              </p>
+              <h1 className="font-serif text-xl font-bold text-foreground" data-testid="text-journal-locked-title">
+                {isEvening ? "Now go live it." : "Rest well. Tomorrow is ready for you."}
+              </h1>
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-6 border border-border/40 shadow-sm text-center space-y-3">
-            <p className="text-sm text-foreground leading-relaxed">
-              This journal moves at a 24-hour pace, one day at a time — that's part of the reset.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {unlocksAt
-                ? `Day ${journalData?.lockedDay} unlocks ${unlocksAt.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" })}.`
-                : `Day ${journalData?.lockedDay} unlocks 24 hours after your last entry.`}
-            </p>
-          </div>
+
+          {isEvening ? (
+            <div className="bg-white rounded-2xl p-6 border border-border/40 shadow-sm space-y-4">
+              {morningFocus && (
+                <div className="rounded-xl bg-primary/5 border border-primary/15 p-4">
+                  <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your focus for today</p>
+                  <p className="text-sm text-foreground leading-relaxed" data-testid="text-morning-focus">"{morningFocus}"</p>
+                </div>
+              )}
+              <p className="text-sm text-foreground leading-relaxed">
+                You named it. Now give it your day. It doesn't have to go perfectly. It just needs your honest effort,
+                one small step at a time. That's the discipline, and it's how the seed grows.
+              </p>
+              <p className="text-sm text-foreground leading-relaxed">
+                {timeText
+                  ? <>Your evening reflection opens at <strong>{timeText}</strong>. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>
+                  : <>Your evening reflection opens 8 hours after your morning focus. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-6 border border-border/40 shadow-sm text-center space-y-3">
+              <p className="text-sm text-foreground leading-relaxed">
+                You showed up today, and that matters. This journal moves one day at a time. That's part of the reset.
+              </p>
+              <p className="text-sm text-muted-foreground" data-testid="text-journal-unlocks-at">
+                {dayText ? `Day ${locked.day} opens ${dayText}.` : `Day ${locked.day} opens at 4 AM the day after your evening reflection.`}
+              </p>
+            </div>
+          )}
+
+          {unlocksAt && unlocksAt.getTime() > Date.now() && (
+            <Button
+              variant="outline"
+              className="w-full rounded-xl h-12"
+              onClick={() => downloadReminder(unlocksAt, isEvening ? `Day ${locked.day} evening reflection is open` : `Day ${locked.day} of your Grounding Journal is open`)}
+              data-testid="btn-add-reminder"
+            >
+              Add a reminder to my calendar
+            </Button>
+          )}
           <Button className="w-full rounded-xl h-12" onClick={() => setLocation("/home")}>
             Back to Home
           </Button>
