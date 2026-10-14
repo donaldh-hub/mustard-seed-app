@@ -1,7 +1,7 @@
 export const TERMS_OF_SERVICE_MD = `# Terms of Service
 
 **Effective Date:** June 20, 2026
-**Last Updated:** September 22, 2026
+**Last Updated:** October 14, 2026
 
 Please read these Terms of Service ("Terms") carefully before using Mustard Seed App ("Mustard Seed," "we," "us," or "our"), a product of HARDAWAYAI LLC, a New York limited liability company. These Terms govern your access to and use of the Mustard Seed website, mobile app, and related services (collectively, the "Service").
 
@@ -77,6 +77,8 @@ You may cancel your subscription at any time through your account settings or by
 
 ### 5.5 Refunds
 Except where required by law, payments are non-refundable, including for partial subscription periods. We may, at our sole discretion, issue refunds on a case-by-case basis for billing errors or extenuating circumstances. To request a refund, contact support@mustardseeddap.com.
+
+**7-Day Rebuild.** The 7-Day Rebuild is a one-time purchase, not a subscription, and it opens as soon as your payment clears. You may request a full refund within 7 days of purchase as long as you have not yet started Day 2. After that, the purchase is non-refundable except for billing errors, duplicate charges, or where required by law. If a refund is issued, your access to the 7-Day Rebuild ends.
 
 ### 5.6 Price Changes
 We may change subscription pricing. If a price change affects your existing subscription, we will provide advance notice before the change takes effect on your next renewal. Continued use after a price change takes effect constitutes acceptance of the new price.
@@ -170,7 +172,4 @@ We may update these Terms from time to time. If we make material changes, we wil
 HARDAWAYAI LLC
 support@mustardseeddap.com
 
----
-
-*These Terms of Service are provided as an operational draft and do not constitute legal advice. We recommend review by a licensed attorney prior to public launch — particularly Sections 5 (Subscriptions and Payment), 10 (Limitation of Liability), and 12 (Dispute Resolution), which are jurisdiction-sensitive.*
 `;
