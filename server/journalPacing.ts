@@ -1,8 +1,11 @@
 // Pacing gate for the 3-Day Grounding Journal. Kept free of imports so
 // `node --test` can run journalPacing.test.ts without dependencies.
 //
-//   - Evening opens EVENING_DELAY_HOURS after that day's morning entry, so a
-//     day's reflection follows a day actually lived.
+//   - Evening opens EVENING_DELAY_HOURS after that day's morning entry, or at
+//     EVENING_OPENS_BY_HOUR local time that same day, whichever comes first —
+//     so a day's reflection follows a day actually lived, but a late-starting
+//     day can still be reflected on before bed. A morning saved after
+//     EVENING_OPENS_BY_HOUR opens the evening right away.
 //   - The next day's morning opens at NEXT_DAY_OPENS_HOUR (local time) on the
 //     calendar day after the previous evening entry, so a 9 PM reflection
 //     still leaves tomorrow's morning session open in the morning.
@@ -12,6 +15,7 @@
 // that can't be started yet; it and everything after it are locked.
 
 export const EVENING_DELAY_HOURS = 8;
+export const EVENING_OPENS_BY_HOUR = 21;
 export const NEXT_DAY_OPENS_HOUR = 4;
 
 export type JournalSession = "morning" | "evening";
@@ -61,14 +65,19 @@ function tzOffsetMs(instant: Date, timeZone: string): number {
   return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
 }
 
-// The instant that is `hour`:00 local time on the calendar day after `from`'s
-// local date in `timeZone`. Re-checks the offset once so DST changes land right.
-export function nextLocalDayAt(from: Date, hour: number, timeZone: string): Date {
+// The instant that is `hour`:00 local time, `dayOffset` calendar days after
+// `from`'s local date in `timeZone`. Re-checks the offset once so DST changes
+// land right.
+export function localDayAt(from: Date, dayOffset: number, hour: number, timeZone: string): Date {
   const local = new Date(from.getTime() + tzOffsetMs(from, timeZone));
-  const wallMs = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 1, hour);
+  const wallMs = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + dayOffset, hour);
   let guess = wallMs - tzOffsetMs(new Date(wallMs), timeZone);
   guess = wallMs - tzOffsetMs(new Date(guess), timeZone);
   return new Date(guess);
+}
+
+export function nextLocalDayAt(from: Date, hour: number, timeZone: string): Date {
+  return localDayAt(from, 1, hour, timeZone);
 }
 
 function earliest(entries: JournalEntryLike[], day: number, session: string): Date | null {
@@ -90,7 +99,10 @@ export function computeJournalGate(entries: JournalEntryLike[], now: Date, timeZ
     const prevDoneAt = earliest(entries, prev.day, prev.session);
     if (!prevDoneAt) return { locked: step, unlocksAt: null };
     const opensAt = step.session === "evening"
-      ? new Date(prevDoneAt.getTime() + EVENING_DELAY_HOURS * 60 * 60 * 1000)
+      ? new Date(Math.min(
+          prevDoneAt.getTime() + EVENING_DELAY_HOURS * 60 * 60 * 1000,
+          localDayAt(prevDoneAt, 0, EVENING_OPENS_BY_HOUR, tz).getTime(),
+        ))
       : nextLocalDayAt(prevDoneAt, NEXT_DAY_OPENS_HOUR, tz);
     if (now < opensAt) return { locked: step, unlocksAt: opensAt.toISOString() };
   }

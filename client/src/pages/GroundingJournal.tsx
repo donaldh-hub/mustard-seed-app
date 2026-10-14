@@ -463,8 +463,9 @@ export default function GroundingJournal() {
   }
 
   // ── Locked view (pacing gate) ──────────────────────────────────────────────
-  // Evening opens 8 hours after that day's morning; the next day's morning
-  // opens at 4 AM local time the day after the previous evening. Everything
+  // Evening opens 8 hours after that day's morning or at 9 PM local, whichever
+  // is first; the next day's morning opens at 4 AM local the day after the
+  // previous evening (server/journalPacing.ts). Everything
   // from the locked session onward waits; reflections already earned stay open.
 
   const locked = journalData?.lockedSession ?? null;
@@ -517,7 +518,7 @@ export default function GroundingJournal() {
               <p className="text-sm text-foreground leading-relaxed">
                 {timeText
                   ? <>Your evening reflection opens at <strong>{timeText}</strong>. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>
-                  : <>Your evening reflection opens 8 hours after your morning focus. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>}
+                  : <>Your evening reflection opens later today. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>}
               </p>
             </div>
           ) : (

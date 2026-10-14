@@ -3467,8 +3467,8 @@ export async function registerRoutes(
   // --- 3-Day Grounding Journal ---
 
   // Pacing gate (server/journalPacing.ts): evening opens 8h after that day's
-  // morning; the next day's morning opens at 4 AM local the day after the
-  // previous evening. The browser sends its IANA time zone; fall back to the
+  // morning or at 9 PM local, whichever is first; the next day's morning opens
+  // at 4 AM local the day after the previous evening. The browser sends its IANA time zone; fall back to the
   // user's stored one, then UTC.
   async function journalTimeZone(userId: string, sent: unknown): Promise<string> {
     if (isValidTimeZone(sent)) return sent;

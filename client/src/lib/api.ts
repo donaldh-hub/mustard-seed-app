@@ -134,8 +134,8 @@ export const api = {
     fetchJson<{
       entries: any[];
       completed: boolean;
-      // First session that can't be started yet (evening waits 8h after
-      // morning; next day opens 4 AM local), and when it opens.
+      // First session that can't be started yet (evening: 8h after morning or
+      // 9 PM local, whichever is first; next day: 4 AM local), and when it opens.
       lockedSession: { day: 1 | 2 | 3; session: "morning" | "evening" } | null;
       unlocksAt: string | null;
     }>(`/users/${userId}/grounding-journal?tz=${encodeURIComponent(getUserTimezone())}`),
