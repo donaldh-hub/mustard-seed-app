@@ -40,7 +40,11 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
-  const googleBtnRef = useRef<HTMLDivElement>(null);
+  // Callback ref (state, not useRef): the login and register views each mount
+  // their own button slot, and AnimatePresence mode="wait" mounts the new view
+  // only after the old one exits — so the render effect must re-run when the
+  // slot itself appears, not just when `view` changes.
+  const [googleBtnEl, setGoogleBtnEl] = useState<HTMLDivElement | null>(null);
   const nextIntent = useRef<string | null>(null);
 
   useEffect(() => {
@@ -76,7 +80,7 @@ export default function Auth() {
   }, []);
 
   useEffect(() => {
-    if (!googleClientId || view !== "login") return;
+    if (!googleClientId || !googleBtnEl || (view !== "login" && view !== "register")) return;
 
     const loadGIS = () => {
       if (!window.google) return;
@@ -86,15 +90,13 @@ export default function Auth() {
         auto_select: false,
         cancel_on_tap_outside: true,
       });
-      if (googleBtnRef.current) {
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          theme: "outline",
-          size: "large",
-          width: googleBtnRef.current.offsetWidth || 320,
-          shape: "rectangular",
-          text: "signin_with",
-        });
-      }
+      window.google.accounts.id.renderButton(googleBtnEl, {
+        theme: "outline",
+        size: "large",
+        width: googleBtnEl.offsetWidth || 320,
+        shape: "rectangular",
+        text: view === "register" ? "signup_with" : "signin_with",
+      });
     };
 
     if (window.google) {
@@ -113,7 +115,7 @@ export default function Auth() {
         script.addEventListener("load", loadGIS);
       }
     }
-  }, [googleClientId, view]);
+  }, [googleClientId, googleBtnEl, view]);
 
   const handleGoogleCredential = async (response: { credential: string }) => {
     setError("");
@@ -282,7 +284,7 @@ export default function Auth() {
 
                 {googleClientId && (
                   <>
-                    <div ref={googleBtnRef} className="w-full mb-4" data-testid="btn-google-signin" />
+                    <div ref={setGoogleBtnEl} className="w-full mb-4" data-testid="btn-google-signin" />
                     <div className="flex items-center gap-3 mb-4">
                       <div className="flex-1 h-px bg-stone-200" />
                       <span className="text-xs text-stone-400">or</span>
@@ -363,7 +365,7 @@ export default function Auth() {
                 {googleClientId && (
                   <>
                     <div
-                      ref={googleBtnRef}
+                      ref={setGoogleBtnEl}
                       className={cn("w-full mb-4", !agreedToTerms && "pointer-events-none opacity-50")}
                       data-testid="btn-google-register"
                     />
