@@ -51,19 +51,23 @@ export const DAY1_SLIDES: SlideTiming[] = [
 // Video runs 81.0s — comfortable margin. Real runtime came in noticeably
 // shorter than the estimate used to storyboard it, same as Day 1 — pacing
 // ran faster than the word-count formula predicted.
+// startSec is when each slide actually appears in the video (read off a
+// 1-fps frame sheet), plus ~0.5s to settle — same method as Day 1. Earlier
+// values chained the clips back to back, so narration ran ahead of the
+// visuals with no pauses. Every clip still ends before the next one starts.
 export const DAY2_SLIDES: SlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 2.5, onScreenText: "Day 2 — Refocus", narrationText: "Hi, it's Jai. Day 2 — Refocus." },
-  { slideNumber: 2, startSec: 2.5, durationSec: 4.0, onScreenText: "Yesterday, you paused. Today, you choose.", narrationText: "Yesterday helped you pause. Today is about choosing what truly matters." },
-  { slideNumber: 3, startSec: 6.5, durationSec: 3.5, onScreenText: "Not everything deserves your energy. So what does?", narrationText: "Not everything deserves your energy today. So — what does?" },
-  { slideNumber: 4, startSec: 10.1, durationSec: 5.6, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild. Today: Choose.", narrationText: "Same rhythm as yesterday: pause, notice, reflect, choose, rebuild. Today, we practice choosing." },
-  { slideNumber: 5, startSec: 15.7, durationSec: 8.8, onScreenText: "Refocus isn't a perfect day. It's noticing what pulled you away — and what brought you back.", narrationText: "Refocus doesn't mean you had a perfect day. It means noticing what pulled you away, and what brought you back. That awareness is growth." },
-  { slideNumber: 6, startSec: 24.5, durationSec: 5.9, onScreenText: "What truly matters to me today? / How can I give myself permission to slow down?", narrationText: "This morning, two questions: what truly matters to you today, and how you can give yourself permission to slow down." },
-  { slideNumber: 7, startSec: 30.3, durationSec: 3.7, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Answer in your own words, same as yesterday." },
-  { slideNumber: 8, startSec: 34.0, durationSec: 6.5, onScreenText: "I'm still listening. Nothing you said yesterday is gone.", narrationText: "I'm still listening — nothing you told me yesterday is gone. I'll reflect on it, then ask one honest follow-up question." },
-  { slideNumber: 9, startSec: 40.6, durationSec: 6.2, onScreenText: "What moment brought peace or gratitude today? / What can I release before tomorrow begins?", narrationText: "Tonight, I'll ask what moment brought you peace or gratitude, and what you're ready to release before tomorrow." },
-  { slideNumber: 10, startSec: 46.8, durationSec: 4.8, onScreenText: "Noticing what pulled you away is growth, not failure.", narrationText: "Noticing what pulled you away today isn't failure. It's exactly what refocusing looks like." },
-  { slideNumber: 11, startSec: 51.6, durationSec: 4.8, onScreenText: "Everything from yesterday is still here. I haven't forgotten.", narrationText: "Everything you've told me stays with me — today, tomorrow, whenever you're ready to build from it." },
-  { slideNumber: 12, startSec: 56.4, durationSec: 4.6, onScreenText: "Day 2: Refocus. One more day after this.", narrationText: "Whenever you're ready, open Mustard Seed and start Day 2 with me. One more day after this." },
+  { slideNumber: 2, startSec: 4.5, durationSec: 4.0, onScreenText: "Yesterday, you paused. Today, you choose.", narrationText: "Yesterday helped you pause. Today is about choosing what truly matters." },
+  { slideNumber: 3, startSec: 10.5, durationSec: 3.5, onScreenText: "Not everything deserves your energy. So what does?", narrationText: "Not everything deserves your energy today. So — what does?" },
+  { slideNumber: 4, startSec: 15.5, durationSec: 5.6, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild. Today: Choose.", narrationText: "Same rhythm as yesterday: pause, notice, reflect, choose, rebuild. Today, we practice choosing." },
+  { slideNumber: 5, startSec: 22.5, durationSec: 8.8, onScreenText: "Refocus isn't a perfect day. It's noticing what pulled you away — and what brought you back.", narrationText: "Refocus doesn't mean you had a perfect day. It means noticing what pulled you away, and what brought you back. That awareness is growth." },
+  { slideNumber: 6, startSec: 33.5, durationSec: 5.9, onScreenText: "What truly matters to me today? / How can I give myself permission to slow down?", narrationText: "This morning, two questions: what truly matters to you today, and how you can give yourself permission to slow down." },
+  { slideNumber: 7, startSec: 40.5, durationSec: 3.7, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Answer in your own words, same as yesterday." },
+  { slideNumber: 8, startSec: 45.5, durationSec: 6.5, onScreenText: "I'm still listening. Nothing you said yesterday is gone.", narrationText: "I'm still listening — nothing you told me yesterday is gone. I'll reflect on it, then ask one honest follow-up question." },
+  { slideNumber: 9, startSec: 54.5, durationSec: 6.2, onScreenText: "What moment brought peace or gratitude today? / What can I release before tomorrow begins?", narrationText: "Tonight, I'll ask what moment brought you peace or gratitude, and what you're ready to release before tomorrow." },
+  { slideNumber: 10, startSec: 62.5, durationSec: 4.8, onScreenText: "Noticing what pulled you away is growth, not failure.", narrationText: "Noticing what pulled you away today isn't failure. It's exactly what refocusing looks like." },
+  { slideNumber: 11, startSec: 68.5, durationSec: 4.8, onScreenText: "Everything from yesterday is still here. I haven't forgotten.", narrationText: "Everything you've told me stays with me — today, tomorrow, whenever you're ready to build from it." },
+  { slideNumber: 12, startSec: 74.5, durationSec: 4.6, onScreenText: "Day 2: Refocus. One more day after this.", narrationText: "Whenever you're ready, open Mustard Seed and start Day 2 with me. One more day after this." },
 ];
 
 // Day 3 — REBUILD (real clip timings, measured with ffprobe — see
@@ -73,19 +77,23 @@ export const DAY2_SLIDES: SlideTiming[] = [
 // bridges into the 7-Day Rebuild (Slide 12) — the existing STEP_ORDER /
 // RebuildFunnelCard flow in GroundingJournal.tsx already carries that
 // invitation through, so no separate wiring was needed for it.
+// startSec is when each slide actually appears in the video (read off a
+// 1-fps frame sheet), plus ~0.5s to settle — same method as Day 1. Earlier
+// values chained the clips back to back, so narration ran ahead of the
+// visuals with no pauses. Every clip still ends before the next one starts.
 export const DAY3_SLIDES: SlideTiming[] = [
   { slideNumber: 1, startSec: 0, durationSec: 2.5, onScreenText: "Day 3 — Rebuild", narrationText: "Hi, it's Jai. Day 3 — Rebuild." },
-  { slideNumber: 2, startSec: 2.5, durationSec: 2.4, onScreenText: "Two days down. Today, we bring it together.", narrationText: "Two days down. Today, we bring it together." },
-  { slideNumber: 3, startSec: 4.9, durationSec: 2.0, onScreenText: "Rebuilding doesn't have to be loud.", narrationText: "Rebuilding doesn't have to be loud." },
-  { slideNumber: 4, startSec: 6.9, durationSec: 5.5, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild. Today: Rebuild.", narrationText: "Same rhythm, one last piece: pause, notice, reflect, choose, rebuild. Today, we rebuild." },
-  { slideNumber: 5, startSec: 12.4, durationSec: 4.9, onScreenText: "Sometimes it looks like choosing one value and carrying it through the day.", narrationText: "Sometimes rebuilding looks like choosing one value, and carrying it through the whole day." },
-  { slideNumber: 6, startSec: 17.3, durationSec: 6.7, onScreenText: "What value do I want to carry into today? / How can I stay grounded even when things shift?", narrationText: "This morning, two questions: what value you want to carry into today, and how you'll stay grounded even if things shift." },
-  { slideNumber: 7, startSec: 24.0, durationSec: 4.8, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Same as the last two days — your own words, no wrong answer." },
-  { slideNumber: 8, startSec: 28.8, durationSec: 6.3, onScreenText: "Three days of you, all remembered.", narrationText: "Three days of you, all remembered. What you noticed on Day 1, what you named on Day 2 — it's all still here." },
-  { slideNumber: 9, startSec: 35.1, durationSec: 4.8, onScreenText: "Where did I notice growth, even in small ways? / How can I keep building from this place of calm awareness?", narrationText: "Tonight, I'll ask where you noticed growth, even small, and how you want to keep building from here." },
-  { slideNumber: 10, startSec: 39.8, durationSec: 6.3, onScreenText: "Small is where trust begins. Small is where the seed breaks open.", narrationText: "Small is where trust begins. Small is where consistency starts. Small is where the seed breaks open." },
-  { slideNumber: 11, startSec: 46.1, durationSec: 6.4, onScreenText: "Before we close, name what you learned — in three short reflections.", narrationText: "Before we close, I'll ask you to name what you learned — in three short reflections. That becomes your grounding statement." },
-  { slideNumber: 12, startSec: 52.5, durationSec: 8.1, onScreenText: "Three days of pausing and noticing. The 7-Day Rebuild turns this into rhythm.", narrationText: "Three days of pausing and noticing. Whenever you're ready, the 7-Day Rebuild turns this into rhythm. Come finish Day 3 with me in the app." },
+  { slideNumber: 2, startSec: 5.5, durationSec: 2.4, onScreenText: "Two days down. Today, we bring it together.", narrationText: "Two days down. Today, we bring it together." },
+  { slideNumber: 3, startSec: 10.5, durationSec: 2.0, onScreenText: "Rebuilding doesn't have to be loud.", narrationText: "Rebuilding doesn't have to be loud." },
+  { slideNumber: 4, startSec: 16.0, durationSec: 5.5, onScreenText: "Pause. Notice. Reflect. Choose. Rebuild. Today: Rebuild.", narrationText: "Same rhythm, one last piece: pause, notice, reflect, choose, rebuild. Today, we rebuild." },
+  { slideNumber: 5, startSec: 23.5, durationSec: 4.9, onScreenText: "Sometimes it looks like choosing one value and carrying it through the day.", narrationText: "Sometimes rebuilding looks like choosing one value, and carrying it through the whole day." },
+  { slideNumber: 6, startSec: 31.0, durationSec: 6.7, onScreenText: "What value do I want to carry into today? / How can I stay grounded even when things shift?", narrationText: "This morning, two questions: what value you want to carry into today, and how you'll stay grounded even if things shift." },
+  { slideNumber: 7, startSec: 39.5, durationSec: 4.8, onScreenText: "Open Mustard Seed. Answer honestly.", narrationText: "Open the app when you're ready. Same as the last two days — your own words, no wrong answer." },
+  { slideNumber: 8, startSec: 46.5, durationSec: 6.3, onScreenText: "Three days of you, all remembered.", narrationText: "Three days of you, all remembered. What you noticed on Day 1, what you named on Day 2 — it's all still here." },
+  { slideNumber: 9, startSec: 55.0, durationSec: 4.8, onScreenText: "Where did I notice growth, even in small ways? / How can I keep building from this place of calm awareness?", narrationText: "Tonight, I'll ask where you noticed growth, even small, and how you want to keep building from here." },
+  { slideNumber: 10, startSec: 61.5, durationSec: 6.3, onScreenText: "Small is where trust begins. Small is where the seed breaks open.", narrationText: "Small is where trust begins. Small is where consistency starts. Small is where the seed breaks open." },
+  { slideNumber: 11, startSec: 69.5, durationSec: 6.4, onScreenText: "Before we close, name what you learned — in three short reflections.", narrationText: "Before we close, I'll ask you to name what you learned — in three short reflections. That becomes your grounding statement." },
+  { slideNumber: 12, startSec: 77.5, durationSec: 8.1, onScreenText: "Three days of pausing and noticing. The 7-Day Rebuild turns this into rhythm.", narrationText: "Three days of pausing and noticing. Whenever you're ready, the 7-Day Rebuild turns this into rhythm. Come finish Day 3 with me in the app." },
 ];
 
 // Days without a per-slide timing map fall back to plain (unsynced) local
