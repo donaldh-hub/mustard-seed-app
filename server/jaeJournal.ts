@@ -41,12 +41,15 @@ export interface JournalJaeResponse {
 // four questions reference the user's own saved answers (skipped, not shown
 // blank, if an answer isn't available); the rest are generic.
 function journalFollowUpQuestions(dayNumber: 1 | 2 | 3, morning: string[], evening: string[]): string[] {
+  // The user's own answers ride along in [their words: …] as reference only —
+  // the prompt below tells Jai to paraphrase them, never quote them.
+  const words = (t: string) => `[their words: ${t}]`;
   if (dayNumber === 1) {
     return [
-      morning[0] ? `You said your attention today was going toward "${morning[0]}" — what pulled it away, if anything did?` : "",
-      morning[1] ? `You wrote that moving through today with calm meant "${morning[1]}" — how close did the day actually come to that?` : "",
-      evening[0] ? `The moment you felt most present was "${evening[0]}" — what made that moment different from the rest of the day?` : "",
-      evening[1] ? `You noticed something about your pace or patience: "${evening[1]}" — has that shown up before today, or is it new?` : "",
+      morning[0] ? `Ask what pulled their attention away today, if anything, from what they set out to focus on ${words(morning[0])}.` : "",
+      morning[1] ? `Ask how close the day came to the calm they described this morning ${words(morning[1])}.` : "",
+      evening[0] ? `Ask what made that moment different from the rest of the day ${words(evening[0])}.` : "",
+      evening[1] ? `Ask whether what they noticed about themselves has shown up before, or is new ${words(evening[1])}.` : "",
       "If tomorrow started exactly like today ended, what would you want to carry forward?",
       "What almost kept you from sitting down and answering these questions today?",
       "Where in today did you notice yourself rushing, even a little?",
@@ -55,10 +58,10 @@ function journalFollowUpQuestions(dayNumber: 1 | 2 | 3, morning: string[], eveni
   }
   if (dayNumber === 2) {
     return [
-      morning[0] ? `You said what truly mattered today was "${morning[0]}" — did today's actual time match that, or pull somewhere else?` : "",
-      morning[1] ? `You wrote that slowing down meant giving yourself permission to "${morning[1]}" — what got in the way of that, if anything?` : "",
-      evening[0] ? `The moment that brought peace or gratitude was "${evening[0]}" — what made that moment safe enough to notice?` : "",
-      evening[1] ? `You named something you're ready to release: "${evening[1]}" — how long has that been sitting with you?` : "",
+      morning[0] ? `Ask whether today's actual time matched what they said mattered, or got pulled somewhere else ${words(morning[0])}.` : "",
+      morning[1] ? `Ask what got in the way of slowing down the way they hoped, if anything ${words(morning[1])}.` : "",
+      evening[0] ? `Ask what made that moment of peace safe enough to notice ${words(evening[0])}.` : "",
+      evening[1] ? `Ask how long what they're ready to let go of has been sitting with them ${words(evening[1])}.` : "",
       "What's the difference between what deserved your energy today and what actually got it?",
       "If you gave yourself full permission to slow down tomorrow, what would you do differently?",
       "What's one thing today that felt urgent but wasn't actually important?",
@@ -66,10 +69,10 @@ function journalFollowUpQuestions(dayNumber: 1 | 2 | 3, morning: string[], eveni
     ].filter(Boolean);
   }
   return [
-    morning[0] ? `You said the value you wanted to carry today was "${morning[0]}" — where did you actually see it show up?` : "",
-    morning[1] ? `You wrote that staying grounded when things shift meant "${morning[1]}" — did anything test that today?` : "",
-    evening[0] ? `You noticed growth in "${evening[0]}" — how does that compare to where you started three days ago?` : "",
-    evening[1] ? `You said you want to keep building from "${evening[1]}" — what would keeping that going actually require of you?` : "",
+    morning[0] ? `Ask where they actually saw the value they chose show up today ${words(morning[0])}.` : "",
+    morning[1] ? `Ask whether anything tested how they planned to stay grounded today ${words(morning[1])}.` : "",
+    evening[0] ? `Ask how the growth they noticed compares to where they started three days ago ${words(evening[0])}.` : "",
+    evening[1] ? `Ask what keeping that going would actually require of them ${words(evening[1])}.` : "",
     "Looking back over all three days, what pattern shows up more than once?",
     "What surprised you most about doing this three days in a row?",
     "If you had to name this season in one word, what would it be?",
@@ -84,7 +87,8 @@ function followUpBlock(dayNumber: 1 | 2 | 3, morning: string[], evening: string[
 Optional follow-up bank for tonight's check-in — a menu, not a script:
 ${questions.map((q) => `- ${q}`).join("\n")}
 
-If (and only if) one of these is genuinely relevant to what they just wrote, use it (adapted to their own words) as your "followUpQuestion" value instead of writing a new one from scratch. Otherwise ignore this bank entirely and write your own grounded question as usual.
+If (and only if) one of these is genuinely relevant to what they just wrote, turn it into your "followUpQuestion" in your own voice instead of writing a new one from scratch. Otherwise ignore this bank entirely and write your own grounded question as usual.
+- Text in [their words: …] is the user's raw answer, for your reference only. Never copy it or put it in quotation marks — refer to it in your own clean paraphrase.
 - Never use more than one of these in a single reply, and never list several — pick at most one.
 - It should read as your own natural next question, not a quiz prompt.`;
 }
@@ -126,6 +130,8 @@ Your job is to:
 
 Rules:
 - Sound like a wise friend, not a therapist or life coach.
+- Never quote the user's words back to them, and never use quotation marks around what they wrote. Paraphrase what they said in your own warm, natural words (their typos and shorthand disappear in your phrasing).
+- Don't repeat the journal prompt's wording back to them (for example "most present", "pace or patience", "calm and purpose"). Instead, name the specific insight they gave, in plain words. Example: if they wrote that they got more done because they didn't feel rushed, say something like "not rushing is what made you productive," not "you reflected on your pace or patience."
 - Keep reflection to 2-4 sentences max.
 - Never ask multiple questions. One question only.
 - Avoid clinical or robotic language.
