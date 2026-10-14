@@ -17,13 +17,12 @@ setting is read.
 - [x] **Graduates only ever see graduate prices** ($15.99/mo, $159.90/yr).
   Checkout never falls back to the $17.99/$179.90 price for a graduate. If
   a graduate price isn't configured, checkout errors instead of overcharging.
-- [ ] **Rebuild refund policy.** Drafted in Terms §5.5 ("7-Day Rebuild"
-  paragraph): full refund within 7 days if Day 2 hasn't started, access ends
-  on refund. Needs Donald's sign-off (new text, not covered by the Oct 13
-  legal review).
-- [x] **Legal review.** Legal confirmed the Terms, Privacy Policy, and
-  Subscription Explainer on Oct 13, 2026. The "operational draft" footers
-  were removed from the Terms and Privacy Policy.
+- [ ] **Rebuild refund policy.** Terms §5.3 says the Rebuild "may require
+  payment" but says nothing about refunds for a one-time purchase. Decide
+  the policy and add it before launch (attorney review item).
+- [ ] **Legal review.** `client/src/content/termsOfService.ts` and
+  `privacyPolicy.ts` are marked as drafts that need attorney review before
+  taking payments (especially Terms sections 5, 10, 12).
 - [ ] **Approve dunning email copy.** Failed-payment emails stay off until
   `DUNNING_COPY_APPROVED=true` (`server/billingAgent.ts`).
 
