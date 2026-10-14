@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import jaiHero from "@assets/ChatGPT_Image_Mar_7,_2026,_09_01_46_PM_1772935512407.png";
 
 type AuthView = "login" | "register" | "forgot" | "reset" | "resetSent";
@@ -35,12 +34,17 @@ export default function Auth() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [termsHint, setTermsHint] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
-  const googleBtnRef = useRef<HTMLDivElement>(null);
+  // Callback ref (state, not useRef): the login and register views each mount
+  // their own button slot, and AnimatePresence mode="wait" mounts the new view
+  // only after the old one exits — so the render effect must re-run when the
+  // slot itself appears, not just when `view` changes.
+  const [googleBtnEl, setGoogleBtnEl] = useState<HTMLDivElement | null>(null);
   const nextIntent = useRef<string | null>(null);
 
   useEffect(() => {
@@ -76,7 +80,7 @@ export default function Auth() {
   }, []);
 
   useEffect(() => {
-    if (!googleClientId || view !== "login") return;
+    if (!googleClientId || !googleBtnEl || (view !== "login" && view !== "register")) return;
 
     const loadGIS = () => {
       if (!window.google) return;
@@ -86,15 +90,13 @@ export default function Auth() {
         auto_select: false,
         cancel_on_tap_outside: true,
       });
-      if (googleBtnRef.current) {
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          theme: "outline",
-          size: "large",
-          width: googleBtnRef.current.offsetWidth || 320,
-          shape: "rectangular",
-          text: "signin_with",
-        });
-      }
+      window.google.accounts.id.renderButton(googleBtnEl, {
+        theme: "outline",
+        size: "large",
+        width: googleBtnEl.offsetWidth || 320,
+        shape: "rectangular",
+        text: view === "register" ? "signup_with" : "signin_with",
+      });
     };
 
     if (window.google) {
@@ -113,7 +115,7 @@ export default function Auth() {
         script.addEventListener("load", loadGIS);
       }
     }
-  }, [googleClientId, view]);
+  }, [googleClientId, googleBtnEl, view]);
 
   const handleGoogleCredential = async (response: { credential: string }) => {
     setError("");
@@ -282,7 +284,7 @@ export default function Auth() {
 
                 {googleClientId && (
                   <>
-                    <div ref={googleBtnRef} className="w-full mb-4" data-testid="btn-google-signin" />
+                    <div ref={setGoogleBtnEl} className="w-full mb-4" data-testid="btn-google-signin" />
                     <div className="flex items-center gap-3 mb-4">
                       <div className="flex-1 h-px bg-stone-200" />
                       <span className="text-xs text-stone-400">or</span>
@@ -360,16 +362,54 @@ export default function Auth() {
                 <h2 className="text-xl font-bold text-stone-900 mb-1">Create account</h2>
                 <p className="text-sm text-stone-500 mb-5">Plant your seed. Start growing.</p>
 
+                <label className="flex items-start gap-2 text-sm text-stone-600 px-1 mb-4">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => { setAgreedToTerms(e.target.checked); setTermsHint(false); }}
+                    className="mt-0.5 h-4 w-4 flex-none rounded border-stone-300 text-amber-500 focus:ring-amber-400"
+                    data-testid="checkbox-agree-terms"
+                  />
+                  <span>
+                    By creating an account, you agree to our{" "}
+                    <Link href="/terms-of-service" className="font-semibold text-amber-600 hover:underline">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link href="/privacy-policy" className="font-semibold text-amber-600 hover:underline">
+                      Privacy Policy
+                    </Link>
+                    .
+                  </span>
+                </label>
+
+                {termsHint && !agreedToTerms && (
+                  <p className="-mt-2 mb-4 px-1 text-sm text-amber-700" role="alert" data-testid="text-terms-hint">
+                    Tick the box above first, then sign up with Google.
+                  </p>
+                )}
+
                 {googleClientId && (
                   <>
-                    <div
-                      ref={googleBtnRef}
-                      className={cn("w-full mb-4", !agreedToTerms && "pointer-events-none opacity-50")}
-                      data-testid="btn-google-register"
-                    />
+                    {/* Google's button is a cross-origin iframe, so its clicks can't be
+                        intercepted. Until terms are agreed, a transparent overlay takes
+                        the click and explains why, instead of dimming the button. */}
+                    <div className="relative w-full">
+                      <div ref={setGoogleBtnEl} className="w-full" data-testid="btn-google-register" />
+                      {!agreedToTerms && (
+                        <button
+                          type="button"
+                          aria-label="Sign up with Google (agree to the Terms first)"
+                          onClick={() => setTermsHint(true)}
+                          className="absolute inset-0 w-full cursor-pointer bg-transparent"
+                          data-testid="btn-google-register-gate"
+                        />
+                      )}
+                    </div>
+                    <p className="mt-2 mb-4 text-center text-xs text-stone-500">One click. No password needed.</p>
                     <div className="flex items-center gap-3 mb-4">
                       <div className="flex-1 h-px bg-stone-200" />
-                      <span className="text-xs text-stone-400">or</span>
+                      <span className="text-xs text-stone-400">or sign up with email</span>
                       <div className="flex-1 h-px bg-stone-200" />
                     </div>
                   </>
@@ -413,26 +453,6 @@ export default function Auth() {
                     data-testid="input-register-confirm"
                   />
 
-                  <label className="flex items-start gap-2 text-sm text-stone-600 px-1">
-                    <input
-                      type="checkbox"
-                      checked={agreedToTerms}
-                      onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 flex-none rounded border-stone-300 text-amber-500 focus:ring-amber-400"
-                      data-testid="checkbox-agree-terms"
-                    />
-                    <span>
-                      By creating an account, you agree to our{" "}
-                      <Link href="/terms-of-service" className="font-semibold text-amber-600 hover:underline">
-                        Terms of Service
-                      </Link>{" "}
-                      and{" "}
-                      <Link href="/privacy-policy" className="font-semibold text-amber-600 hover:underline">
-                        Privacy Policy
-                      </Link>
-                      .
-                    </span>
-                  </label>
 
                   {error && (
                     <p className="text-sm text-red-500 px-1" data-testid="text-auth-error">{error}</p>
