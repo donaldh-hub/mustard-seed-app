@@ -56,6 +56,10 @@ async function ensureSchema() {
       ALTER TABLE entries
         ADD COLUMN IF NOT EXISTS water_units INTEGER NOT NULL DEFAULT 1;
     `);
+    await pool.query(`
+      ALTER TABLE grounding_journal_entries
+        ADD COLUMN IF NOT EXISTS reflection_planned_at TIMESTAMP;
+    `);
     // Login sessions (connect-pg-simple). Its own createTableIfMissing reads a
     // table.sql file that isn't in the production bundle, so a fresh database
     // would fail every login — create the table here instead.

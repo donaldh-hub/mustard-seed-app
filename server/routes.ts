@@ -28,7 +28,7 @@ import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User }
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
 import { summarizeRebuildProgress } from "./rebuildProgress";
-import { computeJournalGate, isEntryBlocked, isValidTimeZone } from "./journalPacing";
+import { computeJournalGate, isEntryBlocked, isValidTimeZone, eveningOpensAt, reflectionChoices, isCommitmentKept, isPacingTester } from "./journalPacing";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
 
@@ -3468,8 +3468,8 @@ export async function registerRoutes(
   // --- 3-Day Grounding Journal ---
 
   // Pacing gate (server/journalPacing.ts): evening opens 8h after that day's
-  // morning; the next day's morning opens at 4 AM local the day after the
-  // previous evening. The browser sends its IANA time zone; fall back to the
+  // morning or at 9 PM local, whichever is first; the next day's morning opens
+  // at 4 AM local the day after the previous evening. The browser sends its IANA time zone; fall back to the
   // user's stored one, then UTC.
   async function journalTimeZone(userId: string, sent: unknown): Promise<string> {
     if (isValidTimeZone(sent)) return sent;
@@ -3482,11 +3482,18 @@ export async function registerRoutes(
     const entries = await storage.getGroundingJournalEntries(req.params.userId);
     const user = await storage.getUser(req.params.userId);
     const gate = computeJournalGate(entries, new Date(), await journalTimeZone(req.params.userId, req.query.tz));
+    // While an evening is waiting, offer the times the user can commit to.
+    const waitingMorning = gate.locked?.session === "evening" && gate.unlocksAt
+      ? entries.find((e) => e.dayNumber === gate.locked!.day && e.session === "morning")
+      : undefined;
     return res.json({
       entries,
       completed: user?.groundingJournalCompleted ?? false,
       lockedSession: gate.locked,
       unlocksAt: gate.unlocksAt,
+      reflectionChoices: waitingMorning ? reflectionChoices(new Date(gate.unlocksAt!)).map((d) => d.toISOString()) : [],
+      reflectionPlannedAt: waitingMorning?.reflectionPlannedAt ?? null,
+      canSkipWait: isPacingTester(user?.email, process.env.JOURNAL_PACING_SKIP_EMAILS),
     });
   });
 
@@ -3503,7 +3510,8 @@ export async function registerRoutes(
 
       const existingEntries = await storage.getGroundingJournalEntries(userId);
       const gate = computeJournalGate(existingEntries, new Date(), await journalTimeZone(userId, userTimezone));
-      if (isEntryBlocked(gate, dayNumber, session)) {
+      const gateUser = await storage.getUser(userId);
+      if (isEntryBlocked(gate, dayNumber, session) && !isPacingTester(gateUser?.email, process.env.JOURNAL_PACING_SKIP_EMAILS)) {
         return res.status(403).json({
           message: "This session isn't open yet.",
           code: "SESSION_LOCKED",
@@ -3536,7 +3544,7 @@ export async function registerRoutes(
           userId, dayNumber, session, prompts,
           jaeReflection: safetyReflection, jaeFollowUpQuestion: null, userFollowUpResponse: null,
           keyTheme: null, releasePoint: null, valueNamed: null, possibleFirstSeed: null,
-          isComplete: true,
+          isComplete: true, reflectionPlannedAt: null,
         });
         return res.json({
           entry,
@@ -3601,6 +3609,7 @@ export async function registerRoutes(
         valueNamed: jaeResponse.valueNamed || null,
         possibleFirstSeed: jaeResponse.possibleFirstSeed || null,
         isComplete: true,
+        reflectionPlannedAt: null,
       });
 
       // Mirror to the entries table so Calendar/Memory Bank shows journal
@@ -3624,10 +3633,58 @@ export async function registerRoutes(
         }
       }
 
-      return res.json({ entry, jae: jaeResponse, ...(safetyReflection ? { safetyTriggered: true } : {}) });
+      // Kept the reflection time they chose this morning → bonus water. A
+      // "happy" entry is how water is counted everywhere else (1 unit each).
+      let commitmentKept: { plannedAt: string } | null = null;
+      if (!safetyReflection && session === "evening" && todayMorningEntry?.reflectionPlannedAt
+          && isCommitmentKept(todayMorningEntry.reflectionPlannedAt, new Date())) {
+        commitmentKept = { plannedAt: new Date(todayMorningEntry.reflectionPlannedAt).toISOString() };
+        try {
+          await storage.createEntry({
+            userId,
+            goalId: null,
+            date: localDate || todayStr(),
+            summary: `Kept your word: reflected at the time you chose (Day ${dayNumber})`,
+            mood: "happy",
+            waterUnits: 1,
+          });
+        } catch (bonusErr) {
+          console.error("[JOURNAL] commitment_bonus_error:", (bonusErr as Error).message);
+        }
+      }
+
+      return res.json({
+        entry,
+        jae: jaeResponse,
+        ...(commitmentKept ? { commitmentKept } : {}),
+        ...(safetyReflection ? { safetyTriggered: true } : {}),
+      });
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
       return res.status(500).json({ message: "Journal entry error" });
+    }
+  });
+
+  // Save when the user will come back to reflect tonight. Must be one of the
+  // offered choices for that day's evening, and the evening not yet done.
+  app.patch("/api/users/:userId/grounding-journal/reflection-plan", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { dayNumber, plannedAt, userTimezone } = req.body as { dayNumber: number; plannedAt: string; userTimezone?: string };
+      const entries = await storage.getGroundingJournalEntries(userId);
+      const morning = entries.find((e) => e.dayNumber === dayNumber && e.session === "morning");
+      if (!morning?.createdAt) return res.status(400).json({ message: "Morning focus not saved yet." });
+      if (entries.some((e) => e.dayNumber === dayNumber && e.session === "evening")) {
+        return res.status(409).json({ message: "Evening reflection already done." });
+      }
+      const opensAt = eveningOpensAt(new Date(morning.createdAt), await journalTimeZone(userId, userTimezone));
+      const choice = reflectionChoices(opensAt).find((d) => d.toISOString() === new Date(plannedAt).toISOString());
+      if (!choice) return res.status(400).json({ message: "Pick one of the offered times." });
+      const updated = await storage.updateGroundingJournalEntry(morning.id, { reflectionPlannedAt: choice } as any);
+      return res.json({ reflectionPlannedAt: updated?.reflectionPlannedAt ?? choice });
+    } catch (err) {
+      console.error("[JOURNAL] reflection_plan_error:", err);
+      return res.status(500).json({ message: "Could not save your time." });
     }
   });
 

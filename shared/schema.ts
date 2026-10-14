@@ -84,6 +84,8 @@ export const groundingJournalEntries = pgTable("grounding_journal_entries", {
   valueNamed: text("value_named"),
   possibleFirstSeed: text("possible_first_seed"),
   isComplete: boolean("is_complete").notNull().default(false),
+  // Morning entries only: when the user said they'd come back to reflect.
+  reflectionPlannedAt: timestamp("reflection_planned_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
