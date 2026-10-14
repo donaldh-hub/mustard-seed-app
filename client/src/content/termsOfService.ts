@@ -170,7 +170,4 @@ We may update these Terms from time to time. If we make material changes, we wil
 HARDAWAYAI LLC
 support@mustardseeddap.com
 
----
-
-*These Terms of Service are provided as an operational draft and do not constitute legal advice. We recommend review by a licensed attorney prior to public launch — particularly Sections 5 (Subscriptions and Payment), 10 (Limitation of Liability), and 12 (Dispute Resolution), which are jurisdiction-sensitive.*
 `;

@@ -156,7 +156,4 @@ If you have questions about this Privacy Policy or how we handle your informatio
 HARDAWAYAI LLC
 support@mustardseeddap.com
 
----
-
-*This Privacy Policy is provided as a operational draft and does not constitute legal advice. We recommend review by a licensed attorney prior to public launch, particularly before processing payments or expanding to users outside the United States.*
 `;

@@ -17,12 +17,14 @@ setting is read.
 - [x] **Graduates only ever see graduate prices** ($15.99/mo, $159.90/yr).
   Checkout never falls back to the $17.99/$179.90 price for a graduate. If
   a graduate price isn't configured, checkout errors instead of overcharging.
-- [ ] **Rebuild refund policy.** Terms §5.3 says the Rebuild "may require
-  payment" but says nothing about refunds for a one-time purchase. Decide
-  the policy and add it before launch (attorney review item).
-- [ ] **Legal review.** `client/src/content/termsOfService.ts` and
-  `privacyPolicy.ts` are marked as drafts that need attorney review before
-  taking payments (especially Terms sections 5, 10, 12).
+- [ ] **Rebuild refund policy.** Donald chose Option B: refundable within
+  48 hours of purchase if Day 2 hasn't been started. With legal for wording;
+  goes into the Terms after §5.5 word for word once approved. Enforcing it
+  needs the purchase time (not stored yet; Stripe has it) and whether Day 2
+  has started (`GET /api/admin/users/<userId>/rebuild-progress`, §6).
+- [x] **Legal review.** Legal confirmed the Terms, Privacy Policy, and
+  Subscription Explainer on Oct 13, 2026. The "operational draft" footers
+  were removed from the Terms and Privacy Policy.
 - [ ] **Approve dunning email copy.** Failed-payment emails stay off until
   `DUNNING_COPY_APPROVED=true` (`server/billingAgent.ts`).
 
@@ -139,6 +141,16 @@ curl -X POST https://<your domain>/api/admin/users/<userId>/rebuild-access \
   -d '{"granted": true}'      # false to revoke (e.g. after a refund)
 ```
 
-Refunding in Stripe does **not** remove access automatically. Revoke it with
-the call above. Users who already finished the Rebuild before it became paid
+See where a user is in the Rebuild (read-only: current day, completed days,
+whether Day 2 has started, when the next day unlocks):
+
+```
+curl https://<your domain>/api/admin/users/<userId>/rebuild-progress \
+  -H "x-admin-key: $ADMIN_API_KEY"
+```
+
+The purchase date isn't stored in the app. Look it up in Stripe.
+
+Refunding in Stripe does **not** remove access automatically. Revoke it with the
+`rebuild-access` call above. Users who already finished the Rebuild before it became paid
 keep access.
