@@ -18,7 +18,17 @@ export interface JournalSessionContext {
     valueNamed?: string | null;
     releasePoint?: string | null;
     jaeReflection?: string | null;
+    // Their own answers that session (reference only, for the growth arc),
+    // the follow-up exchange, and an evening's step.
+    answers?: string;
+    followUp?: string | null;
+    nextStep?: string | null;
   }[];
+  // Evening only: this morning's follow-up question and their answer — often
+  // where they set today's small step.
+  todayMorningFollowUp?: { question: string; answer: string } | null;
+  // Grounding statement only: the last step Jai locked in.
+  lockedStep?: string | null;
   // Only populated for evening sessions — that day's own morning prompts +
   // responses, needed to fill the follow-up bank's morning-side placeholders.
   todayMorningPrompts?: { prompt: string; response: string }[];
@@ -50,7 +60,18 @@ export interface JournalJaeResponse {
   // about the next morning), and whether frustration rose since the morning.
   nextStep: string;
   frustrationRose?: boolean;
+  // Jai's decisions behind the Day 3 coaching: an action they took that
+  // lives out a Heartbeat (named in the reflection), and a short optional
+  // invitation to photograph a physical action for their Memory.
+  heartbeatInAction?: string;
+  photoInvite: string;
 }
+
+export const HEARTBEAT_ACTIONS = `- completed a step they set earlier → Small Steps + Consistency
+- named or sharpened their why, or who it's for → Clarity of Vision & Why
+- changed their approach after something didn't work → Feedback & Adaptation
+- did something despite fear, doubt, or discomfort → Courageous Action
+- reframed a belief about themselves or the work → Mindset over Method`;
 
 // The question the journal asks at the top of the next morning about last
 // night's step. Its answer rides along as an extra prompt (always last, so
@@ -95,7 +116,7 @@ function journalFollowUpQuestions(dayNumber: 1 | 2 | 3, morning: string[], eveni
   return [
     morning[0] ? `Ask where they actually saw the value they chose show up today ${words(morning[0])}.` : "",
     morning[1] ? `Ask whether anything tested how they planned to stay grounded today ${words(morning[1])}.` : "",
-    evening[0] ? `Ask how the growth they noticed compares to where they started three days ago ${words(evening[0])}.` : "",
+    evening[0] ? `Name the growth you see since Day 1 yourself, then ask what helped it happen ${words(evening[0])}.` : "",
     evening[1] ? `Ask what keeping that going would actually require of them ${words(evening[1])}.` : "",
     "Looking back over all three days, what pattern shows up more than once?",
     "What surprised you most about doing this three days in a row?",
@@ -123,7 +144,10 @@ export async function generateJournalReflection(
   const prevSummary = (ctx.previousEntries ?? [])
     .map(
       (e) =>
-        `Day ${e.dayNumber} ${e.session}: Theme="${e.keyTheme ?? "—"}", Value="${e.valueNamed ?? "—"}", Release="${e.releasePoint ?? "—"}"`
+        `Day ${e.dayNumber} ${e.session}: Theme="${e.keyTheme ?? "—"}", Value="${e.valueNamed ?? "—"}", Release="${e.releasePoint ?? "—"}"` +
+        (e.answers ? ` [their words: ${e.answers}]` : "") +
+        (e.followUp ? ` [follow-up: ${e.followUp}]` : "") +
+        (e.nextStep ? ` [step Jai set: ${e.nextStep}]` : "")
     )
     .join("\n");
 
@@ -145,7 +169,7 @@ export async function generateJournalReflection(
   const morningStepBlock = ctx.session === "morning" && (ctx.yesterdayStep || stepCheck)
     ? `
 Last night you suggested this small step for today (reference only): ${ctx.yesterdayStep ?? stepCheck!.prompt.slice(STEP_CHECK_PREFIX.length).trim()}
-${stepCheck ? `They answered whether they did it: ${stepCheck.response}. Acknowledge it in ONE short sentence near the start of "reflection" (after answering any direct question). Did it → name it as real progress toward their goal. Partly or not yet → grace, no shame; showing up today still counts, and the step can be smaller. Don't ask about it again.` : `They haven't said whether they did it. Don't assume either way.`}
+${stepCheck ? `They answered whether they did it: ${stepCheck.response}. Acknowledge it in ONE short sentence near the start of "reflection" (after answering any direct question). Did it → name it as real progress toward their goal, and as Small Steps + Consistency in action (that exact name). Partly or not yet → grace, no shame; showing up today still counts, and the step can be smaller. Don't ask about it again.` : `They haven't said whether they did it. Don't assume either way.`}
 `
     : "";
   const eveningStepBlock = isEvening
@@ -154,7 +178,36 @@ Tonight, end with ONE small next step ("nextStep"):
 - One sentence that starts with "Tomorrow, ". Concrete, doable in 5–10 minutes, tied directly to their goal${ctx.weakestHeartbeat ? ` and, where it fits, to ${ctx.weakestHeartbeat.name}` : ""}. Examples by goal: business name → "Tomorrow, write 3 words that describe who your business serves." Writing → "Tomorrow, write for 10 minutes before you open your phone." Gardening → "Tomorrow, check the soil on your tomato plants and water only the dry ones."
 - Never a list, never two steps, never vague ("reflect more", "keep going").
 - Don't repeat the step inside "reflection" — it is shown on its own.
+- If they named their own next step tonight (e.g. "keep one place for my ideas"), lock THAT one in instead of inventing a new one: confirm it in your own words, made small and concrete. It may start with "Tonight, " if it fits tonight (e.g. "Tonight, pick the one place you'll keep your name ideas.").
+- If they say a step they set earlier (this morning, or last night's) did NOT happen: grace first, no shame, and make "nextStep" smaller than the one they missed.
 - Compare this morning's answers with tonight's. If frustration, discouragement, or overwhelm ROSE across the day, set "frustrationRose": true, name the shift in "reflection" with grace in one sentence (e.g. "This morning had some hope in it; tonight feels heavier, and that's real."), and make "nextStep" SMALLER: 2–5 minutes, almost too easy.
+`
+    : "";
+
+  const morningFollowUpBlock = isEvening && ctx.todayMorningFollowUp
+    ? `
+This morning you asked: ${ctx.todayMorningFollowUp.question}
+They answered (reference only, never quote it): ${ctx.todayMorningFollowUp.answer}
+If that answer set a step for today, check tonight's words for whether they did it.
+`
+    : "";
+  const priorDays = (ctx.previousEntries ?? []).some((e) => e.dayNumber < ctx.dayNumber);
+  const arcBlock = isEvening && priorDays
+    ? `
+Growth arc: before your question, state in ONE sentence the arc you see from the earlier days to tonight, using what they actually wrote (e.g. "Two days ago this felt stuck. Tonight you took action."). Name the growth yourself — don't make them do the work of comparing. Then your "followUpQuestion" should be lighter (e.g. what helped, or what they want to keep), never "how does this compare to where you started?".
+`
+    : "";
+  const actionBlock = ctx.session === "grounding_statement" ? "" : `
+Heartbeat in action — when their words show they DID something (not just thought about it), name the Heartbeat it lives out, by its exact full name, in one sentence. Example: "You said you'd write the names down, and you did. That's Small Steps + Consistency working for you."
+${HEARTBEAT_ACTIONS}
+Only when it actually happened. Put the full name you used in "heartbeatInAction" ("" if none).
+
+Photo proof — if they report a physical, visible action (wrote a list, planted, wrote pages, built something), set "photoInvite" to one short, optional, no-pressure line inviting a photo for their Memory, e.g. "Want to snap a photo of your list? It'll go in your Memory." Otherwise "". Don't put this line in "reflection".
+`;
+  const groundingBlock = ctx.session === "grounding_statement" && ctx.lockedStep
+    ? `
+The last small step you and they locked in (reference only): ${ctx.lockedStep}
+Let their possible first seed build on that step where it fits.
 `
     : "";
 
@@ -186,7 +239,7 @@ Rules:
 ${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of Vision & Why: not knowing what it's for, who it's for, or why ("I don't have any of that", "I'm not sure"). Small Steps + Consistency: skipping, stopping and starting, "again", all-or-nothing, waiting for a big push. Mindset over Method: hunting for the perfect method or tool, harsh self-talk. Feedback & Adaptation: repeating what didn't work, not adjusting. Courageous Action: avoiding, putting off the uncomfortable step, waiting until ready.
 - When their words show a gap in ${ctx.weakestHeartbeat.name} (for example "I don't have any of that"), name it gently by that exact full name and link it to their goal, with grace and accountability and no shame. Example tone for a business-name goal with low Clarity of Vision & Why: "That's why the name won't come yet. A name follows clarity. Let's find what the business is for first." Only do this when their words actually point to it.
 - Always write a Heartbeat's full name exactly (Clarity of Vision & Why, Small Steps + Consistency, Mindset over Method, Feedback & Adaptation, Courageous Action) — never shorten it.
-` : ""}${eveningFollowUp}${morningStepBlock}${eveningStepBlock}
+` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${eveningStepBlock}
 
 Before writing, decide two things and put them FIRST in your JSON:
 - "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.
@@ -195,7 +248,8 @@ Before writing, decide two things and put them FIRST in your JSON:
 Respond ONLY with valid JSON in this exact shape:
 {
   "userQuestion": "...",
-  "heartbeatGap": false,${isEvening ? `
+  "heartbeatGap": false,
+  "heartbeatInAction": "",${isEvening ? `
   "frustrationRose": false,` : ""}
   "reflection": "...",
   "followUpQuestion": "...",
@@ -203,7 +257,8 @@ Respond ONLY with valid JSON in this exact shape:
   "releasePoint": "...",
   "valueNamed": "...",
   "possibleFirstSeed": "...",
-  "focusSummary": "..."${isEvening ? `,
+  "focusSummary": "...",
+  "photoInvite": ""${isEvening ? `,
   "nextStep": "Tomorrow, ..."` : ""}
 }
 ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, paraphrasing what they said they'll give their attention to today. Never copy their words. If they were unsure, say so kindly (e.g. "You're still finding today's focus — and that's okay.").` : `"focusSummary": "" (morning sessions only).`}`;
@@ -215,7 +270,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       { role: "user", content: `Here are my responses:\n\n${responseBlock}` },
     ],
     temperature: 0.7,
-    max_tokens: 650,
+    max_tokens: 800,
   });
 
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -233,6 +288,8 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       heartbeatGap: parsed.heartbeatGap === true,
       nextStep: isEvening && typeof parsed.nextStep === "string" ? parsed.nextStep.trim() : "",
       frustrationRose: parsed.frustrationRose === true,
+      heartbeatInAction: typeof parsed.heartbeatInAction === "string" ? parsed.heartbeatInAction : "",
+      photoInvite: ctx.session !== "grounding_statement" && typeof parsed.photoInvite === "string" ? parsed.photoInvite.trim() : "",
     };
   } catch {
     return {
@@ -244,6 +301,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       possibleFirstSeed: "",
       focusSummary: "",
       nextStep: "",
+      photoInvite: "",
     };
   }
 }

@@ -336,6 +336,8 @@ export default function GroundingJournal() {
   };
 
   const stepHasVideo = (id: string) => !!JOURNAL_VIDEOS[id];
+  // A real video file, not a PLACEHOLDER_* entry still waiting to be recorded.
+  const videoAssetReady = (id: string) => !!JOURNAL_VIDEOS[id] && !JOURNAL_VIDEOS[id]!.startsWith("PLACEHOLDER");
   const videoIsReady = (id: string) => videoAcknowledged.has(id);
 
   // ── Save opening intention then advance ───────────────────────────────────
@@ -842,18 +844,20 @@ export default function GroundingJournal() {
                 {/* Video (if applicable and not yet dismissed) */}
                 {stepHasVideo(stepId) && !videoIsReady(stepId) && (
                   <div className="space-y-4">
-                    <SyncedVideoPlayer
-                      url={JOURNAL_VIDEOS[stepId]!}
-                      audioSync={JOURNAL_AUDIO_SYNC[stepId]}
-                      onReady={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
-                      comingSoonText="Video coming soon — being recorded now."
-                      skipLabel="Skip to reflection"
-                    />
+                    {/* Only a real file renders; no "coming soon" box. */}
+                    {videoAssetReady(stepId) && (
+                      <SyncedVideoPlayer
+                        url={JOURNAL_VIDEOS[stepId]!}
+                        audioSync={JOURNAL_AUDIO_SYNC[stepId]}
+                        onReady={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
+                      />
+                    )}
                     <Button
                       className="w-full rounded-xl h-12"
                       onClick={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
+                      data-testid="button-start-reflection"
                     >
-                      {(journalData?.entries ?? []).some((e: any) => e.session !== "intention") ? "Continue" : "I'm ready — start the reflection"}
+                      {stepId === "grounding-statement" || !(journalData?.entries ?? []).some((e: any) => e.session !== "intention") ? "I'm ready — start the reflection" : "Continue"}
                       <ChevronRight className="w-4 h-4 ml-1" />
                     </Button>
                   </div>

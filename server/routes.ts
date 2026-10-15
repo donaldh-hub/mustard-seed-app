@@ -24,7 +24,7 @@ import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, 
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
 import { assessments, insertGoalSchema } from "@shared/schema";
-import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User, SafetyThreadMessage, SafetyTier } from "@shared/schema";
+import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User, SafetyThreadMessage, SafetyTier, GroundingJournalEntry } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
 import { computeShowUpStreak } from "./showUpStreak";
@@ -3492,6 +3492,40 @@ export async function registerRoutes(
     }
   }
 
+  // Everything Jai sees from earlier sessions when writing a reflection:
+  // earlier days (with their answers, for the growth arc), today's morning
+  // (answers plus the follow-up where they often set a step), last night's
+  // step, and the latest step for the grounding statement.
+  function journalReflectionContext(
+    previous: GroundingJournalEntry[], dayNumber: number, session: string,
+  ) {
+    const answers = (e: GroundingJournalEntry) =>
+      ((e.prompts as { prompt: string; response: string }[]) ?? []).map((p) => p.response).filter(Boolean).join(" / ");
+    const morning = session === "evening" ? previous.find((e) => e.dayNumber === dayNumber && e.session === "morning") : undefined;
+    const latestStep = [...previous].filter((e) => e.session === "evening" && e.nextStep).sort((a, b) => b.dayNumber - a.dayNumber)[0]?.nextStep ?? null;
+    return {
+      previousEntries: previous.filter((e) => e.session !== "intention").map((e) => ({
+        dayNumber: e.dayNumber,
+        session: e.session,
+        keyTheme: e.keyTheme,
+        valueNamed: e.valueNamed,
+        releasePoint: e.releasePoint,
+        jaeReflection: e.jaeReflection,
+        answers: answers(e).slice(0, 300),
+        followUp: e.userFollowUpResponse ? `${e.jaeFollowUpQuestion ?? ""} → ${e.userFollowUpResponse}`.slice(0, 300) : null,
+        nextStep: e.nextStep,
+      })),
+      todayMorningPrompts: morning?.prompts as { prompt: string; response: string }[] | undefined,
+      todayMorningFollowUp: morning?.userFollowUpResponse
+        ? { question: morning.jaeFollowUpQuestion ?? "", answer: morning.userFollowUpResponse }
+        : null,
+      yesterdayStep: session === "morning"
+        ? previous.find((e) => e.dayNumber === dayNumber - 1 && e.session === "evening")?.nextStep ?? null
+        : null,
+      lockedStep: session === "grounding_statement" ? latestStep : null,
+    };
+  }
+
   // A journal entry whose safety response is still waiting on the user's
   // reply (or on Jai's answer to it) holds the journal in place.
   function awaitingSafetyReply(e: { safetyTier?: string | null; safetyThread?: unknown }): boolean {
@@ -3627,24 +3661,12 @@ export async function registerRoutes(
         });
       }
 
-      const prevSummary = previousEntries.map((e) => ({
-        dayNumber: e.dayNumber,
-        session: e.session,
-        keyTheme: e.keyTheme,
-        valueNamed: e.valueNamed,
-        releasePoint: e.releasePoint,
-        jaeReflection: e.jaeReflection,
-      }));
-
       const todayMorningEntry =
         session === "evening"
           ? previousEntries.find((e) => e.dayNumber === dayNumber && e.session === "morning")
           : undefined;
 
       const journalJaiContext = await journalAssessmentContext(userId, previousEntries);
-      const yesterdayStep = session === "morning"
-        ? previousEntries.find((e) => e.dayNumber === dayNumber - 1 && e.session === "evening")?.nextStep ?? null
-        : null;
 
       const jaeResponse = safetyReflection
         ? { reflection: safetyReflection, followUpQuestion: "", keyTheme: "", releasePoint: "", valueNamed: "", possibleFirstSeed: "", nextStep: "" }
@@ -3654,10 +3676,8 @@ export async function registerRoutes(
             dayTheme: dayThemes[dayNumber],
             session,
             prompts,
-            previousEntries: prevSummary,
-            todayMorningPrompts: todayMorningEntry?.prompts as { prompt: string; response: string }[] | undefined,
+            ...journalReflectionContext(previousEntries, dayNumber, session),
             ...journalJaiContext,
-            yesterdayStep,
           });
 
       const entry = await storage.createGroundingJournalEntry({
@@ -3787,17 +3807,8 @@ export async function registerRoutes(
           dayTheme: ({ 1: "RESET", 2: "REFOCUS", 3: "REBUILD" } as const)[dayNumber],
           session,
           prompts,
-          previousEntries: previous.map((e) => ({
-            dayNumber: e.dayNumber, session: e.session, keyTheme: e.keyTheme, valueNamed: e.valueNamed,
-            releasePoint: e.releasePoint, jaeReflection: e.jaeReflection,
-          })),
-          todayMorningPrompts: session === "evening"
-            ? (previous.find((e) => e.dayNumber === dayNumber && e.session === "morning")?.prompts as { prompt: string; response: string }[] | undefined)
-            : undefined,
+          ...journalReflectionContext(previous, dayNumber, session),
           ...context,
-          yesterdayStep: session === "morning"
-            ? previous.find((e) => e.dayNumber === dayNumber - 1 && e.session === "evening")?.nextStep ?? null
-            : null,
         });
         updates = {
           ...updates,
@@ -3982,6 +3993,14 @@ export async function registerRoutes(
       allInstances
         .filter((i) => i.instanceNumber < instanceNumber && i.status === "completed")
         .forEach((i) => Object.assign(priorMemory, i.memoryData ?? {}));
+      // Rebuild Day 1 picks up where the Grounding Journal left off.
+      if (instanceNumber === 1) {
+        const journal = await storage.getGroundingJournalEntries(userId);
+        const seed = journal.find((e) => e.session === "grounding_statement")?.possibleFirstSeed;
+        const lastStep = journal.filter((e) => e.session === "evening" && e.nextStep).sort((a, b) => b.dayNumber - a.dayNumber)[0]?.nextStep;
+        if (seed) priorMemory["Grounding Journal first seed"] = seed;
+        if (lastStep) priorMemory["Last small step from the Grounding Journal"] = lastStep;
+      }
 
       const jaeResponse = await generateRebuildReflection({
         userName: user.name || "friend",
