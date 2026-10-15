@@ -196,6 +196,10 @@ export default function GroundingJournal() {
   const [planSaving, setPlanSaving] = useState(false);
   // Evening steps where the user came back by the time they chose (+1 water).
   const [keptCommitments, setKeptCommitments] = useState<Record<string, string>>({});
+  // Jai's short reply to the optional follow-up answer, per Jai step. Once a
+  // reply shows, the button moves the user on.
+  const [followUpReplies, setFollowUpReplies] = useState<Record<string, string>>({});
+  const [followUpReplying, setFollowUpReplying] = useState(false);
 
   const hasResumed = useRef(false);
 
@@ -339,15 +343,30 @@ export default function GroundingJournal() {
 
   const handleSaveFollowUp = async () => {
     setFollowUpError(null);
+    // Jai already replied to this answer: this tap moves on.
+    if (followUpReplies[stepId]) {
+      setFollowUpText("");
+      advance();
+      return;
+    }
     if (!userId || !currentEntryId || !followUpText.trim()) {
       setFollowUpText("");
       advance();
       return;
     }
+    setFollowUpReplying(true);
     try {
-      await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim());
+      const { reply } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim());
+      if (reply) {
+        // Show Jai's reply; the next tap on the button continues.
+        setFollowUpReplies((prev) => ({ ...prev, [stepId]: reply }));
+        return;
+      }
     } catch {
       setFollowUpError("Couldn't save your response — tap Continue to proceed anyway.");
+      return;
+    } finally {
+      setFollowUpReplying(false);
     }
     setFollowUpText("");
     advance();
@@ -451,6 +470,9 @@ export default function GroundingJournal() {
                       <div className="space-y-1">
                         <p className="text-xs text-muted-foreground font-medium">Your follow-up</p>
                         <p className="text-sm text-foreground leading-relaxed">{entry.userFollowUpResponse}</p>
+                        {entry.jaeFollowUpReply && (
+                          <p className="text-sm text-primary leading-relaxed">Jai: {entry.jaeFollowUpReply}</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -486,13 +508,12 @@ export default function GroundingJournal() {
     const timeText = unlocksAt?.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     const dayText = unlocksAt?.toLocaleString(undefined, { weekday: "long", hour: "numeric", minute: "2-digit" });
 
-    // Hand the user's own morning answer back to them — the thing they said
-    // they'd give their attention to is what they're accountable to today.
+    // Hand today's focus back to them — what they're accountable to today —
+    // as Jai's clean paraphrase. Never the raw text; hidden if there's none.
     const morningEntry = isEvening
       ? (journalData?.entries ?? []).find((e: any) => e.dayNumber === locked.day && e.session === "morning")
       : null;
-    const morningFocus: string | null =
-      morningEntry?.prompts?.find((p: any) => (p?.response ?? "").trim())?.response?.trim() ?? null;
+    const morningFocus: string | null = (morningEntry?.focusSummary ?? "").trim() || null;
 
     return (
       <div className="h-full overflow-y-auto bg-background">
@@ -516,7 +537,7 @@ export default function GroundingJournal() {
               {morningFocus && (
                 <div className="rounded-xl bg-primary/5 border border-primary/15 p-4">
                   <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your focus for today</p>
-                  <p className="text-sm text-foreground leading-relaxed" data-testid="text-morning-focus">"{morningFocus}"</p>
+                  <p className="text-sm text-foreground leading-relaxed" data-testid="text-morning-focus">{morningFocus}</p>
                 </div>
               )}
               <p className="text-sm text-foreground leading-relaxed">
@@ -797,6 +818,22 @@ export default function GroundingJournal() {
                     </div>
                   </div>
 
+                  <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
+                    <p className="text-sm text-foreground leading-relaxed">{jae?.reflection}</p>
+                    {jae?.followUpQuestion && (
+                      <p className="text-sm font-medium text-primary">{jae.followUpQuestion}</p>
+                    )}
+                  </div>
+
+                  {isLastStepOfDay && jae?.keyTheme && (
+                    <div className="bg-primary/5 rounded-xl px-4 py-3 border border-primary/15">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">What Jai noticed</p>
+                      <p className="text-sm text-foreground">Theme: <span className="font-medium">{jae.keyTheme}</span></p>
+                      {jae.valueNamed && <p className="text-sm text-foreground">Value: <span className="font-medium">{jae.valueNamed}</span></p>}
+                      {jae.releasePoint && <p className="text-sm text-foreground">Ready to release: <span className="font-medium">{jae.releasePoint}</span></p>}
+                    </div>
+                  )}
+
                   {keptCommitments[sourceStep] && (
                     <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200 text-sm text-blue-900" data-testid="banner-commitment-kept">
                       <p className="font-semibold">You kept your word. +1 water 💧</p>
@@ -809,13 +846,6 @@ export default function GroundingJournal() {
                     </div>
                   )}
 
-                  <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
-                    <p className="text-sm text-foreground leading-relaxed">{jae?.reflection}</p>
-                    {jae?.followUpQuestion && (
-                      <p className="text-sm font-medium text-primary">{jae.followUpQuestion}</p>
-                    )}
-                  </div>
-
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Your response (optional)</label>
                     <Textarea
@@ -823,8 +853,30 @@ export default function GroundingJournal() {
                       value={followUpText}
                       onChange={(e) => setFollowUpText(e.target.value)}
                       className="resize-none rounded-xl min-h-[80px]"
+                      disabled={followUpReplying || !!followUpReplies[stepId]}
+                      data-testid="input-follow-up"
                     />
                   </div>
+
+                  {followUpReplying && (
+                    <div className="flex items-center gap-2" data-testid="follow-up-jai-typing">
+                      <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow" alt="Jai" />
+                      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-border/50 flex gap-1.5">
+                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" />
+                      </div>
+                    </div>
+                  )}
+
+                  {followUpReplies[stepId] && (
+                    <div className="flex items-start gap-2" data-testid="follow-up-jai-reply">
+                      <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
+                      <p className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-border/50 text-sm text-foreground leading-relaxed">
+                        {followUpReplies[stepId]}
+                      </p>
+                    </div>
+                  )}
 
                   {followUpError && (
                     <div className="flex items-center gap-1.5 text-amber-600 text-sm">
@@ -833,7 +885,7 @@ export default function GroundingJournal() {
                     </div>
                   )}
 
-                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp}>
+                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying} data-testid="button-follow-up-continue">
                     {isDay3Evening
                       ? "Continue to Final Reflection"
                       : isLastStepOfDay
@@ -842,14 +894,7 @@ export default function GroundingJournal() {
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
 
-                  {isLastStepOfDay && jae?.keyTheme && (
-                    <div className="bg-primary/5 rounded-xl px-4 py-3 border border-primary/15">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">What Jai noticed</p>
-                      <p className="text-sm text-foreground">Theme: <span className="font-medium">{jae.keyTheme}</span></p>
-                      {jae.valueNamed && <p className="text-sm text-foreground">Value: <span className="font-medium">{jae.valueNamed}</span></p>}
-                      {jae.releasePoint && <p className="text-sm text-foreground">Ready to release: <span className="font-medium">{jae.releasePoint}</span></p>}
-                    </div>
-                  )}
+
                 </div>
               );
             })()}
@@ -887,8 +932,29 @@ export default function GroundingJournal() {
                       value={followUpText}
                       onChange={(e) => setFollowUpText(e.target.value)}
                       className="resize-none rounded-xl min-h-[80px]"
+                      disabled={followUpReplying || !!followUpReplies[stepId]}
                     />
                   </div>
+
+                  {followUpReplying && (
+                    <div className="flex items-center gap-2">
+                      <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow" alt="Jai" />
+                      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-border/50 flex gap-1.5">
+                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" />
+                      </div>
+                    </div>
+                  )}
+
+                  {followUpReplies[stepId] && (
+                    <div className="flex items-start gap-2">
+                      <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
+                      <p className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-border/50 text-sm text-foreground leading-relaxed">
+                        {followUpReplies[stepId]}
+                      </p>
+                    </div>
+                  )}
 
                   {followUpError && (
                     <div className="flex items-center gap-1.5 text-amber-600 text-sm">
@@ -897,7 +963,7 @@ export default function GroundingJournal() {
                     </div>
                   )}
 
-                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp}>
+                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying}>
                     Continue to the Mustard Seed App
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>

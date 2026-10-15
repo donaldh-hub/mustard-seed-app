@@ -22,6 +22,11 @@ export interface JournalSessionContext {
   // Only populated for evening sessions — that day's own morning prompts +
   // responses, needed to fill the follow-up bank's morning-side placeholders.
   todayMorningPrompts?: { prompt: string; response: string }[];
+  // The user's weakest Heartbeat from their assessment (full locked name +
+  // score out of 5), so Jai can connect what they write to it.
+  weakestHeartbeat?: { name: string; score: number } | null;
+  // What they wrote as their opening intention for the 3 days (their goal).
+  intention?: string | null;
 }
 
 export interface JournalJaeResponse {
@@ -31,6 +36,14 @@ export interface JournalJaeResponse {
   releasePoint: string;
   valueNamed: string;
   possibleFirstSeed: string;
+  // Morning only: a short, clean paraphrase of what they'll focus on today,
+  // shown back to them on the wait screen instead of their raw text.
+  focusSummary: string;
+  // Jai's own pre-writing decisions (not stored): the question it detected
+  // and whether it saw a gap in the weakest Heartbeat. Printed by
+  // scripts/journal-jai-check.ts.
+  userQuestion?: string;
+  heartbeatGap?: boolean;
 }
 
 // ─── Jai check-in follow-up question bank ───────────────────────────────────
@@ -122,6 +135,8 @@ You are guiding ${ctx.userName} through the 3-Day Grounding Journal.
 Today is Day ${ctx.dayNumber} (${ctx.dayTheme}), ${ctx.session} session.
 
 ${prevSummary ? `Context from previous sessions:\n${prevSummary}\n` : ""}
+${ctx.intention ? `Their intention for these 3 days (their goal, in their own words — reference only, never quote it): ${ctx.intention}\n` : ""}
+${ctx.weakestHeartbeat ? `Their assessment: weakest Heartbeat is ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5).\n` : ""}
 
 Your job is to:
 1. Reflect briefly on what the user actually wrote — do not add new ideas they didn't mention.
@@ -137,17 +152,30 @@ Rules:
 - Avoid clinical or robotic language.
 - Help them notice patterns, name what matters, release shame.
 - If this is the grounding_statement session: help them identify a possible first seed — a single small action that could grow from what they've named.
-${eveningFollowUp}
+- If they ask a direct question or doubt the process (e.g. "how does this help me…?"), answer it first in one plain sentence that links this journal to their goal${ctx.weakestHeartbeat ? " and their weakest Heartbeat" : ""}, then reflect. Never ignore the question.
+- Read their goal carefully. Starting something new is not changing something that exists — never assume a name, plan, or result already exists unless they said so. If the goal is a task (e.g. "come up with a name"), gently frame it: the task is the what; this journal is about the why underneath it.
+${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of Vision & Why: not knowing what it's for, who it's for, or why ("I don't have any of that", "I'm not sure"). Small Steps + Consistency: skipping, stopping and starting, "again", all-or-nothing, waiting for a big push. Mindset over Method: hunting for the perfect method or tool, harsh self-talk. Feedback & Adaptation: repeating what didn't work, not adjusting. Courageous Action: avoiding, putting off the uncomfortable step, waiting until ready.
+- When their words show a gap in ${ctx.weakestHeartbeat.name} (for example "I don't have any of that"), name it gently by that exact full name and link it to their goal, with grace and accountability and no shame. Example tone for a business-name goal with low Clarity of Vision & Why: "That's why the name won't come yet. A name follows clarity. Let's find what the business is for first." Only do this when their words actually point to it.
+- Always write a Heartbeat's full name exactly (Clarity of Vision & Why, Small Steps + Consistency, Mindset over Method, Feedback & Adaptation, Courageous Action) — never shorten it.
+` : ""}${eveningFollowUp}
+
+Before writing, decide two things and put them FIRST in your JSON:
+- "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.
+- "heartbeatGap": ${ctx.weakestHeartbeat ? `true if their words today show a gap in ${ctx.weakestHeartbeat.name} (see what a gap sounds like above), else false. If true, "reflection" must name ${ctx.weakestHeartbeat.name} by that exact full name and link it to their goal, gently.` : `always false.`}
 
 Respond ONLY with valid JSON in this exact shape:
 {
+  "userQuestion": "...",
+  "heartbeatGap": false,
   "reflection": "...",
   "followUpQuestion": "...",
   "keyTheme": "...",
   "releasePoint": "...",
   "valueNamed": "...",
-  "possibleFirstSeed": "..."
-}`;
+  "possibleFirstSeed": "...",
+  "focusSummary": "..."
+}
+${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, paraphrasing what they said they'll give their attention to today. Never copy their words. If they were unsure, say so kindly (e.g. "You're still finding today's focus — and that's okay.").` : `"focusSummary": "" (morning sessions only).`}`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
@@ -169,6 +197,9 @@ Respond ONLY with valid JSON in this exact shape:
       releasePoint: parsed.releasePoint ?? "",
       valueNamed: parsed.valueNamed ?? "",
       possibleFirstSeed: parsed.possibleFirstSeed ?? "",
+      focusSummary: ctx.session === "morning" ? (parsed.focusSummary ?? "") : "",
+      userQuestion: typeof parsed.userQuestion === "string" ? parsed.userQuestion : "",
+      heartbeatGap: parsed.heartbeatGap === true,
     };
   } catch {
     return {
@@ -178,6 +209,41 @@ Respond ONLY with valid JSON in this exact shape:
       releasePoint: "",
       valueNamed: "",
       possibleFirstSeed: "",
+      focusSummary: "",
     };
+  }
+}
+
+// Short reply to the user's optional follow-up answer: 1–2 sentences, no new
+// question, paraphrased (never quoted). Returns "" if the call fails.
+export async function generateFollowUpAck(ctx: {
+  userName: string;
+  question: string;
+  answer: string;
+  intention?: string | null;
+  weakestHeartbeat?: { name: string; score: number } | null;
+}): Promise<string> {
+  const system = `You are Jai — a calm, grounded accountability partner in the Mustard Seed app.
+${ctx.userName} just answered your follow-up question in their 3-Day Grounding Journal.
+${ctx.intention ? `Their goal for these 3 days (reference only, never quote it): ${ctx.intention}\n` : ""}${ctx.weakestHeartbeat ? `Their weakest Heartbeat: ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5).\n` : ""}
+Reply in 1–2 short sentences that acknowledge what they said and affirm the step. Rules:
+- Paraphrase in your own words; never quote them or use quotation marks around their words.
+- Do not ask a question. Do not give advice lists.
+- If they asked you something, answer it plainly in one sentence.
+- If you name a Heartbeat, use its full name exactly.
+- Grace and accountability, no shame. Plain text only.`;
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `Your question: ${ctx.question}\nMy answer: ${ctx.answer}` },
+      ],
+      temperature: 0.6,
+      max_tokens: 120,
+    });
+    return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+  } catch {
+    return "";
   }
 }

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { ContinuityRecord } from "./continuityContext";
+import { HEARTBEAT_NAMES } from "./titan";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -41,7 +42,7 @@ function buildSystemPrompt(ctx: JaeContext): string {
   ].filter(Boolean).join("\n");
 
   const heartbeatBlock = ctx.weakestHeartbeat
-    ? `Current Heartbeat Focus: ${ctx.weakestHeartbeat} (score ${ctx.weakestScore ?? "unknown"})`
+    ? `Current Heartbeat Focus: ${(HEARTBEAT_NAMES as Record<string, string>)[ctx.weakestHeartbeat] ?? ctx.weakestHeartbeat} (score ${ctx.weakestScore ?? "unknown"}) — always use this full name, never shorten it`
     : "Current Heartbeat Focus: (none assessed yet)";
 
   const streakBlock = ctx.streak > 0 ? `Current streak: ${ctx.streak} days` : "Current streak: 0 days";
