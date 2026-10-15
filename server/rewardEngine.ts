@@ -256,14 +256,18 @@ export async function processRewardTransaction(
     return skip("duplicate_submission");
   }
 
-  // If no goal exists, AP is still acknowledged but no water/DB update on goal.
-  // Still save a memory entry so the calendar has something to show.
+  // No goal: nothing to measure the action against, so no credit. The action
+  // is saved to Memory as a plain (neutral) entry — never a rewarded one —
+  // so it can't turn into garden water if a goal is planted later that day
+  // (rewardedEntriesForGoal counts rewarded entries from the planting date).
   if (!matchGoal) {
-    console.log(`[REWARD] NO_GOAL | apDelta=${apDelta} | no water awarded | text="${rawText.substring(0, 60)}"`);
+    console.log(`[REWARD] NO_GOAL | apDelta=${apDelta} | held, no water | text="${rawText.substring(0, 60)}"`);
     _markRewardGranted(userId, rawText, todayStr);
     let entryCreated = false;
     try {
-      await writeRewardEntry();
+      if (!existingEntryId) {
+        await storage.createEntry({ userId, goalId: null, date: todayStr, summary: rawText, mood: "neutral", ...(userTimezone ? { userTimezone } : {}) });
+      }
       entryCreated = true;
     } catch (err) {
       console.error(`[MEMORY_WRITE_ERROR] no_goal_entry | userId=${userId} | err="${(err as Error).message}"`);

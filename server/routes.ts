@@ -2110,6 +2110,12 @@ export async function registerRoutes(
         }
       }
 
+      // A real action with no goal to credit: Jai offers the guided goal setup
+      // (at most once per session) so the next one can count.
+      if (rewardResult.skipReason === "no_active_goal") {
+        await maybeOfferGoalSetup(req, userId).catch((err) => console.error("[GOAL_SETUP] offer after action error:", err));
+      }
+
       return res.json({
         userMessage: userMsg,
         jaeMessage: jaeMsg,
