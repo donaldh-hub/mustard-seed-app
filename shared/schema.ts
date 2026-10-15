@@ -66,6 +66,9 @@ export const users = pgTable("users", {
   lastRebuildActivityAt: timestamp("last_rebuild_activity_at"),
   lastAssessmentReminderSentAt: timestamp("last_assessment_reminder_sent_at"),
   lastDailyEncouragementSentAt: timestamp("last_daily_encouragement_sent_at"),
+  // Guided goal setup with Jai (server/goalSetup.ts): which question is open,
+  // and what they've answered so far. null when no setup is in progress.
+  goalSetup: jsonb("goal_setup"),
   lastWeeklySummaryChatAt: timestamp("last_weekly_summary_chat_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });

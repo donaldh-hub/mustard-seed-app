@@ -31,6 +31,9 @@ export interface JaeContext {
   latestWeeklyReviewSummary?: string;
   latestWeeklyReviewFocus?: string;
   groundingJournalInsights?: string;
+  // The 8 newest Memory records (journal sessions, Memory Bank entries,
+  // photos), newest first.
+  recentMemory?: string[];
 }
 
 function buildSystemPrompt(ctx: JaeContext): string {
@@ -94,6 +97,10 @@ function buildSystemPrompt(ctx: JaeContext): string {
 
   const journalBlock = ctx.groundingJournalInsights
     ? `3-Day Grounding Journal (completed before starting this journey):\n${ctx.groundingJournalInsights}\nUse this as background understanding of who they are and what they've already named. Never ask them to repeat it.`
+    : "";
+
+  const recentMemoryBlock = ctx.recentMemory && ctx.recentMemory.length > 0
+    ? `MOST RECENT MEMORY (newest first — journal, Memory Bank, photos):\n${ctx.recentMemory.map((l) => `- ${l}`).join("\n")}\nRead these before you answer. Never ask whether they did something these records already show — acknowledge it instead (e.g. if they wrote names down earlier today, say so; don't ask if they've tried writing ideas down).`
     : "";
 
   // Derive internal behavior state from context (never exposed to user)
@@ -173,6 +180,7 @@ ${patternBlock}
 ${continuityBlock}
 ${weeklyReviewBlock}
 ${journalBlock}
+${recentMemoryBlock}
 Internal behavior state (NEVER reveal this): ${behaviorState}
 Internal style mode (NEVER reveal this): ${styleMode}
 
@@ -283,7 +291,14 @@ If it feels forced, skip it entirely.
 GOAL INTEGRATION
 If a Targeted Goal exists: mention it by title naturally, tie the user's action to it.
 If an Identity Goal exists: reinforce identity statement when relevant.
-If no goal: after responding, mention they can plant one on the Growth tab.
+If no goal: don't send them to the Growth tab — your guided goal setup is offered separately. Just respond to what they said.
+
+HELP WITH THE GOAL ITSELF (NOT JUST THE HABIT AROUND IT)
+You are a thinking partner on the actual goal, not only on routines and timers.
+- Ask discovery questions about the substance of the goal, one per turn. Business (e.g. a name): what the business does, who it serves, what feeling or promise the name should carry, any names they already like. Writing: what the story is about, who it's for. Gardening: what they're growing, where, what's worked so far. Any goal: the concrete thing, not just the habit.
+- You may OFFER to brainstorm ("Want to think through some name directions together?"). Offer once; never push.
+- If they say yes: give 2–3 short directions or example options to react to, then ask which one pulls at them. They own the decision. Help them think; never hand over a finished answer or one "best" pick.
+- When a brainstorm wraps up, end with ONE small step on its own last line, written exactly as "Your step: …" (5–10 minutes, concrete). That line replaces the question for that turn. It gets saved to their Memory.
 
 INTENT HANDLING (CLASSIFY SILENTLY)
 A) PROACTIVE_ACTION — Name the action, note what it moves forward. No praise speeches.

@@ -65,7 +65,7 @@ export const api = {
         rewardTransaction: string;
         progressFeedback?: { completedUnits: number; targetUnits: number; percentComplete: number; feedbackText: string; momentumBoostActive: boolean } | null;
       } | null;
-      entryQualification?: string | null;
+      entryQualification?: string; reflectionSaved?: boolean; goalPlanted?: boolean | null;
       goalCompleted?: unknown;
     }>(`/users/${userId}/messages`, {
       method: "POST",
@@ -96,6 +96,12 @@ export const api = {
   getConsistencySummary: (userId: string) => fetchJson<any>(`/users/${userId}/consistency-summary?localDate=${getLocalDateStr()}`),
 
   getActiveGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals`),
+  // Opens Jai's guided goal setup in Chat (posts his offer, suggested from Memory).
+  startGoalSetup: (userId: string, source: "chat" | "journal") =>
+    fetchJson<{ started: boolean; reason?: string }>(`/users/${userId}/goal-setup/start`, {
+      method: "POST",
+      body: JSON.stringify({ source }),
+    }),
   getAllGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals/all`),
   createGoal: (userId: string, data: any) =>
     fetchJson<any>(`/users/${userId}/goals`, { method: "POST", body: JSON.stringify({ ...localDateFields(), ...data }) }),
