@@ -1,3 +1,4 @@
+import { readPhotoMeta, canCaptureWithCamera } from "@/lib/photoMeta";
 import React, { useState, useRef, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -412,7 +413,10 @@ export default function Chat() {
   const [composerExtra, setComposerExtra] = useState(0);
   const [showAttach, setShowAttach] = useState(false);
   const [showCreateOwn, setShowCreateOwn] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string } | null>(null);
+  // source: which button picked the photo (camera capture vs. a file) — the
+  // server treats a gallery file as today's proof only with today's capture date.
+  const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string; source?: "camera" | "gallery" } | null>(null);
+  const hasCamera = canCaptureWithCamera();
   const [waterAnimating, setWaterAnimating] = useState(false);
   const [localFillPercent, setLocalFillPercent] = useState<number | null>(null);
   const [inlineCards, setInlineCards] = useState<Record<string,
@@ -659,7 +663,10 @@ export default function Chat() {
   });
 
   const photoMutation = useMutation({
-    mutationFn: async ({ file, caption }: { file: File; caption: string }) => {
+    mutationFn: async ({ file, caption, source }: { file: File; caption: string; source?: "camera" | "gallery" }) => {
+      // Read the fingerprint and dates from the original file before
+      // compression drops its metadata.
+      const meta = await readPhotoMeta(file);
       const uploadResult = await uploadFile(file);
       if (!uploadResult) throw new Error("Upload failed");
 
@@ -675,6 +682,11 @@ export default function Chat() {
           caption: caption || undefined,
           localDate,
           uploadAttemptId,
+          source: source ?? "gallery",
+          contentHash: meta.contentHash,
+          lastModified: meta.lastModified,
+          capturedAt: meta.capturedAt,
+          userTimezone: getUserTimezone(),
         });
 
         setMemorySaving();
@@ -794,7 +806,7 @@ export default function Chat() {
   const handleSend = () => {
     if (photoPreview) {
       if (photoMutation.isPending || (phase !== "IDLE" && phase !== "FAILED" && phase !== "CANCELED")) return;
-      photoMutation.mutate({ file: photoPreview.file, caption: input.trim() });
+      photoMutation.mutate({ file: photoPreview.file, caption: input.trim(), source: photoPreview.source });
       return;
     }
     if (!input.trim() || sendMutation.isPending) return;
@@ -824,9 +836,10 @@ export default function Chat() {
     resetUpload();
     photoMutation.reset();
 
+    const source = e.target === cameraInputRef.current ? "camera" as const : "gallery" as const;
     const url = await persistImage(file);
 
-    setPhotoPreview({ file, url });
+    setPhotoPreview({ file, url, source });
     setShowAttach(false);
 
     e.target.value = "";
@@ -1260,21 +1273,25 @@ export default function Chat() {
               exit={{ opacity: 0, y: 10 }}
               className="flex gap-2 mb-1"
             >
-              <button
-                onClick={() => cameraInputRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-border shadow-sm text-sm hover:bg-muted transition-colors"
-                data-testid="button-take-photo"
-              >
-                <Camera className="w-4 h-4 text-primary" />
-                Take Photo
-              </button>
+              {/* Desktop browsers have no camera capture — the input just opens a
+                  file picker — so "Take Photo" only shows on phones/tablets. */}
+              {hasCamera && (
+                <button
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-border shadow-sm text-sm hover:bg-muted transition-colors"
+                  data-testid="button-take-photo"
+                >
+                  <Camera className="w-4 h-4 text-primary" />
+                  Take Photo
+                </button>
+              )}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-border shadow-sm text-sm hover:bg-muted transition-colors"
                 data-testid="button-choose-gallery"
               >
                 <Image className="w-4 h-4 text-primary" />
-                Gallery
+                {hasCamera ? "Gallery" : "Upload photo"}
               </button>
             </motion.div>
           )}

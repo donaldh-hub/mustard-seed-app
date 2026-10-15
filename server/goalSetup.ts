@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { storage } from "./storage";
 import { plantGoal } from "./goalPlanting";
 import { HEARTBEAT_NAMES } from "./titan";
+import { releaseHeldPhotos } from "./photoReview";
 
 // ─── Guided goal setup with Jai ─────────────────────────────────────────────
 // A user with no active goal gets one gentle offer: Jai suggests a goal from
@@ -361,8 +362,14 @@ async function plant(
   await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
   const first = firstName(name);
   const stepLine = state.step ? ` Your first step is ${lowerFirst(stripEnd(state.step))}, and I'll ask you about it next time.` : "";
+  // A photo shared before there was a goal gets checked against it now.
+  const released = await releaseHeldPhotos(userId, opts.localDate || new Date().toLocaleDateString("en-CA")).catch((err) => {
+    console.error("[GOAL_SETUP] held photo release error:", err);
+    return 0;
+  });
+  const photoLine = released > 0 ? " The photo you shared earlier counts toward it too, so your seed got water for that as well." : "";
   return {
-    text: `${first ? `${first}, it's planted. ` : "It's planted. "}🌱 ${title} is your first goal, and it just got its first drop of water.${stepLine}`,
+    text: `${first ? `${first}, it's planted. ` : "It's planted. "}🌱 ${title} is your first goal, and it just got its first drop of water.${stepLine}${photoLine}`,
     messageType: "text",
     plantedGoalId: planted.goal.id,
   };

@@ -89,6 +89,9 @@ async function ensureSchema() {
         alert_sent BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMP DEFAULT now()
       );
+      ALTER TABLE photo_memories
+        ADD COLUMN IF NOT EXISTS content_hash TEXT,
+        ADD COLUMN IF NOT EXISTS entry_id VARCHAR;
       ALTER TABLE safety_events
         ADD COLUMN IF NOT EXISTS tier TEXT,
         ADD COLUMN IF NOT EXISTS outcome TEXT;

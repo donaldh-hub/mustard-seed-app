@@ -76,6 +76,8 @@ export interface IStorage {
   getPhotoMemories(userId: string): Promise<PhotoMemory[]>;
   getPhotoMemoriesByDate(userId: string, dateKey: string): Promise<PhotoMemory[]>;
   getPhotoMemoryByUrl(userId: string, photoUrl: string): Promise<PhotoMemory | undefined>;
+  getPhotoMemoryByHash(userId: string, contentHash: string): Promise<PhotoMemory | undefined>;
+  getPhotoMemoriesByStatus(userId: string, status: string): Promise<PhotoMemory[]>;
   getMessageById(id: string): Promise<Message | undefined>;
 
   createCommitment(data: InsertCommitment): Promise<Commitment>;
@@ -378,6 +380,20 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(photoMemories.userId, userId), eq(photoMemories.photoUrl, photoUrl)))
       .limit(1);
     return pm;
+  }
+
+  async getPhotoMemoryByHash(userId: string, contentHash: string): Promise<PhotoMemory | undefined> {
+    const [pm] = await db.select().from(photoMemories)
+      .where(and(eq(photoMemories.userId, userId), eq(photoMemories.contentHash, contentHash)))
+      .orderBy(asc(photoMemories.createdAt))
+      .limit(1);
+    return pm;
+  }
+
+  async getPhotoMemoriesByStatus(userId: string, status: string): Promise<PhotoMemory[]> {
+    return db.select().from(photoMemories)
+      .where(and(eq(photoMemories.userId, userId), eq(photoMemories.status, status)))
+      .orderBy(desc(photoMemories.createdAt));
   }
 
   async getMessageById(id: string): Promise<Message | undefined> {

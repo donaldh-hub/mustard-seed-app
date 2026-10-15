@@ -10,6 +10,8 @@ import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
 import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
 import { buildOpeningLine } from "./chatOpening";
+import { assessFreshness, decidePhotoWater } from "./photoProof";
+import { photoReplyText, photoMemoryLines, rewardPhoto, logPhotoDecision, resolveHeldPhotoReply } from "./photoReview";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
 import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, recordSubscriptionStarted, runReconciliation, generateBillingReport } from "./billingAgent";
@@ -25,7 +27,7 @@ import { evaluateHeartbeatDirections, generateCollectiveAnalysis, type Heartbeat
 import { computeGrowthUpdate, computeGrowthStateFromEntries, computeGrowthStateWithBoost, SEED_STAGE_INFO, CUP_IDENTITY_STATEMENTS, BOOST_FIRST_CUP_THRESHOLD } from "./waterEngine";
 import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, checkEscalation, computeEscalationFromMessages, computeHeartbeatBalance, type HeartbeatCredits, type HeartbeatKey, HEARTBEAT_NAMES } from "./titan";
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
-import { analyzePhoto } from "./visionAnalysis";
+import { analyzePhoto, type VisionAnalysisResult } from "./visionAnalysis";
 import { assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User, SafetyThreadMessage, SafetyTier, GroundingJournalEntry } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
@@ -671,6 +673,13 @@ export async function registerRoutes(
       if (setupReply) {
         const setupMsg = await storage.createMessage({ userId, text: setupReply.text, sender: "jae", messageType: setupReply.messageType });
         return res.json({ userMessage: userMsg, jaeMessage: setupMsg, ...(setupReply.plantedGoalId ? { goalPlanted: true } : {}) });
+      }
+
+      // ─── A photo waiting on "Did you make or change this today?" ───
+      const photoReply = await resolveHeldPhotoReply(userId, rawText);
+      if (photoReply) {
+        const photoMsg = await storage.createMessage({ userId, text: photoReply.text, sender: "jae" });
+        return res.json({ userMessage: userMsg, jaeMessage: photoMsg, ...(photoReply.waterAwarded ? { photoWaterAwarded: true } : {}) });
       }
 
       const name = user.name || "";
@@ -3007,7 +3016,7 @@ export async function registerRoutes(
     const startTime = Date.now();
     try {
       const userId = req.params.userId;
-      const { photoUrl, caption, localDate, uploadAttemptId } = req.body;
+      const { photoUrl, caption, localDate, uploadAttemptId, contentHash, source, lastModified, capturedAt, userTimezone } = req.body;
 
       if (!photoUrl) return res.status(400).json({ ok: false, message: "photoUrl is required", code: "MISSING_PHOTO" });
 
@@ -3050,6 +3059,19 @@ export async function registerRoutes(
         photoUrl,
       });
 
+      const serveUrl = photoUrl.startsWith("/objects/")
+        ? `${req.protocol}://${req.get("host")}${photoUrl}`
+        : photoUrl;
+      const freshness = assessFreshness({
+        source: source === "camera" ? "camera" : source === "gallery" ? "gallery" : "unknown",
+        lastModified: typeof lastModified === "number" ? lastModified : null,
+        capturedAt: typeof capturedAt === "number" ? capturedAt : null,
+        localDate: dateKey,
+        timeZone: userTimezone,
+      });
+      const hash = typeof contentHash === "string" && /^[a-f0-9]{64}$/.test(contentHash) ? contentHash : null;
+      const sameImage = hash ? await storage.getPhotoMemoryByHash(userId, hash) : undefined;
+
       const photoMemory = await storage.createPhotoMemory({
         userId,
         messageId: photoMessage.id,
@@ -3057,31 +3079,44 @@ export async function registerRoutes(
         photoUrl,
         status: "pending_analysis",
         waterAwarded: 0,
+        contentHash: hash,
       });
 
+      const activeGoals = await storage.getActiveGoals(userId);
+      const targetedGoal = activeGoals.find((g) => g.goalType === "targeted");
+      const untargetedGoal = activeGoals.find((g) => g.goalType === "untargeted");
+      const matchGoal = targetedGoal || untargetedGoal;
+
+      // Same image again: no second look, no water.
+      if (sameImage) {
+        const analysis = { ...(sameImage.analysisJson as any ?? {}), next_prompt: "" } as VisionAnalysisResult;
+        const decision = decidePhotoWater({ hasGoal: !!matchGoal, duplicate: true, confidence: 0, relevant: false, evidence: "unknown", needsContext: false, freshness });
+        const text = photoReplyText(decision, analysis);
+        await logPhotoDecision(photoMemory, analysis, decision, { jaiResponse: text, freshness, source: String(source || "unknown"), serveUrl });
+        await storage.updateMessage(photoMessage.id, { status: "analyzed", analysisJson: { ...analysis, water_award: 0 } as any });
+        const jaeResponse = await storage.createMessage({ userId, text, sender: "jae", messageType: "text", status: "sent" });
+        console.log(`[PHOTO] duplicate of ${sameImage.id} | 0 water`);
+        return res.json({ ok: true, validation: { status: "duplicate", reason: decision.reason }, photoMessage, jaeResponse, analysis, photoMemory, water: null });
+      }
+
+      // The hidden calendar entry for the photo — promoted only if it earns water.
       const photoEntry = await storage.createEntry({
         userId,
         date: dateKey,
         summary: caption ? `📷 ${caption}` : "📷 Photo uploaded",
         mood: "neutral",
       });
+      await storage.updatePhotoMemory(photoMemory.id, { entryId: photoEntry.id });
 
-      const activeGoals = await storage.getActiveGoals(userId);
-      const targetedGoal = activeGoals.find((g) => g.goalType === "targeted");
-      const untargetedGoal = activeGoals.find((g) => g.goalType === "untargeted");
-
-      const serveUrl = photoUrl.startsWith("/objects/")
-        ? `${req.protocol}://${req.get("host")}${photoUrl}`
-        : photoUrl;
-
-      let analysis;
+      let analysis: VisionAnalysisResult;
       try {
         analysis = await analyzePhoto(
           serveUrl,
           caption || "",
           targetedGoal?.title || null,
           untargetedGoal?.title || null,
-          user.name || ""
+          user.name || "",
+          matchGoal ? { goalWhy: matchGoal.emotionalWhy, recentMemory: await photoMemoryLines(userId) } : {},
         );
       } catch (analysisErr: any) {
         console.error(`[PHOTO] Vision analysis failed after ${Date.now() - startTime}ms:`, analysisErr?.message || analysisErr);
@@ -3098,107 +3133,55 @@ export async function registerRoutes(
         };
       }
 
-      const validConfidence = typeof analysis.confidence === "number" ? analysis.confidence : 0;
-      const validActionType = analysis.action_type || "unknown_or_irrelevant";
-
-      let validationStatus: "valid" | "invalid" | "unclear" = "invalid";
-      let validationReason = "";
-
-      if (validActionType === "unknown_or_irrelevant" || validConfidence < 0.60) {
-        validationStatus = "invalid";
-        validationReason = analysis.water_reason || "Image does not show a recognizable goal-aligned action.";
-      } else if (validConfidence >= 0.60 && validConfidence < 0.75) {
-        validationStatus = "unclear";
-        validationReason = analysis.water_reason || "Image may show an action but confidence is too low to verify.";
-      } else {
-        validationStatus = "valid";
-        validationReason = analysis.water_reason || "Verified goal-aligned action detected.";
-      }
-
-      const validation = { status: validationStatus, reason: validationReason };
-      console.log(`[PHOTO] Validation: status=${validationStatus} confidence=${validConfidence} actionType=${validActionType}`);
-
-      let photoAP = 0;
-      if (validationStatus === "valid") {
-        photoAP = analysis.proof_level >= 2 ? 3 : 2;
-      }
-
-      analysis.water_award = photoAP;
-      analysis.action_points = photoAP;
-
-      await storage.updateMessage(photoMessage.id, {
-        status: "analyzed",
-        analysisJson: analysis as any,
+      const decision = decidePhotoWater({
+        hasGoal: !!matchGoal,
+        duplicate: false,
+        confidence: typeof analysis.confidence === "number" ? analysis.confidence : 0,
+        relevant: (analysis.action_type || "unknown_or_irrelevant") !== "unknown_or_irrelevant",
+        evidence: analysis.evidence_type ?? "unknown",
+        needsContext: analysis.needs_context === true,
+        freshness,
       });
+      const jaeText = photoReplyText(decision, analysis);
+      const loggedMemory = { ...photoMemory, entryId: photoEntry.id };
+      await logPhotoDecision(loggedMemory, analysis, decision, { jaiResponse: jaeText, freshness, source: String(source || "unknown"), serveUrl });
+      analysis.water_award = decision.water;
+      await storage.updateMessage(photoMessage.id, { status: "analyzed", analysisJson: analysis as any });
+      console.log(`[PHOTO] decision=${decision.result} | confidence=${analysis.confidence} | evidence=${analysis.evidence_type} | freshness=${freshness} | source=${source || "unknown"} | water=${decision.water} | ${decision.reason}`);
 
-      await storage.updatePhotoMemory(photoMemory.id, {
-        status: "analyzed",
-        analysisJson: analysis as any,
-        waterAwarded: analysis.water_award,
-        waterReason: analysis.water_reason,
-        tags: analysis.tags || [],
-      });
-
-      // Verified photo → central reward engine: promotes the photo's calendar
-      // memory to a rewarded entry, adds AP, and applies the same 90-second
-      // duplicate guard as chat. cBurn zeroes AP, so no water that turn.
       let photoDisplayWater: ReturnType<typeof waterTransition> | null = null;
-      if (photoAP > 0) {
-        const matchGoal = targetedGoal || untargetedGoal;
-        const effectiveAP = user.cBurnActive ? 0 : photoAP;
-        const growthBefore = matchGoal ? computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user) : null;
-
-        const photoReward = await processRewardTransaction({
-          userId,
-          rawText: `photo ${uploadAttemptId || photoUrl}`,
-          apDelta: effectiveAP,
-          matchGoal: matchGoal || null,
-          actionType: "PHOTO_PROOF",
-          todayStr: dateKey,
-          existingEntryId: photoEntry.id,
-        });
-
-        if (matchGoal && growthBefore && photoReward.success) {
-          photoDisplayWater = waterTransition(
-            growthBefore,
-            computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user),
-          );
-        }
-
-        if (matchGoal) {
-          const userCredits = (user.heartbeatCredits || { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 }) as HeartbeatCredits;
-          const hbKey = analysis.action_type?.includes("courage") ? "courage" as HeartbeatKey : "consistency" as HeartbeatKey;
-          const updatedCredits = { ...userCredits, [hbKey]: (userCredits[hbKey] || 0) + 1 };
-          await storage.updateUser(userId, {
-            heartbeatCredits: updatedCredits as any,
-            lastVerifiedActionAt: new Date(),
-            consecutiveIOCount: 0,
-            cBurnActive: 0,
-          } as any);
-
-          console.log(`[TITAN-PHOTO] apDelta=${effectiveAP} | heartbeat=${hbKey} | reward=${photoReward.skipReason ?? "success"} | cBurnWasActive=${!!user.cBurnActive}`);
+      if (decision.result === "approved" && matchGoal) {
+        const growthBefore = computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user);
+        const reward = await rewardPhoto(user, loggedMemory, analysis, matchGoal, dateKey);
+        if (reward.success) {
+          photoDisplayWater = waterTransition(growthBefore, computeDisplayGrowth(matchGoal, await storage.getEntries(userId), user));
         }
       }
 
-      const photoWaterAck = photoDisplayWater ? " Water added to your cup." : "";
       const jaeResponse = await storage.createMessage({
         userId,
-        text: analysis.next_prompt + photoWaterAck,
+        text: jaeText,
         sender: "jae",
         messageType: "text",
         status: "sent",
         analysisJson: analysis as any,
       });
 
-      console.log(`[PHOTO] Complete: ${Date.now() - startTime}ms | validation=${validationStatus} | AP=${photoAP} | water_award=${analysis.water_award}`);
+      // No goal yet: Jai starts the guided goal setup right after.
+      if (decision.result === "held_no_goal") {
+        await startGoalSetup(userId, "chat").catch((err) => console.error("[PHOTO] goal setup start error:", err));
+        (req.session as any).goalOfferAt = Date.now();
+      }
+
+      console.log(`[PHOTO] Complete: ${Date.now() - startTime}ms | decision=${decision.result}`);
 
       return res.json({
         ok: true,
-        validation,
+        validation: { status: decision.result, reason: decision.reason },
         photoMessage,
         jaeResponse,
         analysis,
-        photoMemory,
+        photoMemory: loggedMemory,
         water: photoDisplayWater ? { awarded: true, ...photoDisplayWater } : null,
       });
     } catch (err: any) {
@@ -3210,7 +3193,8 @@ export async function registerRoutes(
   app.get("/api/users/:userId/photo-memories", async (req, res) => {
     try {
       const memories = await storage.getPhotoMemories(req.params.userId);
-      return res.json(memories);
+      // A repeat of an earlier image is logged but shown once.
+      return res.json(memories.filter((m) => m.status !== "duplicate"));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Failed to get photo memories" });

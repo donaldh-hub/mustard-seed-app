@@ -184,6 +184,12 @@ export const photoMemories = pgTable("photo_memories", {
   waterReason: text("water_reason"),
   tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
   visibility: text("visibility").notNull().default("private"),
+  // SHA-256 of the original file (from the browser), to catch the same image
+  // uploaded twice, and the hidden calendar entry that gets promoted when the
+  // photo earns water. The water decision itself is logged in
+  // analysisJson.decision (server/photoProof.ts).
+  contentHash: text("content_hash"),
+  entryId: varchar("entry_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

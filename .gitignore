@@ -5,3 +5,5 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .claude/worktrees
+# Photos for scripts/photo-proof-check.ts (never committed)
+.photo-tests/
