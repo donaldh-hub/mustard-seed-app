@@ -8,6 +8,23 @@ import { checkRebuildPriceConfig } from "./stripePriceCheck";
 
 // Idempotent schema guard — adds missing columns without touching existing data
 async function ensureSchema() {
+  // Login columns. Production was once created from an older schema without
+  // users.email, which broke sign-up; this keeps any database in step with
+  // shared/schema.ts. Its own try so a failure here can't skip the rest.
+  try {
+    await pool.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS email TEXT UNIQUE,
+        ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS password_hash TEXT,
+        ADD COLUMN IF NOT EXISTS auth_provider TEXT DEFAULT 'email',
+        ADD COLUMN IF NOT EXISTS google_id TEXT UNIQUE,
+        ADD COLUMN IF NOT EXISTS profile_image TEXT,
+        ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;
+    `);
+  } catch (err) {
+    console.error("[schema] login column check failed (non-fatal):", err);
+  }
   try {
     await pool.query(`
       ALTER TABLE users
