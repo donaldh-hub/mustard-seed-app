@@ -171,7 +171,10 @@ export default function Home() {
     }
   }, [assessment, assessmentLoading, userId]);
 
-  const currentStreak = user?.streak ?? 0;
+  // Consistency Streak = consecutive days showing up (journal session, verified
+  // action, any entry), computed on the server from the same days as "Days
+  // active", using this device's calendar day.
+  const currentStreak: number = consistency?.currentStreak ?? user?.streak ?? 0;
   useEffect(() => {
     if (currentStreak > prevStreakRef.current) {
       setStreakPulsing(true);
@@ -214,10 +217,13 @@ export default function Home() {
   const show24hBanner = hasTargetedGoal && hoursSinceLastVA >= 24 && !inactivityBannerDismissed;
 
   // Streak state
-  const previousStreak = (user as any)?.previousStreak ?? 0;
-  const streakAtRisk = currentStreak >= 1 && hoursSinceLastVA >= 24 && hoursSinceLastVA < 48;
-  const streakBroken = hoursSinceLastVA >= 48 && currentStreak >= 1;
-  const streakNewBegins = currentStreak === 1 && previousStreak > 0 && hoursSinceLastVA < 24;
+  const previousStreak: number = consistency?.previousStreak ?? (user as any)?.previousStreak ?? 0;
+  const activeToday: boolean = consistency?.activeToday ?? false;
+  // Alive from yesterday but nothing logged yet today.
+  const streakAtRisk = currentStreak >= 1 && !activeToday;
+  // Had a streak before, missed a day, nothing new yet.
+  const streakBroken = currentStreak === 0 && previousStreak > 0;
+  const streakNewBegins = currentStreak === 1 && previousStreak > 0 && activeToday;
 
   // Reassessment reminder: based on user's cadence preference and time since last assessment
   const cadenceMonths = (user as any)?.assessmentReminderCadenceMonths ?? 3;
@@ -474,16 +480,24 @@ export default function Home() {
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No active goal yet</p>
+              rebuild?.hasCompletedRebuild ? (
+                <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No active goal yet</p>
+              ) : (
+                // Planting a goal is the first move of the 7-Day Rebuild; the
+                // Journal is the free on-ramp before it.
+                <p className="text-sm text-muted-foreground" data-testid="text-no-goal">
+                  Your goal gets planted in the 7-Day Rebuild. That's where your water fills cups and your seed starts to grow.
+                </p>
+              )
             )}
             <Button
-              onClick={() => setLocation(goal ? "/chat" : "/progress")}
+              onClick={() => setLocation(goal ? "/chat" : rebuild?.hasCompletedRebuild ? "/progress" : "/rebuild")}
               variant="outline"
               className="mt-3 w-full rounded-full"
               size="sm"
               data-testid="button-refine-goal"
             >
-              {goal ? "Refine Goal" : "Plant a Goal"}
+              {goal ? "Refine Goal" : rebuild?.hasCompletedRebuild ? "Plant a Goal" : "See the 7-Day Rebuild"}
             </Button>
           </motion.div>
 
@@ -717,7 +731,7 @@ export default function Home() {
             ) : streakBroken ? (
               <>
                 <p className="text-2xl font-bold text-muted-foreground/40 leading-none" data-testid="text-streak-count">{currentStreak}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">Log a verified action to keep it alive.</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Show up today to start a new one.</p>
               </>
             ) : (
               <>
@@ -726,7 +740,7 @@ export default function Home() {
                   <span className="text-xs text-muted-foreground mb-0.5">{currentStreak === 1 ? "day" : "days"}</span>
                 </div>
                 {streakAtRisk && (
-                  <p className="text-[11px] text-amber-600 mt-1">Log today to protect your streak.</p>
+                  <p className="text-[11px] text-amber-600 mt-1">Show up today to keep it going.</p>
                 )}
               </>
             )}

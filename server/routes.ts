@@ -27,6 +27,7 @@ import { assessments, insertGoalSchema } from "@shared/schema";
 import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
+import { computeShowUpStreak } from "./showUpStreak";
 import { computeJournalGate, isEntryBlocked, isValidTimeZone, eveningOpensAt, reflectionChoices, isCommitmentKept, isPacingTester } from "./journalPacing";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sql } from "drizzle-orm";
@@ -590,6 +591,7 @@ export async function registerRoutes(
 
       const userMsg = await storage.createMessage({ userId, text: rawText, sender: "user" });
 
+      await storage.refreshShowUpStreak(userId);
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -1709,29 +1711,14 @@ export async function registerRoutes(
         const updatedCredits = { ...userCredits };
         updatedCredits[heartbeatKey] = (updatedCredits[heartbeatKey] || 0) + 1;
 
-        const lastVAMs = user.lastVerifiedActionAt ? new Date(user.lastVerifiedActionAt).getTime() : null;
-        const gapHours = lastVAMs ? (Date.now() - lastVAMs) / 3600000 : null;
-        let newStreak: number;
-        let newPreviousStreak: number = (user as any).previousStreak ?? 0;
-        if (gapHours === null || gapHours < 24) {
-          newStreak = streak + 1;
-        } else if (gapHours < 48) {
-          newStreak = streak;
-        } else {
-          newPreviousStreak = streak;
-          newStreak = 1;
-        }
-
-        console.log(`[STREAK] streakBefore: ${streak}, gapHoursComputed: ${gapHours !== null ? gapHours.toFixed(2) : "null (first VA)"}, streakAfter: ${newStreak}`);
-        finalStreak = newStreak;
-
+        // The Consistency Streak is no longer bumped per action here: it is
+        // recomputed from show-up days whenever an entry is saved
+        // (storage.refreshShowUpStreak), and read back below.
         await storage.updateUser(userId, {
           heartbeatCredits: updatedCredits as any,
           lastVerifiedActionAt: new Date(),
           consecutiveIOCount: 0,
           cBurnActive: 0,
-          streak: newStreak,
-          previousStreak: newPreviousStreak,
         } as any);
 
         console.log(`[STREAK] syncCompleted: true, userId: ${userId}`);
@@ -1758,6 +1745,7 @@ export async function registerRoutes(
           displayWater = waterTransition(growthBefore, growthAfter);
         }
 
+        finalStreak = (await storage.getUser(userId))?.streak ?? finalStreak;
         if (rewardResult.postUpdateAP !== null) postUpdateAP = rewardResult.postUpdateAP;
         if (rewardResult.waterAwarded && rewardResult.growthResult) {
           waterAwarded = true;
@@ -2348,6 +2336,7 @@ export async function registerRoutes(
       });
 
       const weeklyWaterLevelPercent = Math.round(Math.min((weeklyActiveDays / 7) * 100, 100));
+      const showUp = computeShowUpStreak(Array.from(distinctDates), todayDate);
 
       const lifetimeActiveDays = distinctDates.size;
 
@@ -2380,6 +2369,9 @@ export async function registerRoutes(
       return res.json({
         weeklyWaterLevelPercent,
         weeklyActiveDays,
+        currentStreak: showUp.current,
+        previousStreak: showUp.previous,
+        activeToday: showUp.activeToday,
         lifetimeActiveDays,
         seedStageName,
         seedStageDescription,

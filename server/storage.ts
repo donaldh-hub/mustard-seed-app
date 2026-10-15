@@ -28,6 +28,7 @@ import {
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, asc, and, gte, inArray, sql as sqlOp } from "drizzle-orm";
 import pg from "pg";
+import { computeShowUpStreak } from "./showUpStreak";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -50,6 +51,7 @@ export interface IStorage {
   getEntries(userId: string): Promise<Entry[]>;
   getEntriesByGoalId(goalId: string): Promise<Entry[]>;
   createEntry(entry: InsertEntry): Promise<Entry>;
+  refreshShowUpStreak(userId: string): Promise<void>;
   updateEntry(id: string, data: Partial<InsertEntry>): Promise<Entry | undefined>;
 
   getActiveGoals(userId: string): Promise<Goal[]>;
@@ -228,7 +230,31 @@ export class DatabaseStorage implements IStorage {
 
   async createEntry(entry: InsertEntry): Promise<Entry> {
     const [e] = await db.insert(entries).values(entry).returning();
+    await this.refreshShowUpStreak(entry.userId);
     return e;
+  }
+
+  // Consistency Streak = consecutive days with any entry (server/showUpStreak.ts),
+  // the same days "Days active" counts. Recomputed on every new entry, and
+  // before chat and retention read it (a missed day writes nothing), so Jai,
+  // retention nudges, and Home all read one number.
+  async refreshShowUpStreak(userId: string): Promise<void> {
+    try {
+      const all = await this.getEntries(userId);
+      if (all.length === 0) return;
+      const dates = all.map((x) => x.date);
+      const latest = dates.reduce((a, b) => (b > a ? b : a));
+      // Reference day: the latest entry, or the server's yesterday (UTC) if
+      // that's later. Entries carry the user's local date and the server
+      // doesn't know their time zone, so UTC-yesterday never ends a streak
+      // that is still alive locally; at worst it is a day lenient.
+      const utcYesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const ref = latest > utcYesterday ? latest : utcYesterday;
+      const { current, previous } = computeShowUpStreak(dates, ref);
+      await db.update(users).set({ streak: current, previousStreak: previous } as any).where(eq(users.id, userId));
+    } catch (err) {
+      console.error("[STREAK] refresh failed:", (err as Error).message);
+    }
   }
 
   async updateEntry(id: string, data: Partial<InsertEntry>): Promise<Entry | undefined> {
