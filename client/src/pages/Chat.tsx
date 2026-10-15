@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, Fragment, useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Send, Plus, Camera, Image, X, Droplets, Loader2, RotateCcw, Ban, Sprout, PenLine, CheckCircle2, Zap, Trophy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -392,6 +391,13 @@ export default function Chat() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
+  // The message just sent, shown right away as the user's bubble while Jai
+  // replies. Cleared once the saved copy arrives from the server, or on error.
+  const [pendingMessage, setPendingMessage] = useState<{ text: string; sentAt: number } | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Extra height the message box has grown past one line, so the message
+  // list keeps its last bubble clear of the box.
+  const [composerExtra, setComposerExtra] = useState(0);
   const [showAttach, setShowAttach] = useState(false);
   const [showCreateOwn, setShowCreateOwn] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<{ file: File; url: string } | null>(null);
@@ -628,6 +634,11 @@ export default function Chat() {
         }
       }
     },
+    onError: (_err, sentText) => {
+      // Don't lose what they typed: put it back in the box.
+      setPendingMessage(null);
+      setInput((current) => current || sentText);
+    },
   });
 
   const photoMutation = useMutation({
@@ -742,7 +753,26 @@ export default function Chat() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, sendMutation.isPending, photoMutation.isPending]);
+  }, [messages, sendMutation.isPending, photoMutation.isPending, pendingMessage, composerExtra]);
+
+  useEffect(() => {
+    if (!pendingMessage) return;
+    const saved = (messages as any[]).some(
+      (m) => m.sender === "user" && m.text === pendingMessage.text &&
+        (!m.createdAt || new Date(m.createdAt).getTime() >= pendingMessage.sentAt - 60_000),
+    );
+    if (saved) setPendingMessage(null);
+  }, [messages, pendingMessage]);
+
+  // Grow the message box with what's typed (up to ~6 lines, then scroll).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const h = Math.min(el.scrollHeight, 144);
+    el.style.height = `${h}px`;
+    setComposerExtra(Math.max(0, h - 48));
+  }, [input]);
 
   const handleSend = () => {
     if (photoPreview) {
@@ -753,6 +783,7 @@ export default function Chat() {
     if (!input.trim() || sendMutation.isPending) return;
     const text = input;
     setInput("");
+    setPendingMessage({ text, sentAt: Date.now() });
     sendMutation.mutate(text);
   };
 
@@ -835,6 +866,7 @@ export default function Chat() {
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 pb-32"
+        style={composerExtra ? { paddingBottom: 128 + composerExtra } : undefined}
       >
         {isLoading && (
           <div className="text-center text-muted-foreground text-sm py-8">Loading messages...</div>
@@ -1063,18 +1095,38 @@ export default function Chat() {
           );
         })}
 
+        {pendingMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-end gap-2 mb-1 justify-end"
+            data-testid="chat-pending-user-message"
+          >
+            <div className="max-w-[80%] px-4 py-3 rounded-2xl rounded-br-sm shadow-sm text-sm leading-relaxed bg-primary text-primary-foreground whitespace-pre-wrap">
+              {pendingMessage.text}
+            </div>
+          </motion.div>
+        )}
+
         {isTextSending && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 text-muted-foreground text-xs ml-14"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="flex items-end gap-2 mb-1 justify-start"
+            aria-label="Jai is typing"
+            data-testid="chat-jai-typing"
           >
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce" />
+            <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm shrink-0 mb-1">
+              <img src={JaeAvatar} alt="Jai" className="w-full h-full object-cover" />
             </div>
-            Jai is thinking...
+            <div className="px-4 py-3.5 rounded-2xl rounded-bl-sm shadow-sm bg-white border border-border/50">
+              <div className="flex gap-1.5">
+                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" />
+              </div>
+            </div>
           </motion.div>
         )}
       </div>
@@ -1196,7 +1248,7 @@ export default function Chat() {
 
         <form
           onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-          className="flex gap-2 items-center"
+          className="flex gap-2 items-end"
         >
           <Button
             type="button"
@@ -1209,11 +1261,20 @@ export default function Chat() {
           >
             <Plus className={`w-5 h-5 transition-transform ${showAttach ? 'rotate-45' : ''}`} />
           </Button>
-          <Input
+          <textarea
+            ref={inputRef}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter adds a line.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
             placeholder={photoPreview ? "Add a caption (optional)..." : "Type a message..."}
-            className="rounded-full bg-white border border-border shadow-lg h-12 px-6 focus-visible:ring-1 focus-visible:ring-primary"
+            className="flex-1 min-h-12 max-h-36 resize-none overflow-y-auto rounded-3xl bg-white border border-border shadow-lg px-5 py-3 text-sm leading-6 outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50"
             disabled={isPhotoProcessing}
             data-testid="input-chat"
           />
