@@ -16,6 +16,18 @@ export interface VisionAnalysisResult {
   risk_flags: string[];
   tags: string[];
   next_prompt: string;
+  // What kind of evidence the picture is (server/photoProof.ts EvidenceType),
+  // and whether Jai knows too little about the goal to judge it.
+  evidence_type?: "action_in_progress" | "fresh_output" | "finished_artifact" | "meme_or_unrelated" | "unknown";
+  needs_context?: boolean;
+}
+
+const EVIDENCE_TYPES = ["action_in_progress", "fresh_output", "finished_artifact", "meme_or_unrelated", "unknown"] as const;
+
+export interface PhotoGoalContext {
+  goalWhy?: string | null;
+  // The user's newest Memory records (journal, entries), newest first.
+  recentMemory?: string[];
 }
 
 // POSITIONING NOTE: Mustard Seed is goal-neutral and growth-centered.
@@ -42,11 +54,14 @@ export async function analyzePhoto(
   caption: string,
   targetedGoalTitle: string | null,
   untargetedGoalTitle: string | null,
-  userName: string
+  userName: string,
+  context: PhotoGoalContext = {},
 ): Promise<VisionAnalysisResult> {
   const goalContext = [
     targetedGoalTitle ? `Targeted Goal: "${targetedGoalTitle}"` : null,
     untargetedGoalTitle ? `Identity Goal: "${untargetedGoalTitle}"` : null,
+    context.goalWhy ? `Why it matters to them: "${context.goalWhy}"` : null,
+    context.recentMemory?.length ? `Recent Memory (newest first):\n${context.recentMemory.slice(0, 6).map((l) => `- ${l}`).join("\n")}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -54,7 +69,7 @@ export async function analyzePhoto(
   const systemPrompt = `You are analyzing photos for verified progress toward the user's stated goal. You are NOT a coach. You observe and classify — nothing more.
 The user's name is ${userName || "friend"}.
 
-${goalContext || "No active goals set."}
+${goalContext || "No active goal set. Describe what you see factually; don't judge whether it's progress, and don't suggest it counts."}
 
 CORE PRINCIPLE: Mustard Seed is goal-neutral. It is NOT a fitness app. The user's goal could be fitness, gardening, writing, budgeting, business, cleaning, studying, parenting, faith, or anything else. Your job is to determine whether this photo shows evidence of aligned action toward THEIR SPECIFIC STATED GOAL — not to evaluate fitness activity.
 
@@ -85,8 +100,16 @@ RULES:
 8. If confidence < 0.60: water_award = 0
 9. If confidence 0.60-0.74: water_award = 0, ask a clarifying question in next_prompt
 10. If confidence >= 0.75 AND action is goal-aligned: award water (1 or 2)
-11. next_prompt: Write a short grounded response (2-3 sentences max, plain text, no markdown). Acknowledge the specific action factually. Connect it to their goal. No praise, no motivation, no coaching language. If photo is unclear or irrelevant, redirect without punishment: "This doesn't show the work yet. What would show progress toward your goal?"
+11. evidence_type — what kind of evidence this picture is:
+   - "action_in_progress": the work being done (hands planting, someone writing at a desk)
+   - "fresh_output": freshly made work (a handwritten list, a planted bed, a drafted page, a cleaned shelf)
+   - "finished_artifact": a finished design, logo, polished document, work screenshot, or anything that looks like a stock or AI-generated image. This is NOT proof of action by itself — it could have been made any time, by anyone.
+   - "meme_or_unrelated": memes, random screenshots, selfies, pets, scenery, objects with no goal connection
+   - "unknown": can't tell
+12. needs_context: true when you can't judge whether this relates to the goal because you don't know enough about the goal itself (e.g. what the business does or who it serves). Then next_prompt must be ONE short discovery question about the goal (e.g. "What does your business do, and who is it for?") instead of a guess.
+13. next_prompt: Write a short grounded response (2-3 sentences max, plain text, no markdown). Acknowledge the specific action factually. Connect it to their goal. No praise, no motivation, no coaching language. If photo is unclear or irrelevant, redirect without punishment: "This doesn't show the work yet. What would show progress toward your goal?"
 
+Never say in next_prompt that the photo counts, was verified, or earned water — the app decides that and adds its own line.
 BANNED in next_prompt: "Great job", "Keep it up", "Well done", "Amazing", "Proud of you", "Keep going", "You got this", any motivational filler.
 
 RESPONSE FORMAT (strict JSON only, no markdown fences):
@@ -99,13 +122,15 @@ RESPONSE FORMAT (strict JSON only, no markdown fences):
   "water_reason": "Photo shows fertilizer and seeds — aligned with the user's gardening goal",
   "risk_flags": [],
   "tags": ["gardening", "seeds", "fertilizer"],
+  "evidence_type": "fresh_output",
+  "needs_context": false,
   "next_prompt": "That fertilizer and those seeds are in the right direction. What's the next step once you get them in the ground?"
 }`;
 
   try {
     const userContent: any[] = [];
 
-    if (photoUrl.startsWith("http")) {
+    if (photoUrl.startsWith("http") || photoUrl.startsWith("data:image/")) {
       userContent.push({
         type: "image_url",
         image_url: { url: photoUrl, detail: "low" },
@@ -174,6 +199,8 @@ RESPONSE FORMAT (strict JSON only, no markdown fences):
     if (!Array.isArray(parsed.labels)) parsed.labels = [];
     if (!Array.isArray(parsed.risk_flags)) parsed.risk_flags = [];
     if (!Array.isArray(parsed.tags)) parsed.tags = [];
+    if (!EVIDENCE_TYPES.includes(parsed.evidence_type as any)) parsed.evidence_type = "unknown";
+    parsed.needs_context = parsed.needs_context === true;
     if (!parsed.water_reason) parsed.water_reason = "No reason provided";
     if (!parsed.next_prompt) parsed.next_prompt = "Thanks for sharing. Keep going.";
 

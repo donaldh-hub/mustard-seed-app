@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Camera, CheckCircle2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useUpload } from "@/hooks/use-upload";
-import { getLocalDateStr } from "@/lib/dateUtils";
+import { getLocalDateStr, getUserTimezone } from "@/lib/dateUtils";
+import { readPhotoMeta } from "@/lib/photoMeta";
 
 // Optional photo proof after the user reports a physical action in the
 // Grounding Journal. Uses the same loop as Chat: upload → POST
@@ -31,9 +32,13 @@ export function JournalPhotoProof({
     if (!file) return;
     setState("working");
     try {
+      const meta = await readPhotoMeta(file);
       const up = await uploadFile(file);
       if (!up) throw new Error("upload failed");
-      const r = await api.sendPhoto(userId, { photoUrl: up.objectPath, caption, localDate: getLocalDateStr(), uploadAttemptId: up.attemptId });
+      const r = await api.sendPhoto(userId, {
+        photoUrl: up.objectPath, caption, localDate: getLocalDateStr(), uploadAttemptId: up.attemptId,
+        source: "gallery", ...meta, userTimezone: getUserTimezone(),
+      });
       setResult({
         status: r?.validation?.status ?? "unclear",
         jai: r?.jaeResponse?.text ?? "",
