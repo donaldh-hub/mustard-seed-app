@@ -65,6 +65,7 @@ function pick<T>(arr: T[], seed: number): T {
  * lazy, cadence-gated, in-chat-message pattern already established there.
  */
 export async function maybeInjectRetentionNudge(userId: string): Promise<void> {
+  await storage.refreshShowUpStreak(userId);
   const user = await storage.getUser(userId);
   if (!user) return;
 
