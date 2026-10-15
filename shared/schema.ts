@@ -91,8 +91,19 @@ export const groundingJournalEntries = pgTable("grounding_journal_entries", {
   focusSummary: text("focus_summary"),
   // Jai's 1–2 sentence reply to the user's optional follow-up answer.
   jaeFollowUpReply: text("jae_follow_up_reply"),
+  // Set when this entry tripped the safety screen: the tier, the logged
+  // event, and the conversation that follows ({ from: "jae" | "user", text }).
+  // The journal can't move on until Jai has answered the user's reply.
+  safetyTier: text("safety_tier"),
+  safetyEventId: varchar("safety_event_id"),
+  safetyThread: jsonb("safety_thread").notNull().default(sql`'[]'::jsonb`),
+  // Evening entries: Jai's one small goal-linked step for tomorrow, asked
+  // about at the start of the next morning.
+  nextStep: text("next_step"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export type SafetyThreadMessage = { from: "jae" | "user"; text: string };
 
 export type GroundingJournalEntry = typeof groundingJournalEntries.$inferSelect;
 
@@ -306,7 +317,15 @@ export const SAFETY_TRIGGER_CATEGORIES = [
   "abuse_in_progress",
   "medical_emergency",
   "disordered_eating",
+  // Distress that is probably about the task but could be heavier — gets the
+  // gentle check-in, not the full crisis script.
+  "ambiguous_distress",
 ] as const;
+
+// clear = explicit risk language → full crisis script (+ founder alert).
+// check_in = ambiguous distress → one-line check-in with 988.
+export const SAFETY_TIERS = ["clear", "check_in"] as const;
+export type SafetyTier = typeof SAFETY_TIERS[number];
 export type SafetyTriggerCategory = typeof SAFETY_TRIGGER_CATEGORIES[number];
 
 export const SAFETY_RESPONSE_TYPES = ["primary", "backtrack_followup"] as const;
@@ -320,6 +339,11 @@ export const safetyEvents = pgTable("safety_events", {
   triggeringMessage: text("triggering_message").notNull(),
   surface: text("surface").notNull().default("chat"), // chat | grounding_journal | rebuild
   alertSent: boolean("alert_sent").notNull().default(false),
+  // null on rows logged before tiering (treated as "clear").
+  tier: text("tier"),
+  // What happened after the safety response, once the user replied:
+  // clarified_no_risk | still_unclear | escalated. null = no reply yet.
+  outcome: text("outcome"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

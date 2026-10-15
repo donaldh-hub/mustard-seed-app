@@ -24,6 +24,8 @@ async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export type SafetyMessage = { from: "jae" | "user"; text: string };
+
 export const api = {
   getConfig: () => fetchJson<{ googleClientId: string | null }>("/config"),
 
@@ -154,17 +156,24 @@ export const api = {
     userId: string,
     data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[]; localDate?: string }
   ) =>
-    fetchJson<{ entry: any; jae: any; commitmentKept?: { plannedAt: string } }>(`/users/${userId}/grounding-journal/entry`, {
+    fetchJson<{ entry: any; jae: any; commitmentKept?: { plannedAt: string }; safetyTriggered?: boolean; safetyTier?: "clear" | "check_in"; safetyThread?: SafetyMessage[] }>(`/users/${userId}/grounding-journal/entry`, {
       method: "POST",
       body: JSON.stringify({ ...data, userTimezone: getUserTimezone() }),
     }),
   // Saves the optional follow-up answer; `reply` is Jai's 1–2 sentence
   // acknowledgment ("" when the answer was empty or the AI call failed).
   saveJournalFollowUp: (userId: string, entryId: string, followUpResponse: string) =>
-    fetchJson<{ entry: any; reply: string }>(`/users/${userId}/grounding-journal/follow-up`, {
+    fetchJson<{ entry: any; reply: string; safetyTriggered?: boolean; safetyTier?: "clear" | "check_in"; safetyThread?: SafetyMessage[] }>(`/users/${userId}/grounding-journal/follow-up`, {
       method: "PATCH",
       body: JSON.stringify({ entryId, followUpResponse }),
     }),
+  // The user's reply after a safety response. Jai always answers; `jae` is the
+  // session's normal reflection when they made clear there's no risk.
+  sendJournalSafetyReply: (userId: string, entryId: string, reply: string, localDate?: string) =>
+    fetchJson<{ reply: string; outcome: "clarified_no_risk" | "still_unclear" | "escalated"; safetyThread: SafetyMessage[]; jae: any | null }>(
+      `/users/${userId}/grounding-journal/safety-reply`,
+      { method: "POST", body: JSON.stringify({ entryId, reply, localDate }) },
+    ),
   completeGroundingJournal: (userId: string) =>
     fetchJson<any>(`/users/${userId}/grounding-journal/complete`, { method: "POST" }),
 

@@ -6,7 +6,7 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection, generateFollowUpAck } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
-import { evaluateMessage } from "./trustSafety";
+import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
 import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, recordSubscriptionStarted, runReconciliation, generateBillingReport } from "./billingAgent";
@@ -24,7 +24,7 @@ import { classifyMultipleActions, aggregateClassifications, computeWaterFromAP, 
 import { processRewardTransaction, REWARD_CONFIG, type RewardActionType, type RewardResult } from "./rewardEngine";
 import { analyzePhoto } from "./visionAnalysis";
 import { assessments, insertGoalSchema } from "@shared/schema";
-import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User } from "@shared/schema";
+import type { InsertAssessment, Assessment, Goal, RebuildInstance, Entry, User, SafetyThreadMessage, SafetyTier } from "@shared/schema";
 import { deriveEffectiveState, isPremium, getSubscriptionBadge, getTrialDaysRemaining, getFeatureLimits, validateReceiptUpdate, computeStateTransition } from "./subscriptionEngine";
 import { getSubscriptionPeriodEnd, getInvoiceSubscriptionId } from "./stripeShapes";
 import { computeShowUpStreak } from "./showUpStreak";
@@ -3475,6 +3475,32 @@ export async function registerRoutes(
     };
   }
 
+  // Mirror a journal session to `entries` so Calendar/Memory Bank shows it —
+  // the journal has its own table, but Calendar only reads from `entries`.
+  async function mirrorJournalToCalendar(userId: string, dayNumber: number, session: string, keyTheme: string | null | undefined, localDate: string | undefined) {
+    const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
+    try {
+      await storage.createEntry({
+        userId,
+        goalId: null,
+        date: localDate || todayStr(),
+        summary: `Grounding Journal — Day ${dayNumber} ${sessionLabel}${keyTheme ? `: ${keyTheme}` : ""}`,
+        mood: "neutral",
+      });
+    } catch (calErr) {
+      console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
+    }
+  }
+
+  // A journal entry whose safety response is still waiting on the user's
+  // reply (or on Jai's answer to it) holds the journal in place.
+  function awaitingSafetyReply(e: { safetyTier?: string | null; safetyThread?: unknown }): boolean {
+    if (!e.safetyTier) return false;
+    const thread = (Array.isArray(e.safetyThread) ? e.safetyThread : []) as SafetyThreadMessage[];
+    const lastUser = thread.map((m) => m.from).lastIndexOf("user");
+    return lastUser === -1 || !thread.slice(lastUser + 1).some((m) => m.from === "jae");
+  }
+
   async function journalTimeZone(userId: string, sent: unknown): Promise<string> {
     if (isValidTimeZone(sent)) return sent;
     const user = await storage.getUser(userId);
@@ -3527,15 +3553,40 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
+      const pendingSafety = existingEntries.find(awaitingSafetyReply);
+      if (pendingSafety) {
+        return res.status(409).json({
+          message: "Jai is waiting to hear back from you first.",
+          code: "SAFETY_REPLY_PENDING",
+          entryId: pendingSafety.id,
+        });
+      }
+
       // ─── Trust & Safety Agent (Agent 01) — screens journal responses too ───
       // Persists what the user wrote either way (it's real journal content and
       // matters for the audit trail) but replaces Jai's reflection with the
-      // locked safe-response script and skips the reflection AI call entirely.
+      // safe response and skips the reflection AI call. The prompts and their
+      // goal ride along as context so "too frustrated" can be read against
+      // what they were asked.
       const journalText = (prompts || []).map((p) => p.response).filter(Boolean).join("\n");
+      const goalForSafety = (await journalAssessmentContext(userId, existingEntries)).intention;
       const journalSafety = journalText
-        ? await evaluateMessage(userId, journalText, [], "grounding_journal")
+        ? await evaluateMessage(userId, journalText, [
+            ...(goalForSafety ? [{ sender: "user", text: `(My goal for these 3 days: ${goalForSafety})` }] : []),
+            ...(prompts || []).map((p) => ({ sender: "jae", text: `Journal prompt: ${p.prompt}` })),
+          ], "grounding_journal")
         : null;
       const safetyReflection: string | null = journalSafety?.triggered ? journalSafety.responseText : null;
+      const safetyFields = journalSafety?.triggered
+        ? {
+            safetyTier: journalSafety.tier,
+            safetyEventId: journalSafety.eventId,
+            safetyThread: [{ from: "jae", text: journalSafety.responseText! }] as SafetyThreadMessage[],
+          }
+        : { safetyTier: null, safetyEventId: null, safetyThread: [] as SafetyThreadMessage[] };
+      const safetyPayload = journalSafety?.triggered
+        ? { safetyTriggered: true, safetyTier: journalSafety.tier, safetyThread: safetyFields.safetyThread }
+        : {};
 
       const dayThemes: Record<number, "RESET" | "REFOCUS" | "REBUILD"> = { 1: "RESET", 2: "REFOCUS", 3: "REBUILD" };
       const previousEntries = await storage.getGroundingJournalEntries(userId);
@@ -3549,11 +3600,12 @@ export async function registerRoutes(
           jaeReflection: safetyReflection, jaeFollowUpQuestion: null, userFollowUpResponse: null,
           keyTheme: null, releasePoint: null, valueNamed: null, possibleFirstSeed: null,
           isComplete: true, reflectionPlannedAt: null, focusSummary: null, jaeFollowUpReply: null,
+          ...safetyFields, nextStep: null,
         });
         return res.json({
           entry,
-          jae: { reflection: safetyReflection ?? "", followUpQuestion: null },
-          ...(safetyReflection ? { safetyTriggered: true } : {}),
+          jae: { reflection: safetyReflection ?? "", followUpQuestion: null, ...safetyPayload },
+          ...safetyPayload,
         });
       }
 
@@ -3570,6 +3622,7 @@ export async function registerRoutes(
             valueNamed: duplicate.valueNamed ?? null,
             releasePoint: duplicate.releasePoint ?? null,
             possibleFirstSeed: duplicate.possibleFirstSeed ?? null,
+            nextStep: duplicate.nextStep ?? "",
           },
         });
       }
@@ -3589,9 +3642,12 @@ export async function registerRoutes(
           : undefined;
 
       const journalJaiContext = await journalAssessmentContext(userId, previousEntries);
+      const yesterdayStep = session === "morning"
+        ? previousEntries.find((e) => e.dayNumber === dayNumber - 1 && e.session === "evening")?.nextStep ?? null
+        : null;
 
       const jaeResponse = safetyReflection
-        ? { reflection: safetyReflection, followUpQuestion: "", keyTheme: "", releasePoint: "", valueNamed: "", possibleFirstSeed: "" }
+        ? { reflection: safetyReflection, followUpQuestion: "", keyTheme: "", releasePoint: "", valueNamed: "", possibleFirstSeed: "", nextStep: "" }
         : await generateJournalReflection({
             userName: user.name || "friend",
             dayNumber,
@@ -3601,6 +3657,7 @@ export async function registerRoutes(
             previousEntries: prevSummary,
             todayMorningPrompts: todayMorningEntry?.prompts as { prompt: string; response: string }[] | undefined,
             ...journalJaiContext,
+            yesterdayStep,
           });
 
       const entry = await storage.createGroundingJournalEntry({
@@ -3619,6 +3676,8 @@ export async function registerRoutes(
         reflectionPlannedAt: null,
         focusSummary: session === "morning" && !safetyReflection ? ((jaeResponse as any).focusSummary || null) : null,
         jaeFollowUpReply: null,
+        ...safetyFields,
+        nextStep: session === "evening" && jaeResponse.nextStep ? jaeResponse.nextStep : null,
       });
 
       // Mirror to the entries table so Calendar/Memory Bank shows journal
@@ -3627,19 +3686,7 @@ export async function registerRoutes(
       // summarize, and this keeps the crisis disclosure out of Calendar/Memory
       // Bank's normal-activity surface.
       if (!safetyReflection) {
-        const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
-        const calendarSummary = `Grounding Journal — Day ${dayNumber} ${sessionLabel}${jaeResponse.keyTheme ? `: ${jaeResponse.keyTheme}` : ""}`;
-        try {
-          await storage.createEntry({
-            userId,
-            goalId: null,
-            date: localDate || todayStr(),
-            summary: calendarSummary,
-            mood: "neutral",
-          });
-        } catch (calErr) {
-          console.error("[JOURNAL] calendar_entry_error:", (calErr as Error).message);
-        }
+        await mirrorJournalToCalendar(userId, dayNumber, session, jaeResponse.keyTheme, localDate);
       }
 
       // Kept the reflection time they chose this morning → bonus water. A
@@ -3664,9 +3711,9 @@ export async function registerRoutes(
 
       return res.json({
         entry,
-        jae: jaeResponse,
+        jae: { ...jaeResponse, ...safetyPayload },
         ...(commitmentKept ? { commitmentKept } : {}),
-        ...(safetyReflection ? { safetyTriggered: true } : {}),
+        ...safetyPayload,
       });
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
@@ -3697,6 +3744,84 @@ export async function registerRoutes(
     }
   });
 
+  // The user's reply after a safety response. Jai always answers; once he
+  // has, the journal can move on. If they clearly say there's no risk, the
+  // session's normal reflection follows so the day isn't lost.
+  app.post("/api/users/:userId/grounding-journal/safety-reply", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { entryId, reply, localDate } = req.body as { entryId: string; reply: string; localDate?: string };
+      const text = (reply ?? "").trim();
+      if (!text) return res.status(400).json({ message: "Write a reply first." });
+      const entries = await storage.getGroundingJournalEntries(userId);
+      const entry = entries.find((e) => e.id === entryId);
+      if (!entry) return res.status(403).json({ message: "Forbidden" });
+      if (!entry.safetyTier) return res.status(400).json({ message: "No safety check on this entry." });
+
+      const thread = (Array.isArray(entry.safetyThread) ? entry.safetyThread : []) as SafetyThreadMessage[];
+      const prompts = (entry.prompts as { prompt: string; response: string }[]) ?? [];
+      const context = await journalAssessmentContext(userId, entries);
+      const { outcome, responseText } = await evaluateSafetyReply(userId, {
+        eventId: entry.safetyEventId,
+        tier: entry.safetyTier as SafetyTier,
+        thread,
+        triggerText: prompts.map((p) => p.response).filter(Boolean).join("\n"),
+        reply: text,
+        goal: context.intention,
+        surface: "grounding_journal",
+      });
+      const newThread: SafetyThreadMessage[] = [...thread, { from: "user", text }, { from: "jae", text: responseText }];
+      let updates: Record<string, unknown> = { safetyThread: newThread };
+      let jae: Record<string, unknown> | null = null;
+
+      // Clarified, and the reflection hasn't been written yet → write it now.
+      const reflectionPending = entry.session !== "intention" && thread.length > 0 && entry.jaeReflection === thread[0].text;
+      if (outcome === "clarified_no_risk" && reflectionPending) {
+        const user = await storage.getUser(userId);
+        const previous = entries.filter((e) => e.id !== entry.id && e.createdAt && entry.createdAt && new Date(e.createdAt) < new Date(entry.createdAt));
+        const session = entry.session as "morning" | "evening" | "grounding_statement";
+        const dayNumber = entry.dayNumber as 1 | 2 | 3;
+        const r = await generateJournalReflection({
+          userName: user?.name || "friend",
+          dayNumber,
+          dayTheme: ({ 1: "RESET", 2: "REFOCUS", 3: "REBUILD" } as const)[dayNumber],
+          session,
+          prompts,
+          previousEntries: previous.map((e) => ({
+            dayNumber: e.dayNumber, session: e.session, keyTheme: e.keyTheme, valueNamed: e.valueNamed,
+            releasePoint: e.releasePoint, jaeReflection: e.jaeReflection,
+          })),
+          todayMorningPrompts: session === "evening"
+            ? (previous.find((e) => e.dayNumber === dayNumber && e.session === "morning")?.prompts as { prompt: string; response: string }[] | undefined)
+            : undefined,
+          ...context,
+          yesterdayStep: session === "morning"
+            ? previous.find((e) => e.dayNumber === dayNumber - 1 && e.session === "evening")?.nextStep ?? null
+            : null,
+        });
+        updates = {
+          ...updates,
+          jaeReflection: r.reflection,
+          jaeFollowUpQuestion: r.followUpQuestion,
+          keyTheme: r.keyTheme || null,
+          releasePoint: r.releasePoint || null,
+          valueNamed: r.valueNamed || null,
+          possibleFirstSeed: r.possibleFirstSeed || null,
+          focusSummary: session === "morning" ? (r.focusSummary || null) : null,
+          nextStep: session === "evening" && r.nextStep ? r.nextStep : null,
+        };
+        jae = { ...r };
+        await mirrorJournalToCalendar(userId, dayNumber, session, r.keyTheme, localDate);
+      }
+
+      const updated = await storage.updateGroundingJournalEntry(entry.id, updates as any);
+      return res.json({ entry: updated, reply: responseText, outcome, safetyThread: newThread, jae });
+    } catch (err) {
+      console.error("[JOURNAL] safety_reply_error:", err);
+      return res.status(500).json({ message: "Couldn't send that — please try again." });
+    }
+  });
+
   app.patch("/api/users/:userId/grounding-journal/follow-up", async (req, res) => {
     try {
       const { userId } = req.params;
@@ -3709,6 +3834,23 @@ export async function registerRoutes(
       const entry = entries.find((e) => e.id === entryId)!;
       const answer = (followUpResponse ?? "").trim();
       let reply = "";
+      // Follow-up answers go through the same safety screen as the session.
+      const followUpSafety = answer
+        ? await evaluateMessage(userId, answer, [
+            { sender: "jae", text: entry.jaeReflection ?? "" },
+            { sender: "jae", text: entry.jaeFollowUpQuestion ?? "" },
+          ], "grounding_journal")
+        : null;
+      if (followUpSafety?.triggered) {
+        const safetyThread: SafetyThreadMessage[] = [{ from: "jae", text: followUpSafety.responseText! }];
+        const updated = await storage.updateGroundingJournalEntry(entryId, {
+          userFollowUpResponse: followUpResponse,
+          safetyTier: followUpSafety.tier,
+          safetyEventId: followUpSafety.eventId,
+          safetyThread,
+        } as any);
+        return res.json({ entry: updated, reply: "", safetyTriggered: true, safetyTier: followUpSafety.tier, safetyThread });
+      }
       if (answer) {
         const user = await storage.getUser(userId);
         reply = await generateFollowUpAck({
@@ -4032,6 +4174,37 @@ export async function registerRoutes(
 
   // ─── Jai Quality Supervisor (Agent 02) — founder-only admin surface ───────
   // Flags drift only; never edits Jai's core prompt or any content directly.
+
+  // Safety log: every flag, its tier, and what happened after.
+  app.get("/api/admin/safety-events", requireAdminKey, async (req, res) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "200"), 10) || 200, 1), 1000);
+      const events = await storage.getAllSafetyEvents(limit);
+      const users = new Map<string, { name: string | null; email: string | null }>();
+      for (const id of Array.from(new Set(events.map((e) => e.userId)))) {
+        const u = await storage.getUser(id);
+        users.set(id, { name: u?.name ?? null, email: u?.email ?? null });
+      }
+      return res.json({
+        events: events.map((e) => ({
+          date: e.createdAt,
+          userId: e.userId,
+          userName: users.get(e.userId)?.name ?? null,
+          userEmail: users.get(e.userId)?.email ?? null,
+          surface: e.surface,
+          triggerText: e.triggeringMessage,
+          tier: e.tier ?? "clear",
+          category: e.category,
+          responseType: e.responseType,
+          outcome: e.outcome ?? (e.responseType === "backtrack_followup" ? "backtrack_followup" : "no_reply_yet"),
+          alertSent: e.alertSent,
+        })),
+      });
+    } catch (err) {
+      console.error("[ADMIN] safety_events_error:", err);
+      return res.status(500).json({ message: "Could not load safety events." });
+    }
+  });
 
   app.get("/api/admin/quality/style-guide", requireAdminKey, async (_req, res) => {
     try {
