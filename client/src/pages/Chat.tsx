@@ -212,6 +212,18 @@ function NudgeCard({
   );
 }
 
+// Answer buttons for Jai's guided goal setup (server/goalSetup.ts sends the
+// same phrases back through the normal chat route; typing works too).
+function goalSetupButtons(msg: { messageType?: string; text?: string }): string[] | null {
+  if (msg.messageType === "goal_offer") {
+    return /kept coming back to/.test(msg.text ?? "")
+      ? ["Yes, make this my goal", "Create a different goal", "Not yet"]
+      : ["Set up my first goal", "Not yet"];
+  }
+  if (msg.messageType === "goal_confirm") return ["Plant it", "Change something"];
+  return null;
+}
+
 type ReflectionQualification = "reflectionEntry" | "tooShort" | "duplicate";
 
 function ReflectionCard({
@@ -527,6 +539,11 @@ export default function Chat() {
         // and goal-type confirmations, both of which change garden state. Without
         // this, Home's Goal card stays stale ("No active goal yet") until a hard reload.
         qc.invalidateQueries({ queryKey: ["garden", userId] });
+        if (data?.goalPlanted) {
+          qc.invalidateQueries({ queryKey: ["user", userId] });
+          qc.invalidateQueries({ queryKey: ["goals", userId] });
+          qc.invalidateQueries({ queryKey: ["consistency", userId] });
+        }
       }
 
       if (data?.water?.awarded) {
@@ -625,8 +642,8 @@ export default function Chat() {
             ...prev,
             [jaeId]: { type: "nudge", text: sentText },
           }));
-        } else if (category === "RW" && qualification === "reflectionEntry") {
-          // Reflection card: acknowledge RW entries saved as memory
+        } else if (category === "RW" && qualification === "reflectionEntry" && data?.reflectionSaved) {
+          // Reflection card: only when a reflection was actually saved to Memory
           setInlineCards(prev => ({
             ...prev,
             [jaeId]: { type: "reflection", qualification: "reflectionEntry" },
@@ -1035,6 +1052,23 @@ export default function Chat() {
                   </div>
                 )}
               </motion.div>
+
+              {/* Guided goal setup: answer buttons under Jai's latest offer / confirm */}
+              {msg.sender === "jae" && msg.id === messages[messages.length - 1]?.id && goalSetupButtons(msg) && (
+                <div className="flex flex-wrap gap-2 ml-12 mb-3" data-testid="goal-setup-buttons">
+                  {goalSetupButtons(msg)!.map((label) => (
+                    <button
+                      key={label}
+                      onClick={() => { setInput(""); sendMutation.mutate(label); }}
+                      disabled={sendMutation.isPending}
+                      className="px-3 py-2 rounded-xl border border-primary/30 bg-white text-primary text-xs font-medium hover:bg-primary/5 disabled:opacity-50"
+                      data-testid="button-goal-setup"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Inline reward / nudge cards after each Jai message */}
               {msg.sender === "jae" && card && card.type !== "dismissed" && (

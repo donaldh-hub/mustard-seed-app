@@ -144,6 +144,72 @@ const SESSION_LABELS: Record<string, string> = {
 // paid-track 7-Day Rebuild — mirrored on the styling the Rebuild itself uses
 // to pitch its own subscription at Day 7, so the two feel like one funnel.
 
+// ── Completion summary ───────────────────────────────────────────────────────
+// The user's own three days, from their saved entries (never placeholders).
+function answerTo(entries: any[], day: number, session: string, prompt: string, index: number): string {
+  const e = entries.find((x) => x.dayNumber === day && x.session === session);
+  const prompts: { prompt: string; response: string }[] = Array.isArray(e?.prompts) ? e.prompts : [];
+  return ((prompts.find((p) => p.prompt === prompt) ?? prompts[index])?.response ?? "").trim();
+}
+
+function JourneySummary({ entries }: { entries: any[] }) {
+  const statement = entries.find((e) => e.session === "grounding_statement");
+  const statementAnswers: { prompt: string; response: string }[] = Array.isArray(statement?.prompts) ? statement.prompts : [];
+  const rows: { label: string; value: string }[] = [
+    { label: "Your gentle intention", value: answerTo(entries, 1, "intention", "", 0) },
+    { label: "Day 1 — where you gave your attention", value: answerTo(entries, 1, "morning", MORNING_PROMPTS[1][0], 0) },
+    { label: "Day 2 — what truly matters", value: answerTo(entries, 2, "morning", MORNING_PROMPTS[2][0], 0) },
+    { label: "Day 3 — the value you carried", value: answerTo(entries, 3, "morning", MORNING_PROMPTS[3][0], 0) },
+    { label: "What you're ready to release", value: answerTo(entries, 2, "evening", EVENING_PROMPTS[2][1], 1) },
+    { label: "What you'll keep nurturing", value: answerTo(entries, 3, "grounding_statement", GROUNDING_STATEMENT_PROMPTS[1], 1) },
+  ].filter((r) => r.value);
+  if (rows.length === 0 && !statement) return null;
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm text-left space-y-4" data-testid="card-journey-summary">
+      <p className="text-sm font-semibold text-foreground">Your three days</p>
+      {rows.map((r) => (
+        <div key={r.label} className="space-y-0.5">
+          <p className="text-xs text-muted-foreground font-medium">{r.label}</p>
+          <p className="text-sm text-foreground leading-relaxed">{r.value}</p>
+        </div>
+      ))}
+      {statementAnswers.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground font-medium">Your Grounding Statement</p>
+          {statementAnswers.map((p, i) => (
+            <p key={i} className="text-sm text-foreground leading-relaxed">{p.response}</p>
+          ))}
+        </div>
+      )}
+      {statement?.possibleFirstSeed && (
+        <div className="bg-primary/5 rounded-xl p-3 border border-primary/20">
+          <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your first seed</p>
+          <p className="text-sm font-medium text-foreground">{statement.possibleFirstSeed}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "Plant this as my first goal" — opens Jai's guided goal setup in Chat with
+// a goal suggested from these three days. Hidden once they have a goal.
+function PlantGoalCard({ onPlant, busy }: { onPlant: () => void; busy: boolean }) {
+  return (
+    <div className="rounded-2xl p-5 border border-primary/25 bg-primary/5 text-left space-y-3" data-testid="card-plant-goal">
+      <div className="flex items-start gap-3">
+        <img src={JaeAvatar} className="w-9 h-9 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
+        <p className="text-sm text-foreground leading-relaxed">
+          What you named here can become your first goal. That's what your water, your seed, and our check-ins grow from. Want me to walk you through it? One question at a time.
+        </p>
+      </div>
+      <Button className="w-full rounded-xl h-12" onClick={onPlant} disabled={busy} data-testid="button-plant-goal">
+        {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+        Plant this as my first goal
+      </Button>
+    </div>
+  );
+}
+
 function RebuildFunnelCard({ started, onClick }: { started: boolean; onClick: () => void }) {
   return (
     <div className="bg-[#1a3a2a] rounded-2xl p-5 text-left space-y-3">
@@ -190,6 +256,14 @@ export default function GroundingJournal() {
     enabled: !!userId && !!journalData?.completed,
   });
   const rebuildStarted = (rebuildData?.instances ?? []).some((i: any) => i.status !== "locked");
+
+  const { data: activeGoals } = useQuery({
+    queryKey: ["goals", userId],
+    queryFn: () => api.getActiveGoals(userId!),
+    enabled: !!userId,
+  });
+  const hasGoal = (activeGoals ?? []).some((g: any) => g.status === "active" || g.isActive === 1);
+  const [planting, setPlanting] = useState(false);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -475,6 +549,18 @@ export default function GroundingJournal() {
     setLocation("/home");
   };
 
+  const handlePlantGoal = async () => {
+    if (!userId || planting) return;
+    setPlanting(true);
+    try {
+      await markComplete().catch(() => {});
+      await api.startGoalSetup(userId, "journal");
+    } catch {
+      // Chat will still offer it on open.
+    }
+    setLocation("/chat");
+  };
+
   const handleGoToRebuild = async () => {
     await markComplete().catch(() => {});
     setLocation("/rebuild");
@@ -581,6 +667,8 @@ export default function GroundingJournal() {
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">Journal complete. Jai carries this forward with you.</p>
           </div>
+
+          {!hasGoal && <PlantGoalCard onPlant={handlePlantGoal} busy={planting} />}
 
           <RebuildFunnelCard started={rebuildStarted} onClick={() => setLocation("/rebuild")} />
         </div>
@@ -1195,12 +1283,9 @@ export default function GroundingJournal() {
                     Three days of pausing, noticing, and choosing what matters. That's rebuilding.
                   </p>
                 </div>
-                <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm text-left space-y-2">
-                  <p className="text-sm font-semibold text-foreground">What's next</p>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Your reflections are saved to your Mustard Seed account. Jai will carry this context into your ongoing journey — your first seed is already forming. Up next: the 7-Day Rebuild, where you'll turn this into an Actionable Goal Plan.
-                  </p>
-                </div>
+                <JourneySummary entries={journalData?.entries ?? []} />
+
+                {!hasGoal && <PlantGoalCard onPlant={handlePlantGoal} busy={planting} />}
 
                 <RebuildFunnelCard started={rebuildStarted} onClick={handleGoToRebuild} />
 

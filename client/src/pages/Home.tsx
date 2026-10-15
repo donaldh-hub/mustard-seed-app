@@ -480,24 +480,23 @@ export default function Home() {
                 )}
               </>
             ) : (
-              rebuild?.hasCompletedRebuild ? (
-                <p className="text-sm text-muted-foreground italic" data-testid="text-no-goal">No active goal yet</p>
-              ) : (
-                // Planting a goal is the first move of the 7-Day Rebuild; the
-                // Journal is the free on-ramp before it.
-                <p className="text-sm text-muted-foreground" data-testid="text-no-goal">
-                  Your goal gets planted in the 7-Day Rebuild. That's where your water fills cups and your seed starts to grow.
-                </p>
-              )
+              // No goal yet: Jai walks them into one (server/goalSetup.ts).
+              <p className="text-sm text-muted-foreground" data-testid="text-no-goal">
+                No active goal yet. Your water, your seed, and Jai's check-ins all grow from one. Jai can help you plant it in a couple of minutes.
+              </p>
             )}
             <Button
-              onClick={() => setLocation(goal ? "/chat" : rebuild?.hasCompletedRebuild ? "/progress" : "/rebuild")}
+              onClick={async () => {
+                if (goal) return setLocation("/chat");
+                if (userId) await api.startGoalSetup(userId, "chat").catch(() => {});
+                setLocation("/chat");
+              }}
               variant="outline"
               className="mt-3 w-full rounded-full"
               size="sm"
               data-testid="button-refine-goal"
             >
-              {goal ? "Refine Goal" : rebuild?.hasCompletedRebuild ? "Plant a Goal" : "See the 7-Day Rebuild"}
+              {goal ? "Refine Goal" : "Plant my first goal with Jai"}
             </Button>
           </motion.div>
 

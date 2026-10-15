@@ -165,7 +165,7 @@ export const DAY7_STAGES: Day7Stage[] = [
   {
     stageNumber: 1,
     heartbeat: "Clarity of Vision & Why",
-    title: "Stage 1 — Clarity",
+    title: "Stage 1 — Clarity of Vision & Why",
     question: "Your why from Day 1 was: {day1Why}. Does that still feel true, or has it sharpened this week?",
     memoryField: "finalWhy",
     priorMemoryRef: "whyStatement",
@@ -173,7 +173,7 @@ export const DAY7_STAGES: Day7Stage[] = [
   {
     stageNumber: 2,
     heartbeat: "Small Steps + Consistency",
-    title: "Stage 2 — Small Steps",
+    title: "Stage 2 — Small Steps + Consistency",
     question: "Your non-negotiable minimum from Day 2 was: {day2Min}. Is that still the right floor — or do you want to refine it?",
     memoryField: "ongoingSmallStep",
     priorMemoryRef: "nonNegotiableMinimum",
@@ -181,7 +181,7 @@ export const DAY7_STAGES: Day7Stage[] = [
   {
     stageNumber: 3,
     heartbeat: "Mindset over Method",
-    title: "Stage 3 — Mindset",
+    title: "Stage 3 — Mindset over Method",
     question: "The belief you said needed to change was: {day3Reframe}. What does that shift look like as a plan — not a hope, but a practice?",
     memoryField: "mindsetPlan",
     priorMemoryRef: "reframedTruth",
@@ -189,7 +189,7 @@ export const DAY7_STAGES: Day7Stage[] = [
   {
     stageNumber: 4,
     heartbeat: "Feedback & Adaptation",
-    title: "Stage 4 — Feedback Loop",
+    title: "Stage 4 — Feedback & Adaptation",
     question: "The adjustment you committed to on Day 4 was: {day4Adjustment}. How will you know when it's working — what will you track or review, and how often?",
     memoryField: "feedbackLoop",
     priorMemoryRef: "chosenAdjustment",

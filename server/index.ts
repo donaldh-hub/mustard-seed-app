@@ -13,7 +13,8 @@ async function ensureSchema() {
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS last_daily_encouragement_sent_at TIMESTAMP,
         ADD COLUMN IF NOT EXISTS last_weekly_summary_chat_at TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+        ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
+        ADD COLUMN IF NOT EXISTS goal_setup JSONB;
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS grounding_journal_entries (

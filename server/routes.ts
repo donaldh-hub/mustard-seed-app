@@ -7,6 +7,9 @@ import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection, generateFollowUpAck } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
+import { plantGoal } from "./goalPlanting";
+import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
+import { buildOpeningLine } from "./chatOpening";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
 import { classifySupportInquiry, generateWeeklyStuckReport } from "./supportAgent";
 import { recordAndDunFailedPayment, recordPaymentRecovered, recordCancellationRequested, recordSubscriptionStarted, runReconciliation, generateBillingReport } from "./billingAgent";
@@ -72,6 +75,25 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction) {
     return res.status(403).json({ message: "Forbidden" });
   }
   return next();
+}
+
+// Pleasantries and acknowledgments: not reflections, never saved or shown
+// as "Reflection saved".
+const CASUAL_CHAT = /^(ok(ay)?|k|thanks?|thank (you|u)|thx|ty|cool|got it|sounds good|great|nice|awesome|perfect|lol|haha|yes|yeah|yep|no|nope|sure|alright|bye|good ?night|hi|hey|hello|appreciate (it|you)|will do)\b[\s\w,]{0,30}$/i;
+function isCasualChat(text: string): boolean {
+  const t = text.trim().replace(/[!.?,🙏😊👍❤️]+/gu, "").trim();
+  const words = t.split(/\s+/).length;
+  return t.length < 20
+    || (CASUAL_CHAT.test(t) && words <= 7)
+    // Thank-yous are thank-yous, even long ones ("thanks so much for helping me with all of this").
+    || (/^(thanks?|thank (you|u)|thx|ty|appreciate)\b/i.test(t) && words <= 12);
+}
+
+// One line describing a photo memory, from its stored vision analysis.
+function photoSummary(p: { analysisJson?: unknown; tags?: unknown }): string {
+  const a = (p.analysisJson ?? {}) as { labels?: string[]; action_type?: string };
+  const labels = Array.isArray(a.labels) ? a.labels.slice(0, 4).join(", ") : "";
+  return [a.action_type?.replace(/_/g, " "), labels].filter(Boolean).join(": ") || "photo check-in";
 }
 
 function todayStr(): string {
@@ -278,6 +300,10 @@ const DAILY_ENCOURAGEMENTS = [
   "You've shown up before. You can show up again today.",
 ];
 
+// Jai's daily opening in Chat (at most once per 20h). With an active goal
+// it's the latest step from Memory, asked about; with no goal, nothing here —
+// the guided goal offer opens instead. DAILY_ENCOURAGEMENTS is only the
+// fallback if the opening can't be built.
 async function maybeInjectDailyEncouragement(userId: string): Promise<void> {
   const user = await storage.getUser(userId);
   if (!user || user.notifyDailyEncouragement === false) return;
@@ -285,9 +311,24 @@ async function maybeInjectDailyEncouragement(userId: string): Promise<void> {
   const lastSent = (user as any).lastDailyEncouragementSentAt;
   if (lastSent && Date.now() - new Date(lastSent).getTime() < 20 * 3600000) return;
 
-  const idx = new Date().getDay() % DAILY_ENCOURAGEMENTS.length;
-  await storage.createMessage({ userId, text: DAILY_ENCOURAGEMENTS[idx], sender: "jae" });
+  const goals = await storage.getActiveGoals(userId);
+  if (goals.length === 0) return;
+  const opening = await buildOpeningLine(userId).catch(() => null);
+  const text = opening ?? DAILY_ENCOURAGEMENTS[new Date().getDay() % DAILY_ENCOURAGEMENTS.length];
+  await storage.createMessage({ userId, text, sender: "jae" });
   await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
+}
+
+// A user with no active goal gets Jai's goal offer when they open Chat — at
+// most once per login session (re-offered after 12h in a long session).
+const GOAL_OFFER_SESSION_GAP_MS = 12 * 3600000;
+async function maybeOfferGoalSetup(req: Request, userId: string): Promise<void> {
+  const session = req.session as any;
+  const last = session?.goalOfferAt ? Number(session.goalOfferAt) : 0;
+  if (last && Date.now() - last < GOAL_OFFER_SESSION_GAP_MS) return;
+  if (!(await shouldOfferGoalSetup(userId))) return;
+  if (session) session.goalOfferAt = Date.now();
+  await startGoalSetup(userId, "chat");
 }
 
 async function maybeInjectWeeklySummaryToChat(userId: string): Promise<void> {
@@ -577,8 +618,25 @@ export async function registerRoutes(
       maybeInjectWeeklySummaryToChat(userId),
       maybeInjectRetentionNudge(userId),
     ]);
+    await maybeOfferGoalSetup(req, userId).catch((err) => console.error("[GOAL_SETUP] offer error:", err));
     const msgs = await storage.getMessages(userId);
     return res.json(msgs);
+  });
+
+  // "Plant this as my first goal" (journal completion) — opens Jai's guided
+  // setup in Chat with a goal suggested from their Memory.
+  app.post("/api/users/:userId/goal-setup/start", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      if ((await storage.getActiveGoals(userId)).length > 0) return res.json({ started: false, reason: "has_goal" });
+      const source = req.body?.source === "journal" ? "journal" : "chat";
+      const message = await startGoalSetup(userId, source);
+      (req.session as any).goalOfferAt = Date.now();
+      return res.json({ started: true, message });
+    } catch (err) {
+      console.error("[GOAL_SETUP] start error:", err);
+      return res.status(500).json({ message: "Couldn't start goal setup." });
+    }
   });
 
   app.post("/api/users/:userId/messages", async (req, res) => {
@@ -606,6 +664,13 @@ export async function registerRoutes(
       if (safetyResult.triggered && safetyResult.responseText) {
         const safeMsg = await storage.createMessage({ userId, text: safetyResult.responseText, sender: "jae" });
         return res.json({ userMessage: userMsg, jaeMessage: safeMsg, safetyTriggered: true });
+      }
+
+      // ─── Guided goal setup — while it's open, Jai's first priority ───
+      const setupReply = await handleGoalSetupTurn(userId, rawText, { localDate: clientLocalDate, userTimezone: clientTimezone });
+      if (setupReply) {
+        const setupMsg = await storage.createMessage({ userId, text: setupReply.text, sender: "jae", messageType: setupReply.messageType });
+        return res.json({ userMessage: userMsg, jaeMessage: setupMsg, ...(setupReply.plantedGoalId ? { goalPlanted: true } : {}) });
       }
 
       const name = user.name || "";
@@ -658,37 +723,14 @@ export async function registerRoutes(
               return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
             }
 
-            await storage.createGoal({
-              userId,
-              title: pendingGoalText,
-              goalType: chosenType,
-              status: "active",
-              emotionalWhy: "",
-              focusArea: "",
-              metricType: "actions",
-              deadline: null,
-              baselineMetric: null,
-              targetMetric: null,
-              percentComplete: 0,
-              microHabit: "",
-              weeklyTarget: 3,
-              streakCount: 0,
-              momentumScore: 0,
-              consistencyRate: 0,
-              treeGrowthScore: 0,
-              isActive: 1,
+            const planted = await plantGoal(userId, {
+              goalType: chosenType, title: pendingGoalText,
+              localDate: clientLocalDate || todayStr(), userTimezone: clientTimezone,
             });
-
-            const clarGoalIndex = chosenType === "targeted" ? 0 : 1;
-            const clarUser = await storage.getUser(userId);
-            if (clarUser) {
-              const clarGoals = [...(clarUser.goals || [])];
-              while (clarGoals.length <= clarGoalIndex) clarGoals.push("");
-              clarGoals[clarGoalIndex] = pendingGoalText;
-              await storage.updateUser(userId, { goals: clarGoals });
+            if (!planted.ok) {
+              const jaeMsg = await storage.createMessage({ userId, text: `${greeting}${planted.message}`, sender: "jae" });
+              return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
             }
-
-            await storage.createEntry({ userId, date: clientLocalDate || todayStr(), summary: `Goal planted: ${pendingGoalText}`, mood: "neutral", ...(clientTimezone ? { userTimezone: clientTimezone } : {}) });
 
             const typeLabel = chosenType === "targeted" ? "Targeted Goal" : "Identity Goal";
             jaeText = `${greeting}${typeLabel} planted: "${pendingGoalText}".\n\nYour goal has been planted. Check the Growth tab to see your seed. Every action you take from here adds water and helps it grow.`;
@@ -1173,43 +1215,14 @@ export async function registerRoutes(
           }
         }
 
-        const newGoal = await storage.createGoal({
-          userId,
-          title: goalText,
-          goalType,
-          status: "active",
-          emotionalWhy: "",
-          focusArea: "",
-          metricType: "actions",
-          deadline,
-          baselineMetric,
-          targetMetric,
-          percentComplete: 0,
-          microHabit: "",
-          weeklyTarget: 3,
-          streakCount: 0,
-          momentumScore: 0,
-          consistencyRate: 0,
-          treeGrowthScore: 0,
-          isActive: 1,
+        const planted = await plantGoal(userId, {
+          goalType, title: goalText, deadline, baselineMetric, targetMetric,
+          localDate: clientLocalDate || todayStr(), userTimezone: clientTimezone,
         });
-
-        const goalIndex = goalType === "targeted" ? 0 : 1;
-        const currentUser = await storage.getUser(userId);
-        if (currentUser) {
-          const updatedGoals = [...(currentUser.goals || [])];
-          while (updatedGoals.length <= goalIndex) updatedGoals.push("");
-          updatedGoals[goalIndex] = goalText;
-          await storage.updateUser(userId, { goals: updatedGoals });
+        if (!planted.ok) {
+          const jaeMsg = await storage.createMessage({ userId, text: `${greeting}${planted.message}`, sender: "jae" });
+          return res.json({ userMessage: userMsg, jaeMessage: jaeMsg });
         }
-
-        await storage.createEntry({
-          userId,
-          date: clientLocalDate || todayStr(),
-          summary: `Goal planted: ${goalText}`,
-          mood: "neutral",
-          ...(clientTimezone ? { userTimezone: clientTimezone } : {}),
-        });
 
         const typeLabel = goalType === "targeted" ? "Targeted Goal" : "Identity Goal";
         const confirmLines: string[] = [`${greeting}${typeLabel} planted: "${goalText}".`];
@@ -1434,6 +1447,31 @@ export async function registerRoutes(
           .slice(0, 3)
           .map(c => ({ action: c.action, resolvedAt: c.resolvedAt }));
 
+        // The 8 newest Memory records of any kind — journal sessions (their
+        // own words), Memory Bank entries, and photos — so Jai never asks
+        // about something they already reported.
+        const recentMemory = [
+          ...journalEntries.filter((e: any) => e.session !== "intention").map((e: any) => {
+            const answers = ((e.prompts as { response: string }[]) ?? []).map((p) => p.response).filter(Boolean).join(" / ");
+            const label = e.session === "grounding_statement" ? "Grounding Statement" : `Day ${e.dayNumber} ${e.session}`;
+            return {
+              at: new Date(e.createdAt ?? 0).getTime(),
+              line: `Grounding Journal ${label}: ${answers}${e.userFollowUpResponse ? ` / follow-up: ${e.userFollowUpResponse}` : ""}${e.nextStep ? ` / step Jai set: ${e.nextStep}` : ""}${e.possibleFirstSeed ? ` / first seed: ${e.possibleFirstSeed}` : ""}`,
+            };
+          }),
+          ...allEntries.filter((e: any) => e.summary && !String(e.summary).startsWith("Grounding Journal —")).map((e: any) => ({
+            at: new Date(e.createdAt ?? 0).getTime(),
+            line: `Memory (${e.date}): ${e.summary}`,
+          })),
+          ...recentPhotoMemories.map((p: any) => ({
+            at: new Date(p.createdAt ?? 0).getTime(),
+            line: `Photo (${p.dateKey}): ${photoSummary(p)}`,
+          })),
+        ]
+          .sort((a, b) => b.at - a.at)
+          .slice(0, 8)
+          .map((r) => r.line.slice(0, 300));
+
         // Build the 6–8 record continuity context
         const continuityCtx = buildContinuityContext({
           recentCommitments: recentCommitments.map(c => ({
@@ -1450,11 +1488,13 @@ export async function registerRoutes(
             createdAt: e.createdAt,
             goalId: e.goalId,
           })),
+          // photo_memories stores analysis_json + water_awarded; a photo that
+          // earned water was a goal-aligned action.
           recentPhotoMemories: recentPhotoMemories.slice(0, 5).map((p: any) => ({
-            analysisResult: p.analysisResult,
+            analysisResult: photoSummary(p),
             dateKey: p.dateKey,
             createdAt: p.createdAt,
-            isGoalAligned: p.isGoalAligned,
+            isGoalAligned: (p.waterAwarded ?? 0) > 0,
           })),
           latestWeeklyReview: latestWeeklyReview ? {
             weekSummary: (latestWeeklyReview as any).weekSummary || (latestWeeklyReview as any).summary || null,
@@ -1506,10 +1546,24 @@ export async function registerRoutes(
             ? ((latestWeeklyReview as any).recommendedFocus || undefined)
             : undefined,
           groundingJournalInsights: journalInsights,
+          recentMemory,
         });
 
         if (depthResult.text) {
           jaeText = depthResult.text;
+          // A brainstorm ends with one step on its own line ("Your step: …").
+          // Save it to Memory so the next check-in can ask about it.
+          const brainstormStep = jaeText.match(/^Your step:\s*(.+)$/m)?.[1]?.trim();
+          if (brainstormStep) {
+            await storage.createEntry({
+              userId,
+              goalId: targetedGoal?.id ?? untargetedGoal?.id ?? null,
+              date: clientLocalDate || todayStr(),
+              summary: `Step from a brainstorm with Jai: ${brainstormStep}`.slice(0, 200),
+              mood: "neutral",
+              ...(clientTimezone ? { userTimezone: clientTimezone } : {}),
+            }).catch((err) => console.error("[CHAT] brainstorm step save error:", err));
+          }
         } else {
           const result = generateJaeResponse(rawText, {
             name,
@@ -1589,6 +1643,7 @@ export async function registerRoutes(
       // increments and the reward engine processes it correctly.
       // Reward logic itself is NOT changed — this only affects the input label.
       let goalAwareOverrideApplied = false;
+      let reflectionSaved = false;
       if (entryQualification === "reflectionEntry") {
         const overrideGoal = targetedGoal || untargetedGoal;
         if (overrideGoal?.targetMetric && overrideGoal.targetMetric > 0) {
@@ -1863,7 +1918,9 @@ export async function registerRoutes(
           }
         }
         // Reflection Memory: store neutral entry for substantive RW/IO content
-        if (entryQualification === "reflectionEntry" && rawText.length >= 20) {
+        // — never pleasantries ("thanks", "ok cool"). No water either way.
+        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText)) {
+          reflectionSaved = true;
           await storage.createEntry({
             userId,
             goalId: null,
@@ -2088,6 +2145,7 @@ export async function registerRoutes(
           };
         })() : null,
         entryQualification,
+        reflectionSaved,
         goalCompleted,
       });
     } catch (err) {
@@ -2413,66 +2471,27 @@ export async function registerRoutes(
         return res.status(400).json({ message: "goalType must be 'targeted' or 'untargeted'" });
       }
 
-      const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      const activeGoals = await storage.getActiveGoals(userId);
-      const existingOfType = activeGoals.find((g) => g.goalType === goalType);
-
-      if (existingOfType) {
-        const msg = goalType === "targeted"
-          ? "You already have an active targeted goal. Complete or archive it before starting another."
-          : "Focus builds growth. Complete or archive your current identity goal before adding another.";
-        return res.status(409).json({ message: msg });
-      }
-
-      const limits = getFeatureLimits(user);
-      if (activeGoals.length >= limits.maxGoals) {
-        return res.status(403).json({
-          message: "Upgrade to Premium to plant a second goal.",
-          upgradeRequired: true,
-          feature: "dual_goals",
+      const planted = await plantGoal(userId, {
+        goalType,
+        title: req.body.title || "",
+        emotionalWhy: req.body.emotionalWhy,
+        focusArea: req.body.focusArea,
+        metricType: req.body.metricType,
+        deadline: req.body.deadline,
+        baselineMetric: req.body.baselineMetric,
+        targetMetric: req.body.targetMetric,
+        microHabit: req.body.microHabit,
+        weeklyTarget: req.body.weeklyTarget,
+        localDate: req.body?.localDate,
+        userTimezone: req.body?.userTimezone,
+      });
+      if (!planted.ok) {
+        return res.status(planted.status).json({
+          message: planted.message,
+          ...(planted.upgradeRequired ? { upgradeRequired: true, feature: "dual_goals" } : {}),
         });
       }
-
-      const data = {
-        userId,
-        title: req.body.title || "",
-        goalType,
-        status: "active" as const,
-        emotionalWhy: req.body.emotionalWhy || "",
-        focusArea: req.body.focusArea || "",
-        metricType: req.body.metricType || "actions",
-        deadline: req.body.deadline || null,
-        baselineMetric: req.body.baselineMetric ?? null,
-        targetMetric: req.body.targetMetric ?? null,
-        percentComplete: 0,
-        microHabit: req.body.microHabit || "",
-        weeklyTarget: req.body.weeklyTarget ?? 3,
-        streakCount: 0,
-        momentumScore: 0,
-        consistencyRate: 0,
-        treeGrowthScore: 0,
-        isActive: 1,
-      };
-
-      const goal = await storage.createGoal(data);
-
-      const apiGoalIndex = goalType === "targeted" ? 0 : 1;
-      const apiGoals = [...(user.goals || [])];
-      while (apiGoals.length <= apiGoalIndex) apiGoals.push("");
-      apiGoals[apiGoalIndex] = data.title;
-      await storage.updateUser(userId, { goals: apiGoals });
-
-      const goalLocalDate = (req.body?.localDate as string | undefined) || new Date().toLocaleDateString("en-CA");
-      await storage.createEntry({
-        userId,
-        date: goalLocalDate,
-        summary: `Goal planted: ${data.title}`,
-        mood: "neutral",
-        ...(req.body?.userTimezone ? { userTimezone: req.body.userTimezone } : {}),
-      });
-
+      const goal = planted.goal;
       return res.json(goal);
     } catch (err) {
       console.error(err);
