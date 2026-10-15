@@ -13,6 +13,7 @@ import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Sparkles }
 import { SyncedVideoPlayer } from "@/components/SyncedVideoPlayer";
 import { JOURNAL_VIDEOS, JOURNAL_AUDIO_SYNC } from "@/content/journalContent";
 import { JournalSafetyPanel, isSafetyResolved } from "@/components/JournalSafetyPanel";
+import { JournalPhotoProof } from "@/components/JournalPhotoProof";
 import type { SafetyMessage } from "@/lib/api";
 
 // Matches STEP_CHECK_PREFIX in server/jaeJournal.ts: the morning's answer
@@ -1047,6 +1048,15 @@ export default function GroundingJournal() {
                       thread={fuSafety.thread}
                       avatar={JaeAvatar}
                       onUpdate={(next) => setFollowUpSafety((prev) => ({ ...prev, [stepId]: { ...fuSafety, thread: next.safetyThread } }))}
+                    />
+                  )}
+
+                  {jae?.photoInvite && !jae?.reflectionIsSafety && userId && (
+                    <JournalPhotoProof
+                      userId={userId}
+                      invite={jae.photoInvite}
+                      caption={`Grounding Journal Day ${day} ${isLastStepOfDay ? "evening" : "morning"} — proof of my step`}
+                      avatar={JaeAvatar}
                     />
                   )}
 
