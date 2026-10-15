@@ -12,6 +12,15 @@ import { getLocalDateStr } from "@/lib/dateUtils";
 import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Sparkles } from "lucide-react";
 import { SyncedVideoPlayer } from "@/components/SyncedVideoPlayer";
 import { JOURNAL_VIDEOS, JOURNAL_AUDIO_SYNC } from "@/content/journalContent";
+import { JournalSafetyPanel, isSafetyResolved } from "@/components/JournalSafetyPanel";
+import type { SafetyMessage } from "@/lib/api";
+
+// Matches STEP_CHECK_PREFIX in server/jaeJournal.ts: the morning's answer
+// about last night's step is sent as one extra prompt starting with this.
+const STEP_CHECK_PREFIX = "Last night's step:";
+const STEP_CHECK_CHOICES = ["Yes, I did it", "Partly", "Not yet"] as const;
+
+type SafetyState = { entryId: string; tier: "clear" | "check_in"; thread: SafetyMessage[] };
 
 // ── Journal content ──────────────────────────────────────────────────────────
 
@@ -200,6 +209,12 @@ export default function GroundingJournal() {
   // reply shows, the button moves the user on.
   const [followUpReplies, setFollowUpReplies] = useState<Record<string, string>>({});
   const [followUpReplying, setFollowUpReplying] = useState(false);
+  // Safety checks: on the opening intention, and on an optional follow-up
+  // answer (per Jai step). Session-level ones live on jaeData[step].safety.
+  const [introSafety, setIntroSafety] = useState<SafetyState | null>(null);
+  const [followUpSafety, setFollowUpSafety] = useState<Record<string, SafetyState>>({});
+  // Morning answer to "did you get to last night's step?", per morning step.
+  const [stepChecks, setStepChecks] = useState<Record<string, string>>({});
 
   const hasResumed = useRef(false);
 
@@ -223,7 +238,20 @@ export default function GroundingJournal() {
       } else if (entry.session === "morning" || entry.session === "evening") {
         stepKey = `day${entry.dayNumber}-${entry.session}`;
       } else {
-        return; // intention — no jae step
+        // intention — no jae step, but a safety check on it still needs its reply
+        const thread: SafetyMessage[] = Array.isArray(entry.safetyThread) ? entry.safetyThread : [];
+        if (entry.safetyTier && !isSafetyResolved(thread)) {
+          setIntroSafety({ entryId: entry.id, tier: entry.safetyTier, thread });
+        }
+        return;
+      }
+      const thread: SafetyMessage[] = Array.isArray(entry.safetyThread) ? entry.safetyThread : [];
+      // The safety response stood in for the reflection (session trigger) vs.
+      // came after it (follow-up answer trigger).
+      const reflectionIsSafety = !!entry.safetyTier && thread.length > 0 && entry.jaeReflection === thread[0].text;
+      if (entry.safetyTier && !reflectionIsSafety) {
+        const jaeStep = `${stepKey}-jae`;
+        setFollowUpSafety((prev) => ({ ...prev, [jaeStep]: { entryId: entry.id, tier: entry.safetyTier, thread } }));
       }
       restoredJae[stepKey] = {
         reflection: entry.jaeReflection,
@@ -232,6 +260,9 @@ export default function GroundingJournal() {
         valueNamed: entry.valueNamed,
         releasePoint: entry.releasePoint,
         possibleFirstSeed: entry.possibleFirstSeed,
+        nextStep: entry.nextStep ?? "",
+        entryId: entry.id,
+        ...(reflectionIsSafety ? { safety: { entryId: entry.id, tier: entry.safetyTier, thread }, reflectionIsSafety: true } : {}),
       };
     });
     setJaeData(restoredJae);
@@ -279,6 +310,31 @@ export default function GroundingJournal() {
     return "grounding_statement";
   };
 
+  // Last night's step, asked about at the top of the next morning.
+  const yesterdayStepFor = (id: string): string | null => {
+    const m = id.match(/^day(\d)-morning$/);
+    if (!m || m[1] === "1") return null;
+    const prevDay = parseInt(m[1]) - 1;
+    const fromState = jaeData[`day${prevDay}-evening`]?.nextStep;
+    const fromEntries = (journalData?.entries ?? []).find((e: any) => e.dayNumber === prevDay && e.session === "evening")?.nextStep;
+    return ((fromState || fromEntries || "") as string).trim() || null;
+  };
+
+  // A safety reply came back for a session-level check. If they made clear
+  // there's no risk, the session's normal reflection arrives with it.
+  const applySessionSafety = (sourceStep: string, next: { safetyThread: SafetyMessage[]; jae: any | null }) => {
+    setJaeData((prev) => {
+      const cur = prev[sourceStep] ?? {};
+      const safety = { ...cur.safety, thread: next.safetyThread };
+      return {
+        ...prev,
+        [sourceStep]: next.jae
+          ? { ...cur, ...next.jae, safety, reflectionIsSafety: false }
+          : { ...cur, safety },
+      };
+    });
+  };
+
   const stepHasVideo = (id: string) => !!JOURNAL_VIDEOS[id];
   const videoIsReady = (id: string) => videoAcknowledged.has(id);
 
@@ -288,11 +344,16 @@ export default function GroundingJournal() {
     if (!userId || !intention.trim() || saving) return;
     setSaving(true);
     try {
-      await api.submitJournalEntry(userId, {
+      const result = await api.submitJournalEntry(userId, {
         dayNumber: 1,
         session: "intention" as any,
         prompts: [{ prompt: "Before you begin — write one gentle intention:", response: intention.trim() }],
       });
+      if (result.safetyTriggered && result.safetyThread) {
+        // Jai answers first; "Begin Day 1" waits until he has.
+        setIntroSafety({ entryId: result.entry.id, tier: result.safetyTier!, thread: result.safetyThread });
+        return;
+      }
     } catch {
       // Non-fatal — persist failure doesn't block the user
     } finally {
@@ -312,13 +373,26 @@ export default function GroundingJournal() {
         prompt: p,
         response: responses[responseKey(p)] ?? "",
       }));
+      const lastStep = yesterdayStepFor(stepId);
+      if (lastStep && stepChecks[stepId]) {
+        prompts.push({ prompt: `${STEP_CHECK_PREFIX} ${lastStep} Did you get to it?`, response: stepChecks[stepId] });
+      }
 
       const isGrounding = stepId === "grounding-statement";
       const day = isGrounding ? 3 : dayOf(stepId as StepId);
       const session = isGrounding ? "grounding_statement" : sessionOf(stepId as StepId);
 
       const result = await api.submitJournalEntry(userId, { dayNumber: day, session, prompts, localDate: getLocalDateStr() });
-      setJaeData((prev) => ({ ...prev, [stepId]: result.jae }));
+      setJaeData((prev) => ({
+        ...prev,
+        [stepId]: {
+          ...result.jae,
+          entryId: result.entry.id,
+          ...(result.safetyTriggered && result.safetyThread
+            ? { safety: { entryId: result.entry.id, tier: result.safetyTier!, thread: result.safetyThread }, reflectionIsSafety: true }
+            : {}),
+        },
+      }));
       if (result.commitmentKept) {
         setKeptCommitments((prev) => ({ ...prev, [stepId]: result.commitmentKept!.plannedAt }));
       }
@@ -343,6 +417,13 @@ export default function GroundingJournal() {
 
   const handleSaveFollowUp = async () => {
     setFollowUpError(null);
+    if (followUpSafety[stepId]) {
+      // Safety check on the follow-up answer — Jai has answered the reply
+      // (the button is disabled until then), so this tap moves on.
+      setFollowUpText("");
+      advance();
+      return;
+    }
     // Jai already replied to this answer: this tap moves on.
     if (followUpReplies[stepId]) {
       setFollowUpText("");
@@ -356,7 +437,12 @@ export default function GroundingJournal() {
     }
     setFollowUpReplying(true);
     try {
-      const { reply } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim());
+      const { reply, safetyTriggered, safetyTier, safetyThread } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim());
+      if (safetyTriggered && safetyThread) {
+        // Jai checks in first; Continue waits for the user's reply and his answer.
+        setFollowUpSafety((prev) => ({ ...prev, [stepId]: { entryId: currentEntryId, tier: safetyTier!, thread: safetyThread } }));
+        return;
+      }
       if (reply) {
         // Show Jai's reply; the next tap on the button continues.
         setFollowUpReplies((prev) => ({ ...prev, [stepId]: reply }));
@@ -463,6 +549,13 @@ export default function GroundingJournal() {
                             <p className="text-sm font-medium text-foreground">{entry.possibleFirstSeed}</p>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {entry.session === "evening" && entry.nextStep && (
+                      <div className="rounded-xl px-4 py-3 bg-primary/5 border border-primary/15">
+                        <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Small step</p>
+                        <p className="text-sm text-foreground">{entry.nextStep}</p>
                       </div>
                     )}
 
@@ -693,13 +786,26 @@ export default function GroundingJournal() {
                     value={intention}
                     onChange={(e) => setIntention(e.target.value)}
                     className="resize-none rounded-xl min-h-[80px]"
+                    disabled={!!introSafety}
                   />
                 </div>
 
+                {introSafety && userId && (
+                  <JournalSafetyPanel
+                    userId={userId}
+                    entryId={introSafety.entryId}
+                    tier={introSafety.tier}
+                    thread={introSafety.thread}
+                    avatar={JaeAvatar}
+                    onUpdate={(next) => setIntroSafety((prev) => (prev ? { ...prev, thread: next.safetyThread } : prev))}
+                  />
+                )}
+
                 <Button
                   className="w-full rounded-xl h-12"
-                  disabled={!intention.trim() || saving}
-                  onClick={handleIntentionSubmit}
+                  disabled={introSafety ? !isSafetyResolved(introSafety.thread) : !intention.trim() || saving}
+                  onClick={introSafety ? advance : handleIntentionSubmit}
+                  data-testid="button-begin-day1"
                 >
                   {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Begin Day 1 — RESET
@@ -756,6 +862,32 @@ export default function GroundingJournal() {
                 {/* Prompts (shown after video or if no video) */}
                 {(!stepHasVideo(stepId) || videoIsReady(stepId)) && (
                   <>
+                    {yesterdayStepFor(stepId) && (
+                      <div className="bg-white rounded-2xl p-4 border border-border/40 shadow-sm space-y-3" data-testid="card-step-check">
+                        <div className="flex items-start gap-2">
+                          <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-primary uppercase tracking-wider">Last night's step</p>
+                            <p className="text-sm text-foreground leading-relaxed" data-testid="text-step-check">{yesterdayStepFor(stepId)}</p>
+                            <p className="text-sm text-muted-foreground">Did you get to it?</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {STEP_CHECK_CHOICES.map((choice) => (
+                            <button
+                              key={choice}
+                              onClick={() => setStepChecks((prev) => ({ ...prev, [stepId]: prev[stepId] === choice ? "" : choice }))}
+                              className={`h-10 rounded-xl border text-xs font-medium transition-colors ${
+                                stepChecks[stepId] === choice ? "bg-primary text-primary-foreground border-primary" : "bg-white text-foreground border-border hover:bg-muted/40"
+                              }`}
+                              data-testid="btn-step-check"
+                            >
+                              {choice}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-5">
                       {currentPrompts().map((prompt, i) => (
                         <div key={i} className="space-y-2">
@@ -807,6 +939,9 @@ export default function GroundingJournal() {
               const day = dayOf(sourceStep as StepId);
               const isLastStepOfDay = sourceStep.includes("evening");
               const isDay3Evening = sourceStep === "day3-evening";
+              const sessionSafety: SafetyState | undefined = jae?.safety;
+              const fuSafety = followUpSafety[stepId];
+              const safetyHolds = (sessionSafety && !isSafetyResolved(sessionSafety.thread)) || (fuSafety && !isSafetyResolved(fuSafety.thread));
 
               return (
                 <div className="space-y-6">
@@ -818,12 +953,25 @@ export default function GroundingJournal() {
                     </div>
                   </div>
 
+                  {sessionSafety && userId && (
+                    <JournalSafetyPanel
+                      userId={userId}
+                      entryId={sessionSafety.entryId}
+                      tier={sessionSafety.tier}
+                      thread={sessionSafety.thread}
+                      avatar={JaeAvatar}
+                      onUpdate={(next) => applySessionSafety(sourceStep, next)}
+                    />
+                  )}
+
+                  {!jae?.reflectionIsSafety && (
                   <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
                     <p className="text-sm text-foreground leading-relaxed">{jae?.reflection}</p>
                     {jae?.followUpQuestion && (
                       <p className="text-sm font-medium text-primary">{jae.followUpQuestion}</p>
                     )}
                   </div>
+                  )}
 
                   {isLastStepOfDay && jae?.keyTheme && (
                     <div className="bg-primary/5 rounded-xl px-4 py-3 border border-primary/15">
@@ -846,6 +994,7 @@ export default function GroundingJournal() {
                     </div>
                   )}
 
+                  {!jae?.reflectionIsSafety && (
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Your response (optional)</label>
                     <Textarea
@@ -853,10 +1002,11 @@ export default function GroundingJournal() {
                       value={followUpText}
                       onChange={(e) => setFollowUpText(e.target.value)}
                       className="resize-none rounded-xl min-h-[80px]"
-                      disabled={followUpReplying || !!followUpReplies[stepId]}
+                      disabled={followUpReplying || !!followUpReplies[stepId] || !!fuSafety}
                       data-testid="input-follow-up"
                     />
                   </div>
+                  )}
 
                   {followUpReplying && (
                     <div className="flex items-center gap-2" data-testid="follow-up-jai-typing">
@@ -885,7 +1035,26 @@ export default function GroundingJournal() {
                     </div>
                   )}
 
-                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying} data-testid="button-follow-up-continue">
+                  {fuSafety && userId && (
+                    <JournalSafetyPanel
+                      userId={userId}
+                      entryId={fuSafety.entryId}
+                      tier={fuSafety.tier}
+                      thread={fuSafety.thread}
+                      avatar={JaeAvatar}
+                      onUpdate={(next) => setFollowUpSafety((prev) => ({ ...prev, [stepId]: { ...fuSafety, thread: next.safetyThread } }))}
+                    />
+                  )}
+
+                  {isLastStepOfDay && jae?.nextStep && !jae?.reflectionIsSafety && (
+                    <div className="rounded-2xl p-4 bg-primary/5 border border-primary/20" data-testid="card-next-step">
+                      <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{isDay3Evening ? "Your next small step" : "Your small step for tomorrow"}</p>
+                      <p className="text-sm font-medium text-foreground leading-relaxed">{jae.nextStep}</p>
+                      {!isDay3Evening && <p className="text-xs text-muted-foreground mt-1">Jai will ask about it tomorrow morning.</p>}
+                    </div>
+                  )}
+
+                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying || !!safetyHolds} data-testid="button-follow-up-continue">
                     {isDay3Evening
                       ? "Continue to Final Reflection"
                       : isLastStepOfDay
@@ -902,6 +1071,9 @@ export default function GroundingJournal() {
             {/* ── GROUNDING STATEMENT JAE ── */}
             {stepId === "grounding-statement-jae" && (() => {
               const jae = jaeData["grounding-statement"];
+              const sessionSafety: SafetyState | undefined = jae?.safety;
+              const fuSafety = followUpSafety[stepId];
+              const safetyHolds = (sessionSafety && !isSafetyResolved(sessionSafety.thread)) || (fuSafety && !isSafetyResolved(fuSafety.thread));
               return (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
@@ -912,6 +1084,18 @@ export default function GroundingJournal() {
                     </div>
                   </div>
 
+                  {sessionSafety && userId && (
+                    <JournalSafetyPanel
+                      userId={userId}
+                      entryId={sessionSafety.entryId}
+                      tier={sessionSafety.tier}
+                      thread={sessionSafety.thread}
+                      avatar={JaeAvatar}
+                      onUpdate={(next) => applySessionSafety("grounding-statement", next)}
+                    />
+                  )}
+
+                  {!jae?.reflectionIsSafety && (
                   <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
                     <p className="text-sm text-foreground leading-relaxed">{jae?.reflection}</p>
                     {jae?.possibleFirstSeed && (
@@ -924,7 +1108,9 @@ export default function GroundingJournal() {
                       <p className="text-sm font-medium text-primary">{jae.followUpQuestion}</p>
                     )}
                   </div>
+                  )}
 
+                  {!jae?.reflectionIsSafety && (
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Your response (optional)</label>
                     <Textarea
@@ -932,9 +1118,10 @@ export default function GroundingJournal() {
                       value={followUpText}
                       onChange={(e) => setFollowUpText(e.target.value)}
                       className="resize-none rounded-xl min-h-[80px]"
-                      disabled={followUpReplying || !!followUpReplies[stepId]}
+                      disabled={followUpReplying || !!followUpReplies[stepId] || !!fuSafety}
                     />
                   </div>
+                  )}
 
                   {followUpReplying && (
                     <div className="flex items-center gap-2">
@@ -963,7 +1150,18 @@ export default function GroundingJournal() {
                     </div>
                   )}
 
-                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying}>
+                  {fuSafety && userId && (
+                    <JournalSafetyPanel
+                      userId={userId}
+                      entryId={fuSafety.entryId}
+                      tier={fuSafety.tier}
+                      thread={fuSafety.thread}
+                      avatar={JaeAvatar}
+                      onUpdate={(next) => setFollowUpSafety((prev) => ({ ...prev, [stepId]: { ...fuSafety, thread: next.safetyThread } }))}
+                    />
+                  )}
+
+                  <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying || !!safetyHolds}>
                     Continue to the Mustard Seed App
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>

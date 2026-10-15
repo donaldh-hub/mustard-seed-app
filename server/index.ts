@@ -60,7 +60,11 @@ async function ensureSchema() {
       ALTER TABLE grounding_journal_entries
         ADD COLUMN IF NOT EXISTS reflection_planned_at TIMESTAMP,
         ADD COLUMN IF NOT EXISTS focus_summary TEXT,
-        ADD COLUMN IF NOT EXISTS jae_follow_up_reply TEXT;
+        ADD COLUMN IF NOT EXISTS jae_follow_up_reply TEXT,
+        ADD COLUMN IF NOT EXISTS safety_tier TEXT,
+        ADD COLUMN IF NOT EXISTS safety_event_id VARCHAR,
+        ADD COLUMN IF NOT EXISTS safety_thread JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS next_step TEXT;
     `);
     // Login sessions (connect-pg-simple). Its own createTableIfMissing reads a
     // table.sql file that isn't in the production bundle, so a fresh database
@@ -72,6 +76,21 @@ async function ensureSchema() {
         expire TIMESTAMP(6) NOT NULL
       );
       CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON user_sessions (expire);
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS safety_events (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR NOT NULL,
+        category TEXT NOT NULL,
+        response_type TEXT NOT NULL DEFAULT 'primary',
+        triggering_message TEXT NOT NULL,
+        surface TEXT NOT NULL DEFAULT 'chat',
+        alert_sent BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP DEFAULT now()
+      );
+      ALTER TABLE safety_events
+        ADD COLUMN IF NOT EXISTS tier TEXT,
+        ADD COLUMN IF NOT EXISTS outcome TEXT;
     `);
     console.log("[schema] auto-migration complete");
   } catch (err) {
