@@ -39,6 +39,11 @@ export interface JournalJaeResponse {
   // Morning only: a short, clean paraphrase of what they'll focus on today,
   // shown back to them on the wait screen instead of their raw text.
   focusSummary: string;
+  // Jai's own pre-writing decisions (not stored): the question it detected
+  // and whether it saw a gap in the weakest Heartbeat. Printed by
+  // scripts/journal-jai-check.ts.
+  userQuestion?: string;
+  heartbeatGap?: boolean;
 }
 
 // ─── Jai check-in follow-up question bank ───────────────────────────────────
@@ -149,12 +154,19 @@ Rules:
 - If this is the grounding_statement session: help them identify a possible first seed — a single small action that could grow from what they've named.
 - If they ask a direct question or doubt the process (e.g. "how does this help me…?"), answer it first in one plain sentence that links this journal to their goal${ctx.weakestHeartbeat ? " and their weakest Heartbeat" : ""}, then reflect. Never ignore the question.
 - Read their goal carefully. Starting something new is not changing something that exists — never assume a name, plan, or result already exists unless they said so. If the goal is a task (e.g. "come up with a name"), gently frame it: the task is the what; this journal is about the why underneath it.
-${ctx.weakestHeartbeat ? `- When their words show a gap in ${ctx.weakestHeartbeat.name} (for example "I don't have any of that"), name it gently by that exact full name and link it to their goal, with grace and accountability and no shame. Example tone for a business-name goal with low Clarity of Vision & Why: "That's why the name won't come yet. A name follows clarity. Let's find what the business is for first." Only do this when their words actually point to it.
+${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of Vision & Why: not knowing what it's for, who it's for, or why ("I don't have any of that", "I'm not sure"). Small Steps + Consistency: skipping, stopping and starting, "again", all-or-nothing, waiting for a big push. Mindset over Method: hunting for the perfect method or tool, harsh self-talk. Feedback & Adaptation: repeating what didn't work, not adjusting. Courageous Action: avoiding, putting off the uncomfortable step, waiting until ready.
+- When their words show a gap in ${ctx.weakestHeartbeat.name} (for example "I don't have any of that"), name it gently by that exact full name and link it to their goal, with grace and accountability and no shame. Example tone for a business-name goal with low Clarity of Vision & Why: "That's why the name won't come yet. A name follows clarity. Let's find what the business is for first." Only do this when their words actually point to it.
 - Always write a Heartbeat's full name exactly (Clarity of Vision & Why, Small Steps + Consistency, Mindset over Method, Feedback & Adaptation, Courageous Action) — never shorten it.
 ` : ""}${eveningFollowUp}
 
+Before writing, decide two things and put them FIRST in your JSON:
+- "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.
+- "heartbeatGap": ${ctx.weakestHeartbeat ? `true if their words today show a gap in ${ctx.weakestHeartbeat.name} (see what a gap sounds like above), else false. If true, "reflection" must name ${ctx.weakestHeartbeat.name} by that exact full name and link it to their goal, gently.` : `always false.`}
+
 Respond ONLY with valid JSON in this exact shape:
 {
+  "userQuestion": "...",
+  "heartbeatGap": false,
   "reflection": "...",
   "followUpQuestion": "...",
   "keyTheme": "...",
@@ -186,6 +198,8 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       valueNamed: parsed.valueNamed ?? "",
       possibleFirstSeed: parsed.possibleFirstSeed ?? "",
       focusSummary: ctx.session === "morning" ? (parsed.focusSummary ?? "") : "",
+      userQuestion: typeof parsed.userQuestion === "string" ? parsed.userQuestion : "",
+      heartbeatGap: parsed.heartbeatGap === true,
     };
   } catch {
     return {

@@ -73,8 +73,8 @@ async function main() {
 
       const mPrompts = PROMPTS.morning.map((p, i) => ({ prompt: p, response: goal.morning[i] }));
       const m = await generateJournalReflection({ ...base, session: "morning", prompts: mPrompts, previousEntries: [intentionEntry] });
-      console.log(`\n— MORNING —\nJai: ${m.reflection}\nFollow-up: ${m.followUpQuestion}\nFocus card: ${m.focusSummary}`);
-      console.log(`  checks: ${copiesUser(m.reflection + " " + m.followUpQuestion + " " + m.focusSummary, goal.morning) ? "⚠ copies user text" : "paraphrases ✓"} | ${nameCheck(m.reflection + " " + m.followUpQuestion)}`);
+      console.log(`\n— MORNING —\n[Jai decided] question: ${m.userQuestion || "none"} · ${user.weakestHeartbeat.name} gap: ${m.heartbeatGap ? "yes" : "no"}\nJai: ${m.reflection}\nFollow-up: ${m.followUpQuestion}\nFocus card: ${m.focusSummary}`);
+      console.log(`  checks: ${copiesUser(m.reflection + " " + m.followUpQuestion + " " + m.focusSummary, goal.morning) ? "⚠ copies user text" : "paraphrases ✓"} | ${nameCheck(m.reflection + " " + m.followUpQuestion)}${m.heartbeatGap && !m.reflection.includes(user.weakestHeartbeat.name) ? " | ⚠ saw a gap but didn't name the Heartbeat" : ""}`);
 
       const ack = await generateFollowUpAck({ userName: "Donald", question: m.followUpQuestion, answer: goal.followUp, intention: goal.intention, weakestHeartbeat: user.weakestHeartbeat });
       console.log(`Your follow-up: ${goal.followUp}\nJai's reply: ${ack}`);
@@ -85,9 +85,9 @@ async function main() {
         ...base, session: "evening", prompts: ePrompts, todayMorningPrompts: mPrompts,
         previousEntries: [intentionEntry, { dayNumber: 1, session: "morning", keyTheme: m.keyTheme, valueNamed: m.valueNamed, releasePoint: m.releasePoint }],
       });
-      console.log(`\n— EVENING —\nJai: ${e.reflection}\nFollow-up: ${e.followUpQuestion}\nWhat Jai noticed: Theme=${e.keyTheme} · Value=${e.valueNamed} · Release=${e.releasePoint}`);
+      console.log(`\n— EVENING —\n[Jai decided] question: ${e.userQuestion || "none"} · ${user.weakestHeartbeat.name} gap: ${e.heartbeatGap ? "yes" : "no"}\nJai: ${e.reflection}\nFollow-up: ${e.followUpQuestion}\nWhat Jai noticed: Theme=${e.keyTheme} · Value=${e.valueNamed} · Release=${e.releasePoint}`);
       const asked = goal.evening.some((t) => t.includes("?"));
-      console.log(`  checks: ${copiesUser(e.reflection + " " + e.followUpQuestion, goal.evening) ? "⚠ copies user text" : "paraphrases ✓"} | ${nameCheck(e.reflection + " " + e.followUpQuestion)}${asked ? " | user asked a question: read the first sentence — does it answer it?" : ""}`);
+      console.log(`  checks: ${copiesUser(e.reflection + " " + e.followUpQuestion, goal.evening) ? "⚠ copies user text" : "paraphrases ✓"} | ${nameCheck(e.reflection + " " + e.followUpQuestion)}${asked ? ` | user asked a question → Jai ${e.userQuestion ? "caught it ✓ (first sentence should answer it)" : "⚠ missed it"}` : ""}${e.heartbeatGap && !e.reflection.includes(user.weakestHeartbeat.name) ? " | ⚠ saw a gap but didn't name the Heartbeat" : ""}`);
     }
   }
 }
