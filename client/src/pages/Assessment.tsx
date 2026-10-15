@@ -8,6 +8,15 @@ import { api } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UpgradePrompt } from "@/components/UpgradePrompt";
 
+// The Five Heartbeats' locked names — never shortened.
+const HEARTBEAT_LABELS: Record<string, string> = {
+  clarity: "Clarity of Vision & Why",
+  consistency: "Small Steps + Consistency",
+  mindset: "Mindset over Method",
+  adaptation: "Feedback & Adaptation",
+  courage: "Courageous Action",
+};
+
 const QUESTIONS = [
   "I have a clear picture of what I want to achieve right now.",
   "I take at least one small action daily toward my goals.",
@@ -123,7 +132,7 @@ export default function Assessment() {
 
           {result.weakestHeartbeat && (
             <p className="text-sm text-orange-600 font-medium" data-testid="text-weakest">
-              Focus Area: {result.weakestHeartbeat.charAt(0).toUpperCase() + result.weakestHeartbeat.slice(1)}
+              Focus Area: {HEARTBEAT_LABELS[result.weakestHeartbeat] ?? result.weakestHeartbeat}
             </p>
           )}
 

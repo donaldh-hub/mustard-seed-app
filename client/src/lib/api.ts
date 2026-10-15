@@ -158,8 +158,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ ...data, userTimezone: getUserTimezone() }),
     }),
+  // Saves the optional follow-up answer; `reply` is Jai's 1–2 sentence
+  // acknowledgment ("" when the answer was empty or the AI call failed).
   saveJournalFollowUp: (userId: string, entryId: string, followUpResponse: string) =>
-    fetchJson<any>(`/users/${userId}/grounding-journal/follow-up`, {
+    fetchJson<{ entry: any; reply: string }>(`/users/${userId}/grounding-journal/follow-up`, {
       method: "PATCH",
       body: JSON.stringify({ entryId, followUpResponse }),
     }),

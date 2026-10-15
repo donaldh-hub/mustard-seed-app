@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
-import { generateJournalReflection } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage } from "./trustSafety";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
@@ -3456,6 +3456,25 @@ export async function registerRoutes(
   // morning or at 9 PM local, whichever is first; the next day's morning opens
   // at 4 AM local the day after the previous evening. The browser sends its IANA time zone; fall back to the
   // user's stored one, then UTC.
+  // What Jai needs from outside the journal itself: the weakest Heartbeat from
+  // the user's latest assessment (full locked name) and their opening
+  // intention (their goal for the 3 days).
+  async function journalAssessmentContext(
+    userId: string,
+    entries: { session: string; prompts: unknown }[],
+  ): Promise<{ weakestHeartbeat: { name: string; score: number } | null; intention: string | null }> {
+    const assessment = await storage.getLatestAssessment(userId).catch(() => undefined);
+    const key = assessment?.weakestHeartbeat || "";
+    const name = (HEARTBEAT_NAMES as Record<string, string>)[key];
+    const score = (assessment?.heartbeatScores as Record<string, number> | undefined)?.[key];
+    const intentionEntry = entries.find((e) => e.session === "intention");
+    const intention = ((intentionEntry?.prompts as { response?: string }[] | undefined)?.[0]?.response ?? "").trim();
+    return {
+      weakestHeartbeat: name && typeof score === "number" ? { name, score } : null,
+      intention: intention || null,
+    };
+  }
+
   async function journalTimeZone(userId: string, sent: unknown): Promise<string> {
     if (isValidTimeZone(sent)) return sent;
     const user = await storage.getUser(userId);
@@ -3529,7 +3548,7 @@ export async function registerRoutes(
           userId, dayNumber, session, prompts,
           jaeReflection: safetyReflection, jaeFollowUpQuestion: null, userFollowUpResponse: null,
           keyTheme: null, releasePoint: null, valueNamed: null, possibleFirstSeed: null,
-          isComplete: true, reflectionPlannedAt: null,
+          isComplete: true, reflectionPlannedAt: null, focusSummary: null, jaeFollowUpReply: null,
         });
         return res.json({
           entry,
@@ -3569,6 +3588,8 @@ export async function registerRoutes(
           ? previousEntries.find((e) => e.dayNumber === dayNumber && e.session === "morning")
           : undefined;
 
+      const journalJaiContext = await journalAssessmentContext(userId, previousEntries);
+
       const jaeResponse = safetyReflection
         ? { reflection: safetyReflection, followUpQuestion: "", keyTheme: "", releasePoint: "", valueNamed: "", possibleFirstSeed: "" }
         : await generateJournalReflection({
@@ -3579,6 +3600,7 @@ export async function registerRoutes(
             prompts,
             previousEntries: prevSummary,
             todayMorningPrompts: todayMorningEntry?.prompts as { prompt: string; response: string }[] | undefined,
+            ...journalJaiContext,
           });
 
       const entry = await storage.createGroundingJournalEntry({
@@ -3595,6 +3617,8 @@ export async function registerRoutes(
         possibleFirstSeed: jaeResponse.possibleFirstSeed || null,
         isComplete: true,
         reflectionPlannedAt: null,
+        focusSummary: session === "morning" && !safetyReflection ? ((jaeResponse as any).focusSummary || null) : null,
+        jaeFollowUpReply: null,
       });
 
       // Mirror to the entries table so Calendar/Memory Bank shows journal
@@ -3682,8 +3706,23 @@ export async function registerRoutes(
       if (!entries.find((e) => e.id === entryId)) {
         return res.status(403).json({ message: "Forbidden" });
       }
-      const updated = await storage.updateGroundingJournalEntry(entryId, { userFollowUpResponse: followUpResponse });
-      return res.json({ entry: updated });
+      const entry = entries.find((e) => e.id === entryId)!;
+      const answer = (followUpResponse ?? "").trim();
+      let reply = "";
+      if (answer) {
+        const user = await storage.getUser(userId);
+        reply = await generateFollowUpAck({
+          userName: user?.name || "friend",
+          question: entry.jaeFollowUpQuestion ?? "",
+          answer,
+          ...(await journalAssessmentContext(userId, entries)),
+        });
+      }
+      const updated = await storage.updateGroundingJournalEntry(entryId, {
+        userFollowUpResponse: followUpResponse,
+        ...(reply ? { jaeFollowUpReply: reply } : {}),
+      } as any);
+      return res.json({ entry: updated, reply });
     } catch (err) {
       return res.status(500).json({ message: "Follow-up save error" });
     }

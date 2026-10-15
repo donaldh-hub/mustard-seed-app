@@ -86,6 +86,11 @@ export const groundingJournalEntries = pgTable("grounding_journal_entries", {
   isComplete: boolean("is_complete").notNull().default(false),
   // Morning entries only: when the user said they'd come back to reflect.
   reflectionPlannedAt: timestamp("reflection_planned_at"),
+  // Morning entries only: Jai's short paraphrase of today's focus (shown on
+  // the wait screen instead of the user's raw text).
+  focusSummary: text("focus_summary"),
+  // Jai's 1–2 sentence reply to the user's optional follow-up answer.
+  jaeFollowUpReply: text("jae_follow_up_reply"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

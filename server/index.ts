@@ -58,7 +58,9 @@ async function ensureSchema() {
     `);
     await pool.query(`
       ALTER TABLE grounding_journal_entries
-        ADD COLUMN IF NOT EXISTS reflection_planned_at TIMESTAMP;
+        ADD COLUMN IF NOT EXISTS reflection_planned_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS focus_summary TEXT,
+        ADD COLUMN IF NOT EXISTS jae_follow_up_reply TEXT;
     `);
     // Login sessions (connect-pg-simple). Its own createTableIfMissing reads a
     // table.sql file that isn't in the production bundle, so a fresh database
