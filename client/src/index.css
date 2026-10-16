@@ -92,3 +92,10 @@
 .chat-bubble-jae {
   @apply bg-white text-foreground rounded-bl-none mr-auto border border-border/50;
 }
+
+/* Five Heartbeats loop: arrows flow 1 → 2 → 3 → 4 → 5 → 1. */
+@keyframes hb-flow { to { stroke-dashoffset: -56; } }
+.hb-flow { animation: hb-flow 1.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .hb-flow { animation: none; }
+}

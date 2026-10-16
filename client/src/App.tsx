@@ -1,3 +1,4 @@
+import Heartbeats from "@/pages/Heartbeats";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -88,6 +89,7 @@ function Router() {
           <Route path="/weekly-review" component={WeeklyReview} />
           <Route path="/journal" component={GroundingJournal} />
           <Route path="/rebuild" component={SevenDayRebuild} />
+          <Route path="/heartbeats" component={Heartbeats} />
           <Route component={NotFound} />
         </Switch>
       </Layout>

@@ -8,6 +8,7 @@ import { generateJournalReflection, generateFollowUpAck } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
+import { HEARTBEAT_ORDER, heartbeatChatOpener } from "@shared/heartbeats";
 import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
 import { buildOpeningLine } from "./chatOpening";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
@@ -2287,6 +2288,40 @@ export async function registerRoutes(
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // "Talk with Jai about this heartbeat" (the Five Heartbeats loop): Jai opens
+  // the conversation with the Heartbeat and the user's saved scores, read here
+  // from their latest assessment — the user never types a score.
+  app.post("/api/users/:userId/heartbeat-chat", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const key = String(req.body?.heartbeat ?? "");
+      if (!(HEARTBEAT_ORDER as string[]).includes(key)) return res.status(400).json({ message: "Unknown heartbeat" });
+      const [user, assessment, messages] = await Promise.all([
+        storage.getUser(userId),
+        storage.getLatestAssessment(userId),
+        storage.getMessages(userId),
+      ]);
+      const text = heartbeatChatOpener(
+        key as HeartbeatKey,
+        (assessment?.heartbeatScores as Record<string, number> | undefined) ?? null,
+        assessment?.weakestHeartbeat ?? null,
+        (user?.name || "").trim().split(/\s+/)[0] || undefined,
+      );
+      // Opening the same Heartbeat twice in a row (a reload) doesn't repeat it.
+      const last = messages[messages.length - 1];
+      if (last?.sender === "jae" && last.text === text) return res.json({ message: last, repeated: true });
+      const message = await storage.createMessage({ userId, text, sender: "jae" });
+      // This is Jai's opener for the visit: no daily opener or goal offer on
+      // top of it when Chat loads.
+      (req.session as any).goalOfferAt = Date.now();
+      await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
+      return res.json({ message });
+    } catch (err) {
+      console.error("[HEARTBEATS] chat open error:", err);
+      return res.status(500).json({ message: "Couldn't open that conversation." });
     }
   });
 
