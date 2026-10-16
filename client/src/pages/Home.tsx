@@ -597,6 +597,14 @@ export default function Home() {
                     </div>
                   );
                 })}
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl min-h-11"
+                  onClick={() => setLocation("/heartbeats")}
+                  data-testid="button-open-heartbeats-loop"
+                >
+                  See how your Heartbeats feed each other
+                </Button>
               </div>
             )}
           </motion.div>

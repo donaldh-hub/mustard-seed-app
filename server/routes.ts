@@ -8,6 +8,7 @@ import { generateJournalReflection, generateFollowUpAck } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
+import { HEARTBEAT_ORDER, heartbeatChatOpener } from "@shared/heartbeats";
 import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
 import { buildOpeningLine } from "./chatOpening";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
@@ -2290,6 +2291,40 @@ export async function registerRoutes(
     }
   });
 
+  // "Talk with Jai about this heartbeat" (the Five Heartbeats loop): Jai opens
+  // the conversation with the Heartbeat and the user's saved scores, read here
+  // from their latest assessment — the user never types a score.
+  app.post("/api/users/:userId/heartbeat-chat", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const key = String(req.body?.heartbeat ?? "");
+      if (!(HEARTBEAT_ORDER as string[]).includes(key)) return res.status(400).json({ message: "Unknown heartbeat" });
+      const [user, assessment, messages] = await Promise.all([
+        storage.getUser(userId),
+        storage.getLatestAssessment(userId),
+        storage.getMessages(userId),
+      ]);
+      const text = heartbeatChatOpener(
+        key as HeartbeatKey,
+        (assessment?.heartbeatScores as Record<string, number> | undefined) ?? null,
+        assessment?.weakestHeartbeat ?? null,
+        (user?.name || "").trim().split(/\s+/)[0] || undefined,
+      );
+      // Opening the same Heartbeat twice in a row (a reload) doesn't repeat it.
+      const last = messages[messages.length - 1];
+      if (last?.sender === "jae" && last.text === text) return res.json({ message: last, repeated: true });
+      const message = await storage.createMessage({ userId, text, sender: "jae" });
+      // This is Jai's opener for the visit: no daily opener or goal offer on
+      // top of it when Chat loads.
+      (req.session as any).goalOfferAt = Date.now();
+      await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
+      return res.json({ message });
+    } catch (err) {
+      console.error("[HEARTBEATS] chat open error:", err);
+      return res.status(500).json({ message: "Couldn't open that conversation." });
+    }
+  });
+
   app.get("/api/users/:userId/assessment", async (req, res) => {
     const assessment = await storage.getLatestAssessment(req.params.userId);
     return res.json(assessment || null);
@@ -2302,9 +2337,12 @@ export async function registerRoutes(
       if (
         !Array.isArray(answers) ||
         answers.length !== 10 ||
-        !answers.every((a: unknown) => typeof a === "number" && a >= 1 && a <= 6)
+        // The scale is 0–5 (Strongly Disagree → Strongly Agree): the buttons
+        // send 0–5, the total is out of 50, and the stage bands are 0–15 /
+        // 16–30 / 31–45 / 46–50.
+        !answers.every((a: unknown) => typeof a === "number" && Number.isInteger(a) && a >= 0 && a <= 5)
       ) {
-        return res.status(400).json({ message: "answers must be an array of 10 numbers between 1 and 6" });
+        return res.status(400).json({ message: "answers must be an array of 10 whole numbers from 0 to 5" });
       }
 
       const previousAssessment = await storage.getLatestAssessment(userId);

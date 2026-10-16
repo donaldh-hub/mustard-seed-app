@@ -1,3 +1,4 @@
+import { HEARTBEAT_NAMES } from "@shared/heartbeats";
 export type TitanCategory = "VA" | "AR" | "RW" | "IO" | "AD";
 
 export type HeartbeatKey = "clarity" | "consistency" | "mindset" | "adaptation" | "courage";
@@ -451,10 +452,5 @@ export function computeEscalationFromMessages(
   );
 }
 
-export const HEARTBEAT_NAMES: Record<HeartbeatKey, string> = {
-  clarity: "Clarity of Vision & Why",
-  consistency: "Small Steps + Consistency",
-  mindset: "Mindset over Method",
-  adaptation: "Feedback & Adaptation",
-  courage: "Courageous Action",
-};
+// Locked names live in shared/heartbeats.ts (one source for server and app).
+export { HEARTBEAT_NAMES };
