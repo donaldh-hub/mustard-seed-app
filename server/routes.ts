@@ -2302,9 +2302,12 @@ export async function registerRoutes(
       if (
         !Array.isArray(answers) ||
         answers.length !== 10 ||
-        !answers.every((a: unknown) => typeof a === "number" && a >= 1 && a <= 6)
+        // The scale is 0–5 (Strongly Disagree → Strongly Agree): the buttons
+        // send 0–5, the total is out of 50, and the stage bands are 0–15 /
+        // 16–30 / 31–45 / 46–50.
+        !answers.every((a: unknown) => typeof a === "number" && Number.isInteger(a) && a >= 0 && a <= 5)
       ) {
-        return res.status(400).json({ message: "answers must be an array of 10 numbers between 1 and 6" });
+        return res.status(400).json({ message: "answers must be an array of 10 whole numbers from 0 to 5" });
       }
 
       const previousAssessment = await storage.getLatestAssessment(userId);
