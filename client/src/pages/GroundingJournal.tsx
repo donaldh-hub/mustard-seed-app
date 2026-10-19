@@ -30,6 +30,16 @@ const DAY_THEMES = ["RESET", "REFOCUS", "REBUILD"] as const;
 // Builds a one-event .ics file and hands it to the browser, which offers to
 // add it to the user's calendar (iPhone, Android, and desktop all accept it).
 // No server, email, or push setup needed.
+// "Kept your word" line, worded from when they actually came back compared
+// with the time they picked (on time, early, or late within the grace hour).
+function keptLine({ plannedAt, arrivedAt }: { plannedAt: string; arrivedAt: string }): string {
+  const fmt = (d: string) => new Date(d).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const diffMin = (new Date(arrivedAt).getTime() - new Date(plannedAt).getTime()) / 60000;
+  if (diffMin < -10) return `You said ${fmt(plannedAt)}, and you showed up early, at ${fmt(arrivedAt)}. That's discipline.`;
+  if (diffMin > 10) return `You said ${fmt(plannedAt)}, and you came back at ${fmt(arrivedAt)}, still within the hour. You kept your word.`;
+  return `You said ${fmt(plannedAt)}, and you showed up. That's discipline.`;
+}
+
 function downloadReminder(at: Date, title: string) {
   const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const url = `${window.location.origin}/journal`;
@@ -279,7 +289,7 @@ export default function GroundingJournal() {
   const [skippedLockIndex, setSkippedLockIndex] = useState<number | null>(null);
   const [planSaving, setPlanSaving] = useState(false);
   // Evening steps where the user came back by the time they chose (+1 water).
-  const [keptCommitments, setKeptCommitments] = useState<Record<string, string>>({});
+  const [keptCommitments, setKeptCommitments] = useState<Record<string, { plannedAt: string; arrivedAt: string }>>({});
   // Jai's short reply to the optional follow-up answer, per Jai step. Once a
   // reply shows, the button moves the user on.
   const [followUpReplies, setFollowUpReplies] = useState<Record<string, string>>({});
@@ -471,7 +481,7 @@ export default function GroundingJournal() {
         },
       }));
       if (result.commitmentKept) {
-        setKeptCommitments((prev) => ({ ...prev, [stepId]: result.commitmentKept!.plannedAt }));
+        setKeptCommitments((prev) => ({ ...prev, [stepId]: result.commitmentKept! }));
       }
       setCurrentEntryId(result.entry.id);
       // Refresh the pacing gate now, not just at final completion — otherwise
@@ -514,7 +524,7 @@ export default function GroundingJournal() {
     }
     setFollowUpReplying(true);
     try {
-      const { reply, safetyTriggered, safetyTier, safetyThread } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim());
+      const { reply, safetyTriggered, safetyTier, safetyThread } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim(), getLocalDateStr());
       if (safetyTriggered && safetyThread) {
         // Jai checks in first; Continue waits for the user's reply and his answer.
         setFollowUpSafety((prev) => ({ ...prev, [stepId]: { entryId: currentEntryId, tier: safetyTier!, thread: safetyThread } }));
@@ -939,6 +949,7 @@ export default function GroundingJournal() {
                         url={JOURNAL_VIDEOS[stepId]!}
                         audioSync={JOURNAL_AUDIO_SYNC[stepId]}
                         poster={JOURNAL_POSTERS[stepId]}
+                        soundHint
                         onReady={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
                       />
                     )}
@@ -956,6 +967,19 @@ export default function GroundingJournal() {
                 {/* Prompts (shown after video or if no video) */}
                 {(!stepHasVideo(stepId) || videoIsReady(stepId)) && (
                   <>
+                    {/* Evening: hand this morning's focus back before the questions. */}
+                    {stepId.endsWith("-evening") && (() => {
+                      const morning = (journalData?.entries ?? []).find((e: any) => e.dayNumber === dayOf(stepId as StepId) && e.session === "morning");
+                      const focus = (morning?.focusSummary ?? "").trim();
+                      return focus ? (
+                        <div className="flex items-start gap-2" data-testid="card-evening-morning-focus">
+                          <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
+                          <p className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-border/50 text-sm text-foreground leading-relaxed">
+                            <span className="font-semibold">This morning:</span> {focus} Let's see how it went.
+                          </p>
+                        </div>
+                      ) : null;
+                    })()}
                     {yesterdayStepFor(stepId) && (
                       <div className="bg-white rounded-2xl p-4 border border-border/40 shadow-sm space-y-3" data-testid="card-step-check">
                         <div className="flex items-start gap-2">
@@ -1080,7 +1104,7 @@ export default function GroundingJournal() {
                     <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200 text-sm text-blue-900" data-testid="banner-commitment-kept">
                       <p className="font-semibold">You kept your word. +1 water 💧</p>
                       <p className="text-blue-800/80 mt-0.5">
-                        You said {new Date(keptCommitments[sourceStep]).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}, and you showed up. That's discipline.
+                        {keptLine(keptCommitments[sourceStep])}
                       </p>
                       <p className="text-xs text-blue-800/70 mt-2" data-testid="text-rebuild-water-teaser">
                         This 3-day journal is a taste. The 7-Day Rebuild and Premium give you the full experience: a real goal you water every day, cups that fill, and a seed you watch grow.

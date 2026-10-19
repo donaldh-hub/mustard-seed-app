@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
-import { generateJournalReflection, generateFollowUpAck } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
@@ -3731,10 +3731,10 @@ export async function registerRoutes(
 
       // Kept the reflection time they chose this morning → bonus water. A
       // "happy" entry is how water is counted everywhere else (1 unit each).
-      let commitmentKept: { plannedAt: string } | null = null;
+      let commitmentKept: { plannedAt: string; arrivedAt: string } | null = null;
       if (!safetyReflection && session === "evening" && todayMorningEntry?.reflectionPlannedAt
           && isCommitmentKept(todayMorningEntry.reflectionPlannedAt, new Date())) {
-        commitmentKept = { plannedAt: new Date(todayMorningEntry.reflectionPlannedAt).toISOString() };
+        commitmentKept = { plannedAt: new Date(todayMorningEntry.reflectionPlannedAt).toISOString(), arrivedAt: new Date().toISOString() };
         try {
           await storage.createEntry({
             userId,
@@ -3856,7 +3856,7 @@ export async function registerRoutes(
   app.patch("/api/users/:userId/grounding-journal/follow-up", async (req, res) => {
     try {
       const { userId } = req.params;
-      const { entryId, followUpResponse } = req.body as { entryId: string; followUpResponse: string };
+      const { entryId, followUpResponse, localDate } = req.body as { entryId: string; followUpResponse: string; localDate?: string };
       // Verify the entry belongs to this user before updating
       const entries = await storage.getGroundingJournalEntries(userId);
       if (!entries.find((e) => e.id === entryId)) {
@@ -3895,6 +3895,22 @@ export async function registerRoutes(
         userFollowUpResponse: followUpResponse,
         ...(reply ? { jaeFollowUpReply: reply } : {}),
       } as any);
+      // Jai's reply goes to Memory too (once per entry; not the generic
+      // fallback line, which says nothing about them).
+      if (reply && reply !== FOLLOW_UP_ACK_FALLBACK && !entry.jaeFollowUpReply) {
+        const label = entry.session === "morning" ? "Morning" : entry.session === "evening" ? "Evening" : "Grounding Statement";
+        try {
+          await storage.createEntry({
+            userId,
+            goalId: null,
+            date: localDate || todayStr(),
+            summary: `Grounding Journal — Day ${entry.dayNumber} ${label}, Jai: ${reply}`,
+            mood: "neutral",
+          });
+        } catch (memErr) {
+          console.error("[JOURNAL] follow_up_memory_error:", (memErr as Error).message);
+        }
+      }
       return res.json({ entry: updated, reply });
     } catch (err) {
       return res.status(500).json({ message: "Follow-up save error" });

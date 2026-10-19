@@ -165,16 +165,16 @@ export const api = {
     userId: string,
     data: { dayNumber: number; session: string; prompts: { prompt: string; response: string }[]; localDate?: string }
   ) =>
-    fetchJson<{ entry: any; jae: any; commitmentKept?: { plannedAt: string }; safetyTriggered?: boolean; safetyTier?: "clear" | "check_in"; safetyThread?: SafetyMessage[] }>(`/users/${userId}/grounding-journal/entry`, {
+    fetchJson<{ entry: any; jae: any; commitmentKept?: { plannedAt: string; arrivedAt: string }; safetyTriggered?: boolean; safetyTier?: "clear" | "check_in"; safetyThread?: SafetyMessage[] }>(`/users/${userId}/grounding-journal/entry`, {
       method: "POST",
       body: JSON.stringify({ ...data, userTimezone: getUserTimezone() }),
     }),
   // Saves the optional follow-up answer; `reply` is Jai's 1–2 sentence
   // acknowledgment ("" when the answer was empty or the AI call failed).
-  saveJournalFollowUp: (userId: string, entryId: string, followUpResponse: string) =>
+  saveJournalFollowUp: (userId: string, entryId: string, followUpResponse: string, localDate?: string) =>
     fetchJson<{ entry: any; reply: string; safetyTriggered?: boolean; safetyTier?: "clear" | "check_in"; safetyThread?: SafetyMessage[] }>(`/users/${userId}/grounding-journal/follow-up`, {
       method: "PATCH",
-      body: JSON.stringify({ entryId, followUpResponse }),
+      body: JSON.stringify({ entryId, followUpResponse, localDate }),
     }),
   // The user's reply after a safety response. Jai always answers; `jae` is the
   // session's normal reflection when they made clear there's no risk.

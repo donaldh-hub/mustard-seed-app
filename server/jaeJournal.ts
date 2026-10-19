@@ -178,6 +178,7 @@ Tonight, end with ONE small next step ("nextStep"):
 - One sentence that starts with "Tomorrow, ". Concrete, doable in 5–10 minutes, tied directly to their goal${ctx.weakestHeartbeat ? ` and, where it fits, to ${ctx.weakestHeartbeat.name}` : ""}. Examples by goal: business name → "Tomorrow, write 3 words that describe who your business serves." Writing → "Tomorrow, write for 10 minutes before you open your phone." Gardening → "Tomorrow, check the soil on your tomato plants and water only the dry ones."
 - Never a list, never two steps, never vague ("reflect more", "keep going").
 - Don't repeat the step inside "reflection" — it is shown on its own.
+- Build the step from THEIR words today: tonight's answers, what they said they'd focus on this morning, or their answer to this morning's follow-up question. If they named a change they want (e.g. not staying up all night doom scrolling), the step IS that change, made small and concrete in your own words (e.g. "Tomorrow, put your phone on the charger by 10:30 PM."), not a different idea of yours. Only suggest your own step when they named nothing usable.
 - If they named their own next step tonight (e.g. "keep one place for my ideas"), lock THAT one in instead of inventing a new one: confirm it in your own words, made small and concrete. It may start with "Tonight, " if it fits tonight (e.g. "Tonight, pick the one place you'll keep your name ideas.").
 - If they say a step they set earlier (this morning, or last night's) did NOT happen: grace first, no shame, and make "nextStep" smaller than the one they missed.
 - Compare this morning's answers with tonight's. If frustration, discouragement, or overwhelm ROSE across the day, set "frustrationRose": true, name the shift in "reflection" with grace in one sentence (e.g. "This morning had some hope in it; tonight feels heavier, and that's real."), and make "nextStep" SMALLER: 2–5 minutes, almost too easy.
@@ -188,7 +189,7 @@ Tonight, end with ONE small next step ("nextStep"):
     ? `
 This morning you asked: ${ctx.todayMorningFollowUp.question}
 They answered (reference only, never quote it): ${ctx.todayMorningFollowUp.answer}
-If that answer set a step for today, check tonight's words for whether they did it.
+If that answer set a step for today, check tonight's words for whether they did it. If it named a change they want, build tomorrow's "nextStep" from it.
 `
     : "";
   const priorDays = (ctx.previousEntries ?? []).some((e) => e.dayNumber < ctx.dayNumber);
@@ -239,7 +240,8 @@ Rules:
 ${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of Vision & Why: not knowing what it's for, who it's for, or why ("I don't have any of that", "I'm not sure"). Small Steps + Consistency: skipping, stopping and starting, "again", all-or-nothing, waiting for a big push. Mindset over Method: hunting for the perfect method or tool, harsh self-talk. Feedback & Adaptation: repeating what didn't work, not adjusting. Courageous Action: avoiding, putting off the uncomfortable step, waiting until ready.
 - When their words show a gap in ${ctx.weakestHeartbeat.name} (for example "I don't have any of that"), name it gently by that exact full name and link it to their goal, with grace and accountability and no shame. Example tone for a business-name goal with low Clarity of Vision & Why: "That's why the name won't come yet. A name follows clarity. Let's find what the business is for first." Only do this when their words actually point to it.
 - Always write a Heartbeat's full name exactly (Clarity of Vision & Why, Small Steps + Consistency, Mindset over Method, Feedback & Adaptation, Courageous Action) — never shorten it.
-` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${eveningStepBlock}
+${ctx.dayNumber === 1 && ctx.session === "morning" ? `- This is their first session since the assessment. Even without a gap, if what they wrote today naturally connects to ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5), link it in ONE sentence by that exact full name, as the Heartbeat these three days help them strengthen, never as a flaw. If it would feel forced, leave it out.
+` : ""}` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${eveningStepBlock}
 
 Before writing, decide two things and put them FIRST in your JSON:
 - "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.

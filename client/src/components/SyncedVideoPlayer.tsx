@@ -35,6 +35,7 @@ export function SyncedVideoPlayer({
   audioSync,
   hasEmbeddedAudio,
   poster,
+  soundHint,
   onReady,
   comingSoonText = "Video coming soon.",
   skipLabel = "Skip ahead",
@@ -48,6 +49,9 @@ export function SyncedVideoPlayer({
   // Still shown before play, so a video whose first frames are a blank
   // fade-in doesn't look broken.
   poster?: string;
+  // Says that narration plays with sound, since the video element itself is
+  // muted (the voice is a separate audio track) and its controls show muted.
+  soundHint?: boolean;
   onReady: () => void;
   comingSoonText?: string;
   skipLabel?: string;
@@ -133,7 +137,17 @@ export function SyncedVideoPlayer({
           <span className="w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
             <Play className="w-8 h-8 ml-1" fill="currentColor" />
           </span>
+          {soundHint && (
+            <span className="absolute bottom-3 left-0 right-0 text-center text-xs font-medium text-white" data-testid="text-video-sound-hint">
+              Tap to play. Jai's voice plays with sound on.
+            </span>
+          )}
         </button>
+      )}
+      {soundHint && started && audioSync && !hasEmbeddedAudio && (
+        <span className="absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white pointer-events-none" data-testid="text-video-sound-on">
+          🔊 Sound on: Jai's voice
+        </span>
       )}
     </div>
   );
