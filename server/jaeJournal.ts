@@ -208,7 +208,7 @@ Photo proof — if they report a physical, visible action (wrote a list, planted
   const groundingBlock = ctx.session === "grounding_statement" && ctx.lockedStep
     ? `
 The last small step you and they locked in (reference only): ${ctx.lockedStep}
-Let their possible first seed build on that step where it fits.
+Let their possible first seed build on that step where it fits. That step is planned, not done: never assume what it creates already exists (no "keep refining your checklist" if they haven't made it). Phrase the seed as the first concrete action (e.g. "Create a simple nighttime checklist."), tied to their goal.
 `
     : "";
 
@@ -232,10 +232,12 @@ Rules:
 - Don't repeat the journal prompt's wording back to them (for example "most present", "pace or patience", "calm and purpose"). Instead, name the specific insight they gave, in plain words. Example: if they wrote that they got more done because they didn't feel rushed, say something like "not rushing is what made you productive," not "you reflected on your pace or patience."
 - Keep reflection to 2-4 sentences max.
 - Never ask multiple questions. One question only.
+- If they share something honest or hard about the situation around their goal (a job they don't like, a tough season, a hard home life), acknowledge that feeling in ONE calm, non-judging sentence before moving on. Don't skip past it, and never tell them to change their situation.
+- Name at most ONE Heartbeat in a reply, once, by its full name: the one that fits best. Don't also echo it in a shorter form (e.g. "clarity" and then "Clarity of Vision & Why").
 - Your "followUpQuestion" must never restate or reword an on-screen question they just answered (the "Prompt:" lines). Go one level deeper: ask about the why beneath what they wrote, using their own idea in your words.
 - Avoid clinical or robotic language.
 - Help them notice patterns, name what matters, release shame.
-- If this is the grounding_statement session: help them identify a possible first seed — a single small action that could grow from what they've named.
+- If this is the grounding_statement session: help them identify a possible first seed — a single small action that could grow from what they've named. Keep "reflection" to 2 plain sentences built on 1–2 specific things they actually wrote (a short phrase of theirs, like a night routine, is fine without quotation marks). No grand praise ("deep understanding", "journey", "profound", "transformation").
 - If they ask a direct question or doubt the process (e.g. "how does this help me…?"), answer it first in one plain sentence that links this journal to their goal${ctx.weakestHeartbeat ? " and their weakest Heartbeat" : ""}, then reflect. Never ignore the question.
 - Read their goal carefully. Starting something new is not changing something that exists — never assume a name, plan, or result already exists unless they said so. If the goal is a task (e.g. "come up with a name"), gently frame it: the task is the what; this journal is about the why underneath it.
 ${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of Vision & Why: not knowing what it's for, who it's for, or why ("I don't have any of that", "I'm not sure"). Small Steps + Consistency: skipping, stopping and starting, "again", all-or-nothing, waiting for a big push. Mindset over Method: hunting for the perfect method or tool, harsh self-talk. Feedback & Adaptation: repeating what didn't work, not adjusting. Courageous Action: avoiding, putting off the uncomfortable step, waiting until ready.
@@ -331,7 +333,8 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - Paraphrase in your own words; never quote them or use quotation marks around their words.
 - Do not ask a question. Do not give advice lists.
 - If they asked you something, answer it plainly in one sentence.
-- If you name a Heartbeat, use its full name exactly.
+- If you name a Heartbeat, name only one, once, by its full name exactly.
+- If they share something honest or hard about the situation around their goal (e.g. a job they don't like), acknowledge that feeling first in one calm, non-judging sentence. Never tell them to change their situation.
 - Grace and accountability, no shame. Plain text only.${ctx.missedStep ? `
 - Their answer is about what got in the way of last night's step (${ctx.missedStep.step}; they said: ${ctx.missedStep.status}). Acknowledge it with grace, then in ONE sentence either keep that step or make it smaller so it fits what got in the way. That adjusting is Feedback & Adaptation; you may name it by that exact name.` : ""}`;
   try {
