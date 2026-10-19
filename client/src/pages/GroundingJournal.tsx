@@ -6,12 +6,12 @@ import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import JaeAvatar from "@assets/jai-avatar.png";
 import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import { getLocalDateStr } from "@/lib/dateUtils";
 import { Loader2, ChevronRight, CheckCircle2, ArrowLeft, AlertCircle, Sparkles } from "lucide-react";
 import { SyncedVideoPlayer } from "@/components/SyncedVideoPlayer";
-import { JOURNAL_VIDEOS, JOURNAL_AUDIO_SYNC } from "@/content/journalContent";
+import { JOURNAL_VIDEOS, JOURNAL_AUDIO_SYNC, JOURNAL_POSTERS } from "@/content/journalContent";
 import { JournalSafetyPanel, isSafetyResolved } from "@/components/JournalSafetyPanel";
 import { JournalPhotoProof } from "@/components/JournalPhotoProof";
 import type { SafetyMessage } from "@/lib/api";
@@ -938,6 +938,7 @@ export default function GroundingJournal() {
                       <SyncedVideoPlayer
                         url={JOURNAL_VIDEOS[stepId]!}
                         audioSync={JOURNAL_AUDIO_SYNC[stepId]}
+                        poster={JOURNAL_POSTERS[stepId]}
                         onReady={() => setVideoAcknowledged((prev) => new Set(prev).add(stepId))}
                       />
                     )}

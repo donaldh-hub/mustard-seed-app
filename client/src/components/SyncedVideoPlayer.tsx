@@ -34,6 +34,7 @@ export function SyncedVideoPlayer({
   url,
   audioSync,
   hasEmbeddedAudio,
+  poster,
   onReady,
   comingSoonText = "Video coming soon.",
   skipLabel = "Skip ahead",
@@ -44,6 +45,9 @@ export function SyncedVideoPlayer({
   // repaired re-exports) — the video plays with sound instead of silently
   // alongside a separate clip sequence.
   hasEmbeddedAudio?: boolean;
+  // Still shown before play, so a video whose first frames are a blank
+  // fade-in doesn't look broken.
+  poster?: string;
   onReady: () => void;
   comingSoonText?: string;
   skipLabel?: string;
@@ -112,6 +116,7 @@ export function SyncedVideoPlayer({
       <video
         ref={videoRef}
         src={url}
+        poster={poster}
         muted={!hasEmbeddedAudio}
         playsInline
         controls={started}

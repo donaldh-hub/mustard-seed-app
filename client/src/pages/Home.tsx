@@ -191,7 +191,8 @@ export default function Home() {
   const userName = user?.name || "there";
   // Google display names can carry suffixes and credentials ("Donald Hardaway,
   // Jr. MSL, LSSBB") — the report title uses the first name only.
-  const firstName = (user?.name || "").trim().split(/[\s,]+/)[0] || "Your";
+  // A name that's really an email (typed into the Name field) reads as "Your Report".
+  const firstName = (user?.name || "").includes("@") ? "Your" : (user?.name || "").trim().split(/[\s,]+/)[0] || "Your";
   const stage = assessment.stage
     ? assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)
     : "Seed";

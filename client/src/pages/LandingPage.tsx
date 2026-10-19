@@ -160,9 +160,9 @@ export default function LandingPage() {
             <img
               src={jaiHero}
               alt="Jai, your accountability partner"
-              className="h-80 w-64 rounded-2xl object-cover object-top"
+              className="h-64 w-64 rounded-2xl object-cover object-top"
             />
-            <div className="absolute -left-8 bottom-6 max-w-[200px] rounded-2xl bg-white px-4 py-3 text-sm font-medium text-stone-800 shadow-xl">
+            <div className="absolute -left-8 -bottom-10 max-w-[200px] rounded-2xl bg-white px-4 py-3 text-sm font-medium text-stone-800 shadow-xl">
               "I'm not here to hype you up. I'm here to help you grow."
               <div className="mt-1 text-xs font-semibold text-stone-500">— Jai, your coach</div>
             </div>

@@ -11,7 +11,7 @@ import { useLocation } from "wouter";
 import { useUpload, type UploadPhase } from "@/hooks/use-upload";
 import { persistImage, restoreImage, clearImage } from "@/lib/imageStore";
 import { syncUserProgressState } from "@/lib/syncProgressState";
-import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import JaeAvatar from "@assets/jai-avatar.png";
 import { GoalCompletionCeremony, type GoalCompletionCeremonyPayload } from "@/components/GoalCompletionCeremony";
 import { getLocalDateStr, getUserTimezone } from "@/lib/dateUtils";
 import { renderInlineMarkdown } from "@/lib/inlineMarkdown";

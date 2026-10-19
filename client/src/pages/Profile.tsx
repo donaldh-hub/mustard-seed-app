@@ -24,7 +24,7 @@ import { useEffect, useState } from "react";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
 import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
 import { GraduateRateNote } from "@/components/GraduateRateNote";
-import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import JaeAvatar from "@assets/jai-avatar.png";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
 const HEARTBEAT_LABELS: Record<string, string> = {
