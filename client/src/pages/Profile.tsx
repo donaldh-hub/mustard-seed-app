@@ -93,6 +93,8 @@ export default function Profile() {
   const [dataCleared, setDataCleared] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [startOverLoading, setStartOverLoading] = useState(false);
+  const [startOverError, setStartOverError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getStripeConfig()
@@ -135,6 +137,25 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["user", userId] });
     } catch {}
     setResetLoading(false);
+  };
+
+  // Test accounts only: wipe the account back to brand new, then reload so
+  // the app routes it like a first sign-in (Welcome → assessment → journal).
+  const handleStartOver = async () => {
+    if (!userId) return;
+    setStartOverError(null);
+    setStartOverLoading(true);
+    try {
+      await api.startOver(userId);
+      Object.keys(localStorage)
+        .filter((k) => k !== "pref_theme")
+        .forEach((k) => localStorage.removeItem(k));
+      sessionStorage.clear();
+      window.location.href = "/";
+    } catch {
+      setStartOverError("Couldn't start over. Please try again.");
+      setStartOverLoading(false);
+    }
   };
 
   const handleClearLocalData = () => {
@@ -470,6 +491,48 @@ export default function Profile() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
             Data Management
           </h2>
+          {user?.canStartOver && (
+            <>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-xl h-12 justify-start text-red-600 border-red-200 hover:bg-red-50"
+                    disabled={startOverLoading}
+                    data-testid="button-start-over"
+                  >
+                    {startOverLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-2" />}
+                    {startOverLoading ? "Starting over…" : "Start Over From Scratch (tester)"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Start over from scratch?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently deletes your assessment, journal, goals, chat with Jai, photos, and Rebuild progress. You keep this login and anything you've paid for. You'll start again like a brand-new user.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                      onClick={handleStartOver}
+                    >
+                      Yes, delete everything
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              {startOverError ? (
+                <p className="text-xs text-red-600">{startOverError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Only HARDAWAYAI test accounts see this. Wipes everything so you can run the whole new-user flow again.
+                </p>
+              )}
+            </>
+          )}
+
           <Button
             onClick={handleExportData}
             variant="outline"

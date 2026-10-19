@@ -215,4 +215,6 @@ export const api = {
   exportData: (userId: string) => fetch(`${BASE}/users/${userId}/export-data`, { credentials: "include" }),
   resetProgress: (userId: string) =>
     fetchJson<{ message: string }>(`/users/${userId}/reset-progress`, { method: "POST" }),
+  startOver: (userId: string) =>
+    fetchJson<{ message: string }>(`/users/${userId}/start-over`, { method: "POST" }),
 };

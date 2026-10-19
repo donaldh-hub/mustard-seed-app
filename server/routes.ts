@@ -561,6 +561,13 @@ export function registerStripeWebhook(app: Express) {
   );
 }
 
+// HARDAWAYAI accounts (and anyone on the pacing tester list) may wipe their
+// own account back to brand new from Profile.
+function canStartOver(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase().endsWith("@hardawayai.com") || isPacingTester(email, process.env.JOURNAL_PACING_SKIP_EMAILS);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -599,6 +606,7 @@ export async function registerRoutes(
       subscriptionBadge: getSubscriptionBadge(user),
       trialDaysRemaining: getTrialDaysRemaining(user),
       featureLimits: getFeatureLimits({ ...user, ...effective } as any),
+      canStartOver: canStartOver(user.email),
     });
   });
 
@@ -4185,6 +4193,25 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[RESET] reset error:", err);
       return res.status(500).json({ message: "Reset failed" });
+    }
+  });
+
+  // ─── Start over from scratch — HARDAWAYAI test accounts only ───
+  // Lets the founder re-run the whole new-user flow (assessment, journal,
+  // goal setup) on the same login. Only ever touches the signed-in user's
+  // own data (the :userId ownership check above).
+  app.post("/api/users/:userId/start-over", async (req, res) => {
+    try {
+      const userId = String(req.params.userId);
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!canStartOver(user.email)) return res.status(403).json({ message: "Forbidden" });
+      await storage.startOver(userId);
+      console.log(`[START_OVER] wiped user ${userId.slice(0, 8)}***`);
+      return res.json({ message: "Account reset to brand new" });
+    } catch (err) {
+      console.error("[START_OVER] error:", err);
+      return res.status(500).json({ message: "Start over failed" });
     }
   });
 
