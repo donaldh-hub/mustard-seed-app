@@ -25,6 +25,7 @@ import { applyTheme, getStoredTheme } from "@/lib/theme";
 import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
 import { GraduateRateNote } from "@/components/GraduateRateNote";
 import JaeAvatar from "@assets/jai-avatar.png";
+import { draftGoalTitle } from "@/lib/goalDraft";
 
 const STAGE_EMOJI: Record<string, string> = { seed: "🌱", sprout: "🌿", growth: "🌳", bloom: "🌸" };
 const HEARTBEAT_LABELS: Record<string, string> = {
@@ -335,7 +336,9 @@ export default function Profile() {
                <div className="mt-1 w-2 h-2 rounded-full bg-primary" />
                <div>
                  <p className="font-medium text-foreground">Big Goal</p>
-                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || garden?.untargeted?.title || user.goals?.[0] || (user.groundingJournalCompleted
+                 <p className="text-sm text-muted-foreground" data-testid="text-goal">{garden?.targeted?.title || garden?.untargeted?.title || user.goals?.[0] || (draftGoalTitle(user)
+                   ? `In progress: ${draftGoalTitle(user)}. Finish it with Jai in Chat.`
+                   : user.groundingJournalCompleted
                    ? "Not set yet. Tap \"Plant my first goal with Jai\" on Home, and Jai will walk you through it."
                    : "Not set yet. When you finish the Grounding Journal, Jai will walk you through setting your first goal.")}</p>
                  {(garden?.targeted?.emotionalWhy || garden?.untargeted?.emotionalWhy) && (
