@@ -26,7 +26,7 @@ export interface JournalSessionContext {
   }[];
   // Evening only: this morning's follow-up question and their answer — often
   // where they set today's small step.
-  todayMorningFollowUp?: { question: string; answer: string } | null;
+  todayMorningFollowUp?: { question: string; answer: string; jaiReply?: string | null } | null;
   // Grounding statement only: the last step Jai locked in.
   lockedStep?: string | null;
   // Only populated for evening sessions — that day's own morning prompts +
@@ -169,7 +169,7 @@ export async function generateJournalReflection(
   const morningStepBlock = ctx.session === "morning" && (ctx.yesterdayStep || stepCheck)
     ? `
 Last night you suggested this small step for today (reference only): ${ctx.yesterdayStep ?? stepCheck!.prompt.slice(STEP_CHECK_PREFIX.length).trim()}
-${stepCheck ? `They answered whether they did it: ${stepCheck.response}. Acknowledge it in ONE short sentence near the start of "reflection" (after answering any direct question). Did it → name it as real progress toward their goal, and as Small Steps + Consistency in action (that exact name). Partly or not yet → grace, no shame; showing up today still counts, and the step can be smaller. Don't ask about it again.` : `They haven't said whether they did it. Don't assume either way.`}
+${stepCheck ? `They answered whether they did it: ${stepCheck.response}. Acknowledge it in ONE short sentence near the start of "reflection" (after answering any direct question). Did it → name it as real progress toward their goal, and as Small Steps + Consistency in action (that exact name). Partly or not yet → grace, no shame; showing up today still counts. Then make your ONE "followUpQuestion" a short, kind question about what got in the way (e.g. "What got in the way last night?"), so the two of you can adapt the step. If they did it, don't ask about it again.` : `They haven't said whether they did it. Don't assume either way.`}
 `
     : "";
   const eveningStepBlock = isEvening
@@ -189,7 +189,7 @@ Tonight, end with ONE small next step ("nextStep"):
     ? `
 This morning you asked: ${ctx.todayMorningFollowUp.question}
 They answered (reference only, never quote it): ${ctx.todayMorningFollowUp.answer}
-If that answer set a step for today, check tonight's words for whether they did it. If it named a change they want, build tomorrow's "nextStep" from it.
+${ctx.todayMorningFollowUp.jaiReply ? `You replied: ${ctx.todayMorningFollowUp.jaiReply}\n` : ""}If that answer set a step for today, check tonight's words for whether they did it. If it named a change they want, build tomorrow's "nextStep" from it.
 `
     : "";
   const priorDays = (ctx.previousEntries ?? []).some((e) => e.dayNumber < ctx.dayNumber);
@@ -232,6 +232,7 @@ Rules:
 - Don't repeat the journal prompt's wording back to them (for example "most present", "pace or patience", "calm and purpose"). Instead, name the specific insight they gave, in plain words. Example: if they wrote that they got more done because they didn't feel rushed, say something like "not rushing is what made you productive," not "you reflected on your pace or patience."
 - Keep reflection to 2-4 sentences max.
 - Never ask multiple questions. One question only.
+- Your "followUpQuestion" must never restate or reword an on-screen question they just answered (the "Prompt:" lines). Go one level deeper: ask about the why beneath what they wrote, using their own idea in your words.
 - Avoid clinical or robotic language.
 - Help them notice patterns, name what matters, release shame.
 - If this is the grounding_statement session: help them identify a possible first seed — a single small action that could grow from what they've named.
@@ -320,6 +321,8 @@ export async function generateFollowUpAck(ctx: {
   answer: string;
   intention?: string | null;
   weakestHeartbeat?: { name: string; score: number } | null;
+  // Set when the question was what got in the way of last night's step.
+  missedStep?: { step: string; status: string } | null;
 }): Promise<string> {
   const system = `You are Jai — a calm, grounded accountability partner in the Mustard Seed app.
 ${ctx.userName} just answered your follow-up question in their 3-Day Grounding Journal.
@@ -329,7 +332,8 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - Do not ask a question. Do not give advice lists.
 - If they asked you something, answer it plainly in one sentence.
 - If you name a Heartbeat, use its full name exactly.
-- Grace and accountability, no shame. Plain text only.`;
+- Grace and accountability, no shame. Plain text only.${ctx.missedStep ? `
+- Their answer is about what got in the way of last night's step (${ctx.missedStep.step}; they said: ${ctx.missedStep.status}). Acknowledge it with grace, then in ONE sentence either keep that step or make it smaller so it fits what got in the way. That adjusting is Feedback & Adaptation; you may name it by that exact name.` : ""}`;
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

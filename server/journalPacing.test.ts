@@ -136,3 +136,11 @@ test("tester list matches emails case-insensitively", () => {
   assert.equal(isPacingTester("someone@example.com", "donaldh@hardawayai.com"), false);
   assert.equal(isPacingTester("donaldh@hardawayai.com", undefined), false);
 });
+
+test("tester skipped the evening wait: the lock moves on to the next session", () => {
+  // Morning 6:00 PM New York, evening done early at 6:10 PM via the tester skip.
+  const entries = [e(1, "morning", "2026-10-14T22:00:00Z"), e(1, "evening", "2026-10-14T22:10:00Z")];
+  const g = computeJournalGate(entries, new Date("2026-10-14T22:15:00Z"), NY);
+  assert.deepEqual(g.locked, { day: 2, session: "morning" });
+  assert.equal(g.unlocksAt, "2026-10-15T08:00:00.000Z"); // 4:00 AM New York
+});

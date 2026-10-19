@@ -30,6 +30,13 @@ const DAY_THEMES = ["RESET", "REFOCUS", "REBUILD"] as const;
 // Builds a one-event .ics file and hands it to the browser, which offers to
 // add it to the user's calendar (iPhone, Android, and desktop all accept it).
 // No server, email, or push setup needed.
+// Last night's stored step ("Tomorrow, put your phone…") read back the next
+// morning without the "Tomorrow," so it doesn't point at the wrong day.
+function pastStep(step: string): string {
+  const rest = step.replace(/^(tomorrow|tonight),?\s*/i, "");
+  return /^[A-Z][a-z]/.test(rest) ? rest[0].toLowerCase() + rest.slice(1) : rest;
+}
+
 // "Kept your word" line, worded from when they actually came back compared
 // with the time they picked (on time, early, or late within the grace hour).
 function keptLine({ plannedAt, arrivedAt }: { plannedAt: string; arrivedAt: string }): string {
@@ -986,7 +993,7 @@ export default function GroundingJournal() {
                           <img src={JaeAvatar} className="w-8 h-8 rounded-full object-cover border-2 border-white shadow shrink-0" alt="Jai" />
                           <div className="space-y-1">
                             <p className="text-xs font-semibold text-primary uppercase tracking-wider">Last night's step</p>
-                            <p className="text-sm text-foreground leading-relaxed" data-testid="text-step-check">{yesterdayStepFor(stepId)}</p>
+                            <p className="text-sm text-foreground leading-relaxed" data-testid="text-step-check">Last night you planned: {pastStep(yesterdayStepFor(stepId)!)}</p>
                             <p className="text-sm text-muted-foreground">Did you get to it?</p>
                           </div>
                         </div>

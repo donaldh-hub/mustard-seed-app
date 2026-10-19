@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
-import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
@@ -3537,7 +3537,7 @@ export async function registerRoutes(
       })),
       todayMorningPrompts: morning?.prompts as { prompt: string; response: string }[] | undefined,
       todayMorningFollowUp: morning?.userFollowUpResponse
-        ? { question: morning.jaeFollowUpQuestion ?? "", answer: morning.userFollowUpResponse }
+        ? { question: morning.jaeFollowUpQuestion ?? "", answer: morning.userFollowUpResponse, jaiReply: morning.jaeFollowUpReply }
         : null,
       yesterdayStep: session === "morning"
         ? previous.find((e) => e.dayNumber === dayNumber - 1 && e.session === "evening")?.nextStep ?? null
@@ -3882,12 +3882,20 @@ export async function registerRoutes(
         } as any);
         return res.json({ entry: updated, reply: "", safetyTriggered: true, safetyTier: followUpSafety.tier, safetyThread });
       }
+      // Last night's step, when they said it only partly happened or not yet:
+      // Jai's question was what got in the way, so his reply adapts the step.
+      const stepCheck = ((entry.prompts as { prompt: string; response: string }[]) ?? [])
+        .find((p) => p.prompt.startsWith(STEP_CHECK_PREFIX));
+      const missedStep = stepCheck && !/^yes/i.test(stepCheck.response)
+        ? { step: stepCheck.prompt.slice(STEP_CHECK_PREFIX.length).replace(/\s*Did you get to it\?$/, "").trim(), status: stepCheck.response }
+        : null;
       if (answer) {
         const user = await storage.getUser(userId);
         reply = await generateFollowUpAck({
           userName: user?.name || "friend",
           question: entry.jaeFollowUpQuestion ?? "",
           answer,
+          missedStep,
           ...(await journalAssessmentContext(userId, entries)),
         });
       }
@@ -3896,15 +3904,20 @@ export async function registerRoutes(
         ...(reply ? { jaeFollowUpReply: reply } : {}),
       } as any);
       // Jai's reply goes to Memory too (once per entry; not the generic
-      // fallback line, which says nothing about them).
-      if (reply && reply !== FOLLOW_UP_ACK_FALLBACK && !entry.jaeFollowUpReply) {
+      // fallback line, which says nothing about them). After a missed step,
+      // their own answer about what got in the way is saved with it.
+      const realReply = reply && reply !== FOLLOW_UP_ACK_FALLBACK ? reply : "";
+      if ((realReply || (missedStep && answer)) && !entry.jaeFollowUpReply) {
         const label = entry.session === "morning" ? "Morning" : entry.session === "evening" ? "Evening" : "Grounding Statement";
+        const summary = missedStep
+          ? `Grounding Journal — Day ${entry.dayNumber} ${label}, what got in the way of last night's step: ${answer}${realReply ? ` · Jai: ${realReply}` : ""}`
+          : `Grounding Journal — Day ${entry.dayNumber} ${label}, Jai: ${realReply}`;
         try {
           await storage.createEntry({
             userId,
             goalId: null,
             date: localDate || todayStr(),
-            summary: `Grounding Journal — Day ${entry.dayNumber} ${label}, Jai: ${reply}`,
+            summary,
             mood: "neutral",
           });
         } catch (memErr) {

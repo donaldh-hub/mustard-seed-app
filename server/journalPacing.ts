@@ -137,6 +137,9 @@ export function computeJournalGate(entries: JournalEntryLike[], now: Date, timeZ
     const prev = ORDER[i - 1];
     const prevDoneAt = earliest(entries, prev.day, prev.session);
     if (!prevDoneAt) return { locked: step, unlocksAt: null };
+    // Already done (only possible early via the tester skip): the lock moves
+    // on, so testers still meet each later wait screen and time picker.
+    if (earliest(entries, step.day, step.session)) continue;
     const opensAt = step.session === "evening"
       ? eveningOpensAt(prevDoneAt, tz)
       : nextLocalDayAt(prevDoneAt, NEXT_DAY_OPENS_HOUR, tz);
