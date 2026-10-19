@@ -9,7 +9,7 @@ import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuil
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
 import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
-import { buildOpeningLine } from "./chatOpening";
+import { buildOpeningLine, buildJournalStepLine } from "./chatOpening";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
 import { photoReplyText, photoMemoryLines, rewardPhoto, logPhotoDecision, resolveHeldPhotoReply } from "./photoReview";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
@@ -314,7 +314,15 @@ async function maybeInjectDailyEncouragement(userId: string): Promise<void> {
   if (lastSent && Date.now() - new Date(lastSent).getTime() < 20 * 3600000) return;
 
   const goals = await storage.getActiveGoals(userId);
-  if (goals.length === 0) return;
+  if (goals.length === 0) {
+    // No goal yet: the one exception is the 3-Day Journal's last step,
+    // asked once, the next day (the goal offer follows it).
+    const line = await buildJournalStepLine(userId, lastSent ? new Date(lastSent) : null).catch(() => null);
+    if (!line) return;
+    await storage.createMessage({ userId, text: line, sender: "jae" });
+    await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
+    return;
+  }
   const opening = await buildOpeningLine(userId).catch(() => null);
   const text = opening ?? DAILY_ENCOURAGEMENTS[new Date().getDay() % DAILY_ENCOURAGEMENTS.length];
   await storage.createMessage({ userId, text, sender: "jae" });
@@ -3497,14 +3505,14 @@ export async function registerRoutes(
 
   // Mirror a journal session to `entries` so Calendar/Memory Bank shows it —
   // the journal has its own table, but Calendar only reads from `entries`.
-  async function mirrorJournalToCalendar(userId: string, dayNumber: number, session: string, keyTheme: string | null | undefined, localDate: string | undefined) {
+  async function mirrorJournalToCalendar(userId: string, dayNumber: number, session: string, keyTheme: string | null | undefined, localDate: string | undefined, nextStep?: string | null) {
     const sessionLabel = session === "morning" ? "Morning" : session === "evening" ? "Evening" : "Grounding Statement";
     try {
       await storage.createEntry({
         userId,
         goalId: null,
         date: localDate || todayStr(),
-        summary: `Grounding Journal — Day ${dayNumber} ${sessionLabel}${keyTheme ? `: ${keyTheme}` : ""}`,
+        summary: `Grounding Journal — Day ${dayNumber} ${sessionLabel}${keyTheme ? `: ${keyTheme}` : ""}${nextStep ? ` · Your small step: ${nextStep}` : ""}`,
         mood: "neutral",
       });
     } catch (calErr) {
@@ -3726,7 +3734,7 @@ export async function registerRoutes(
       // summarize, and this keeps the crisis disclosure out of Calendar/Memory
       // Bank's normal-activity surface.
       if (!safetyReflection) {
-        await mirrorJournalToCalendar(userId, dayNumber, session, jaeResponse.keyTheme, localDate);
+        await mirrorJournalToCalendar(userId, dayNumber, session, jaeResponse.keyTheme, localDate, session === "evening" ? jaeResponse.nextStep : null);
       }
 
       // Kept the reflection time they chose this morning → bonus water. A
@@ -3842,7 +3850,7 @@ export async function registerRoutes(
           nextStep: session === "evening" && r.nextStep ? r.nextStep : null,
         };
         jae = { ...r };
-        await mirrorJournalToCalendar(userId, dayNumber, session, r.keyTheme, localDate);
+        await mirrorJournalToCalendar(userId, dayNumber, session, r.keyTheme, localDate, session === "evening" ? r.nextStep : null);
       }
 
       const updated = await storage.updateGroundingJournalEntry(entry.id, updates as any);

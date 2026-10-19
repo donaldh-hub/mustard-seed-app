@@ -108,7 +108,7 @@ const EVENING_PROMPTS: Record<number, string[]> = {
 };
 
 const GROUNDING_STATEMENT_PROMPTS = [
-  "In three short reflections, share what you've learned:",
+  "What you've learned:",
   "What you'll keep nurturing:",
   "One thing you're ready to carry forward:",
 ];
@@ -427,7 +427,8 @@ export default function GroundingJournal() {
     });
   };
 
-  const stepHasVideo = (id: string) => !!JOURNAL_VIDEOS[id];
+  // Only a real file gates the prompts; a placeholder adds no extra screen.
+  const stepHasVideo = (id: string) => !!JOURNAL_VIDEOS[id] && !JOURNAL_VIDEOS[id]!.startsWith("PLACEHOLDER");
   // A real video file, not a PLACEHOLDER_* entry still waiting to be recorded.
   const videoAssetReady = (id: string) => !!JOURNAL_VIDEOS[id] && !JOURNAL_VIDEOS[id]!.startsWith("PLACEHOLDER");
   const videoIsReady = (id: string) => videoAcknowledged.has(id);
@@ -1184,7 +1185,7 @@ export default function GroundingJournal() {
                     <div className="rounded-2xl p-4 bg-primary/5 border border-primary/20" data-testid="card-next-step">
                       <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{isDay3Evening ? "Your next small step" : "Your small step for tomorrow"}</p>
                       <p className="text-sm font-medium text-foreground leading-relaxed">{jae.nextStep}</p>
-                      {!isDay3Evening && <p className="text-xs text-muted-foreground mt-1">Jai will ask about it tomorrow morning.</p>}
+                      <p className="text-xs text-muted-foreground mt-1">{isDay3Evening ? "Jai will ask about it in Chat tomorrow." : "Jai will ask about it tomorrow morning."}</p>
                     </div>
                   )}
 
@@ -1319,14 +1320,12 @@ export default function GroundingJournal() {
 
                 {!hasGoal && <PlantGoalCard onPlant={handlePlantGoal} busy={planting} />}
 
-                <RebuildFunnelCard started={rebuildStarted} onClick={handleGoToRebuild} />
+                <Button className="w-full rounded-xl h-12" onClick={handleComplete} data-testid="button-enter-app">
+                  Enter the Mustard Seed App
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
 
-                <button
-                  className="w-full text-sm text-muted-foreground hover:text-foreground py-2"
-                  onClick={handleComplete}
-                >
-                  Not yet — enter the Mustard Seed App
-                </button>
+                <RebuildFunnelCard started={rebuildStarted} onClick={handleGoToRebuild} />
               </div>
             )}
 
