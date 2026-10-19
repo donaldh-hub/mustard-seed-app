@@ -12,7 +12,7 @@ import {
 import { BillingIntervalToggle, type BillingInterval } from "@/components/BillingIntervalToggle";
 import { RebuildPurchaseCard } from "@/components/RebuildPurchaseCard";
 import { GraduateRateNote } from "@/components/GraduateRateNote";
-import JaeAvatar from "@assets/file_000000006e04620e9931a4040836810b_1771384491714.png";
+import JaeAvatar from "@assets/jai-avatar.png";
 import { renderInlineMarkdown } from "@/lib/inlineMarkdown";
 import { SyncedVideoPlayer } from "@/components/SyncedVideoPlayer";
 import {

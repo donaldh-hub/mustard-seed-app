@@ -159,6 +159,10 @@ export default function Auth() {
       setError("All fields are required.");
       return;
     }
+    if (name.includes("@")) {
+      setError("Please enter your name, not your email. Jai uses it to greet you.");
+      return;
+    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -301,6 +305,7 @@ export default function Auth() {
                     onChange={(e) => setEmail(e.target.value)}
                     className={inputClass}
                     autoComplete="email"
+                    name="email"
                     data-testid="input-login-email"
                   />
                   <input
@@ -310,6 +315,7 @@ export default function Auth() {
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputClass}
                     autoComplete="current-password"
+                    name="password"
                     data-testid="input-login-password"
                   />
 
@@ -423,6 +429,7 @@ export default function Auth() {
                     onChange={(e) => setName(e.target.value)}
                     className={inputClass}
                     autoComplete="name"
+                    name="name"
                     data-testid="input-register-name"
                   />
                   <input
@@ -432,6 +439,7 @@ export default function Auth() {
                     onChange={(e) => setEmail(e.target.value)}
                     className={inputClass}
                     autoComplete="email"
+                    name="email"
                     data-testid="input-register-email"
                   />
                   <input
@@ -441,6 +449,7 @@ export default function Auth() {
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputClass}
                     autoComplete="new-password"
+                    name="password"
                     data-testid="input-register-password"
                   />
                   <input
@@ -450,6 +459,7 @@ export default function Auth() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className={inputClass}
                     autoComplete="new-password"
+                    name="confirm-password"
                     data-testid="input-register-confirm"
                   />
 
@@ -505,6 +515,7 @@ export default function Auth() {
                     onChange={(e) => setEmail(e.target.value)}
                     className={inputClass}
                     autoComplete="email"
+                    name="email"
                     data-testid="input-forgot-email"
                   />
 
@@ -590,6 +601,7 @@ export default function Auth() {
                     onChange={(e) => setPassword(e.target.value)}
                     className={inputClass}
                     autoComplete="new-password"
+                    name="password"
                     data-testid="input-reset-password"
                   />
                   <input
@@ -599,6 +611,7 @@ export default function Auth() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className={inputClass}
                     autoComplete="new-password"
+                    name="confirm-password"
                     data-testid="input-reset-confirm"
                   />
 

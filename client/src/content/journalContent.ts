@@ -16,6 +16,13 @@ export const JOURNAL_VIDEOS: Partial<Record<string, string>> = {
   "grounding-statement": "PLACEHOLDER_JOURNAL_GROUNDING_VIDEO",
 };
 
+// Title-card frame from each video (Day 1 opens on a blank cream fade-in).
+export const JOURNAL_POSTERS: Partial<Record<string, string>> = {
+  "day1-morning": "/journal-assets/day1/day1-poster.jpg",
+  "day2-morning": "/journal-assets/day2/day2-poster.jpg",
+  "day3-morning": "/journal-assets/day3/day3-poster.jpg",
+};
+
 function clipUrlFor(day: string) {
   return (n: number) => `/journal-assets/${day}/clip-${String(n).padStart(2, "0")}.mp3`;
 }

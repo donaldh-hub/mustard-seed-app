@@ -308,6 +308,10 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
 
 // Short reply to the user's optional follow-up answer: 1–2 sentences, no new
 // question, paraphrased (never quoted). Returns "" if the call fails.
+// Said when the model call fails or returns nothing, so an answered
+// follow-up is never met with silence before the wait screen.
+export const FOLLOW_UP_ACK_FALLBACK = "Thank you for naming that. I'll hold onto it, and we'll build on it together.";
+
 export async function generateFollowUpAck(ctx: {
   userName: string;
   question: string;
@@ -334,8 +338,11 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
       temperature: 0.6,
       max_tokens: 120,
     });
-    return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
-  } catch {
-    return "";
+    const reply = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+    if (!reply) console.warn("[JOURNAL] follow-up ack came back empty; using fallback");
+    return reply || FOLLOW_UP_ACK_FALLBACK;
+  } catch (err) {
+    console.error("[JOURNAL] follow-up ack failed; using fallback:", err instanceof Error ? err.message : err);
+    return FOLLOW_UP_ACK_FALLBACK;
   }
 }
