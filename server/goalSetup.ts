@@ -31,6 +31,9 @@ export interface GoalSetupState {
   deadline?: string | null;
   checkIn?: string | null;
   lastOfferedAt?: string;
+  // Set once the goal is planted (right after the why); the "step" stage
+  // then fills in its first step.
+  plantedGoalId?: string;
 }
 
 // Message types Chat renders with buttons under them.
@@ -48,9 +51,21 @@ export const GOAL_SETUP_BUTTONS = {
 
 const ACTIVE_STAGES: GoalSetupStage[] = ["offered", "wording", "new_goal", "why", "step", "date", "confirm"];
 
-const firstName = (name: string | null | undefined) => (name || "").trim().split(/\s+/)[0] || "";
+// An email typed into the Name field is never used as a greeting.
+const firstName = (name: string | null | undefined) => { const f = (name || "").trim().split(/\s+/)[0] || ""; return f.includes("@") ? "" : f; };
 const withName = (name: string, text: string) => (name ? `${name}, ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text);
 const stripEnd = (t: string) => t.trim().replace(/[.!\s]+$/, "");
+
+// Their own words said back by Jai: "my clothes" → "your clothes".
+function toYou(t: string): string {
+  return t.replace(/\bI'm\b/g, "you're").replace(/\bI am\b/g, "you are").replace(/\bI\b/g, "you")
+    .replace(/\bmyself\b/gi, "yourself").replace(/\bmy\b/gi, "your").replace(/\bme\b/gi, "you");
+}
+
+// Worded and confirmed, not planted yet: shown as "Goal in progress".
+export function isDraft(s: GoalSetupState): boolean {
+  return !!s.title && (["why", "date", "confirm"].includes(s.stage) || (s.stage === "step" && !s.plantedGoalId));
+}
 
 function getState(user: { goalSetup?: unknown }): GoalSetupState | null {
   const s = user.goalSetup as GoalSetupState | null | undefined;
@@ -93,7 +108,7 @@ export async function suggestGoalFromLines(lines: string[]): Promise<{ goal: str
         {
           role: "system",
           content: `From this person's own records, find the ONE thing they keep coming back to that would make a good first goal. Use their words and their goal — never invent one. If nothing clearly points to a goal, return {"goal": "", "because": ""}.
-"goal": first person, plain, under 10 words, no quotes (e.g. "Find a name for my business").
+"goal": first person, plain, under 14 words, no quotes (e.g. "Find a name for my business"). If their journal intention names the outcome this serves (e.g. being on time for work), keep that outcome in the goal: "Build a night routine so I'm on time for work".
 "because": a short phrase completing "you kept coming back to …", in second person (e.g. "finding a name for your business").
 Respond ONLY with JSON: {"goal": "...", "because": "..."}`,
         },
@@ -123,6 +138,12 @@ function offerText(name: string, source: "chat" | "journal", suggestion: GoalSet
 export async function startGoalSetup(userId: string, source: "chat" | "journal") {
   const user = await storage.getUser(userId);
   if (!user) return null;
+  // A goal already worded and on its way (Home shows "Goal in progress"):
+  // pick it back up instead of starting over.
+  const current = getState(user);
+  if (current && isDraft(current)) {
+    return storage.createMessage({ userId, text: RETURN_TO[current.stage]?.(current) ?? questionFor(current.stage, current), sender: "jae" });
+  }
   const suggestion = await suggestGoalFromMemory(userId);
   await saveState(userId, { stage: "offered", source, suggestion, lastOfferedAt: new Date().toISOString() });
   return storage.createMessage({
@@ -147,7 +168,7 @@ export async function shouldOfferGoalSetup(userId: string): Promise<boolean> {
 
 // ─── Reading their answer ────────────────────────────────────────────────────
 
-type Intent = "yes" | "different" | "not_yet" | "change" | "skip" | "answer" | "question" | "off_topic";
+type Intent = "yes" | "different" | "not_yet" | "change" | "skip" | "answer" | "question" | "app_help" | "off_topic";
 
 function buttonIntent(text: string): Intent | null {
   const t = text.trim().toLowerCase().replace(/[.!]+$/, "");
@@ -180,7 +201,8 @@ intent:
 - "skip": skips an optional question
 - "answer": actually answers the question (put the answer in "value")
 - "question": asks Jai something about this question (put a one-sentence plain answer in "reply")
-- "off_topic": talks about something unrelated to setting up the goal
+- "app_help": asks how the app works or what to do now ("how do I use this?", "what happens now?", "what is Growth?")
+- "off_topic": talks about something unrelated to setting up the goal (put a short, warm 1–2 sentence reply to what they said in "reply", in Jai's calm voice: no advice lists, no question)
 "value": for "answer" (or "different" when they name the new goal) — their answer, cleaned up but in their words, no quotes. For a goal: first person, under 12 words. For a date question: a calendar date as YYYY-MM-DD if they gave one (assume the next occurrence; today is ${new Date().toISOString().slice(0, 10)}), otherwise their check-in wording (e.g. "Sundays").
 Respond ONLY with JSON: {"intent": "...", "value": "", "reply": ""}`,
         },
@@ -188,7 +210,7 @@ Respond ONLY with JSON: {"intent": "...", "value": "", "reply": ""}`,
       ],
     });
     const p = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-    const intents: Intent[] = ["yes", "different", "not_yet", "change", "skip", "answer", "question", "off_topic"];
+    const intents: Intent[] = ["yes", "different", "not_yet", "change", "skip", "answer", "question", "app_help", "off_topic"];
     return {
       intent: intents.includes(p.intent) ? p.intent : "answer",
       value: typeof p.value === "string" ? stripEnd(p.value.replace(/["“”]/g, "")) : "",
@@ -205,7 +227,7 @@ Respond ONLY with JSON: {"intent": "...", "value": "", "reply": ""}`,
 const QUESTIONS = {
   wording: (s: GoalSetupState) => `Here's how I'd word it: ${s.suggestion?.goal ?? s.title}. Does that sound like you, or how would you say it?`,
   new_goal: () => "What do you want to work toward? Say it in your own words. One goal is plenty.",
-  why: (s: GoalSetupState) => `Why does ${lowerFirst(s.title ?? "this")} matter to you? That's your Clarity of Vision & Why, the reason you'll come back to on the hard days.`,
+  why: (s: GoalSetupState) => `${whyQuestion(s.title)} That's your Clarity of Vision & Why, the reason you'll come back to on the hard days.`,
   step: () => "What's one small first step you could take this week, something that takes 10 minutes or less? That's where Small Steps + Consistency starts.",
   date: () => "Last one, and it's optional: want a target date or a check-in day? You can say something like by November 30, or check in Sundays. Or just say skip.",
   confirm: (s: GoalSetupState) => [
@@ -218,6 +240,32 @@ const QUESTIONS = {
     "Ready to plant it?",
   ].filter(Boolean).join("\n"),
 } as const;
+
+// Short versions, for coming back to a question after answering something
+// else (never the same words as the full question).
+const RETURN_TO: Partial<Record<GoalSetupStage, (s: GoalSetupState) => string>> = {
+  offered: () => "Whenever you're ready, we can set up your first goal together.",
+  wording: (s) => `Whenever you're ready, tell me if ${s.suggestion?.goal ?? s.title} sounds right, or how you'd say it.`,
+  new_goal: () => "Whenever you're ready, tell me the goal you want to work toward.",
+  why: (s) => `Whenever you're ready, back to your goal: ${lowerFirst(whyQuestion(s.title))}`,
+  step: () => "Whenever you're ready, back to your goal: what's one small first step you could take this week?",
+  date: () => "Whenever you're ready, back to your goal: want a target date or check-in day, or should we skip it?",
+  confirm: () => "Whenever you're ready, tell me if you want to plant it or change something.",
+};
+
+// Only what really exists in the app (checked against the screens). Used
+// when someone asks how to use it, mid-setup.
+export const APP_GUIDE = "Here's how it works. Home is your daily snapshot: your focus Heartbeat, your goal, your Water Level (how many of the last 7 days you showed up), and your Seed Stage. Growth is where your goals live, and where you can log progress on them. Memory is a calendar of what actually happened: your reflections, your steps, and the times you kept your word. Profile shows your five Heartbeat scores and your settings. And this chat is where you tell me what you did, ask me anything, or tell me what's in the way. Water comes from real action, not intention.";
+
+// Goals are worded as actions ("Establish a nighttime routine") or as
+// things ("Better sleep", "Writing my book"); ask "why" so either reads right.
+export function whyQuestion(title: string | undefined): string {
+  const t = stripEnd((title ?? "").replace(/^i\s+(want|need|would like|will|'?m going|am going|plan)\s+to\s+/i, ""));
+  if (!t) return "Why does this goal matter to you?";
+  const first = t.split(/\s+/)[0].toLowerCase();
+  const thing = /ing$/.test(first) || ["a", "an", "the", "my", "our", "more", "less", "better", "healthier", "consistent"].includes(first);
+  return thing ? `Why does ${lowerFirst(t)} matter to you?` : `Why does it matter to you to ${lowerFirst(t)}?`;
+}
 
 function lowerFirst(t: string) {
   return /^[A-Z][a-z]/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t;
@@ -259,7 +307,8 @@ export async function handleGoalSetupTurn(
   if (!user) return null;
   const state = getState(user);
   if (!state || !ACTIVE_STAGES.includes(state.stage)) return null;
-  if ((await storage.getActiveGoals(userId)).length > 0) {
+  const plantedStepOpen = state.stage === "step" && !!state.plantedGoalId;
+  if (!plantedStepOpen && (await storage.getActiveGoals(userId)).length > 0) {
     await saveState(userId, null);
     return null;
   }
@@ -279,13 +328,22 @@ export async function handleGoalSetupTurn(
     await saveState(userId, { ...state, stage: "declined" });
     return { text: "No pressure at all. When you're ready, I'm here, and we can set it up in a couple of minutes.", messageType: "text" };
   }
+  const comeBack = (lead: string): GoalSetupReply => ({
+    text: `${lead} ${RETURN_TO[state.stage]?.(state) ?? questionFor(state.stage, state)}`.trim(),
+    messageType: "text",
+  });
+  if (r.intent === "app_help") return comeBack(APP_GUIDE);
   if (r.intent === "off_topic") {
-    // Let the normal conversation answer; the offer comes back at the next chat open.
-    if (state.stage === "offered") await saveState(userId, { ...state, stage: "declined" });
-    return state.stage === "offered" ? null : ask(state, "Let's finish this first, then I'm all yours. ");
+    // At the offer, let the normal conversation answer; the offer comes back
+    // at the next chat open. Mid-setup, answer briefly, then come back.
+    if (state.stage === "offered") {
+      await saveState(userId, { ...state, stage: "declined" });
+      return null;
+    }
+    return comeBack(r.reply || "Thanks for telling me.");
   }
   if (r.intent === "question") {
-    return ask(state, r.reply ? `${r.reply} ` : "");
+    return r.reply ? comeBack(r.reply) : ask(state);
   }
 
   switch (state.stage) {
@@ -305,9 +363,12 @@ export async function handleGoalSetupTurn(
       return move({ ...state, stage: "why", title: r.value });
     }
     case "why":
-      return move({ ...state, stage: "step", why: r.intent === "skip" ? "" : r.value || text.trim() });
-    case "step":
-      return move({ ...state, stage: "date", step: r.intent === "skip" ? "" : r.value || text.trim() });
+      return plantAfterWhy(userId, user.name, { ...state, why: r.intent === "skip" ? "" : r.value || text.trim() }, opts);
+    case "step": {
+      const step = r.intent === "skip" ? "" : r.value || text.trim();
+      if (state.plantedGoalId) return saveFirstStep(userId, { ...state, step }, opts);
+      return move({ ...state, stage: "date", step });
+    }
     case "date": {
       if (r.intent === "skip" || r.intent === "yes" || !r.value) return move({ ...state, stage: "confirm", deadline: null, checkIn: null });
       const isDate = /^\d{4}-\d{2}-\d{2}$/.test(r.value);
@@ -351,7 +412,7 @@ async function plant(
       userId,
       goalId: planted.goal.id,
       date: opts.localDate || new Date().toLocaleDateString("en-CA"),
-      summary: `First step for ${title}: ${state.step}${state.checkIn ? ` (check-in: ${state.checkIn})` : ""}`,
+      summary: `First step for your goal (${title}): ${state.step}${state.checkIn ? ` (check-in: ${state.checkIn})` : ""}`,
       mood: "neutral",
       ...(opts.userTimezone ? { userTimezone: opts.userTimezone } : {}),
     }).catch(() => {});
@@ -361,7 +422,7 @@ async function plant(
   // step?") waits until tomorrow.
   await storage.updateUser(userId, { lastDailyEncouragementSentAt: new Date() } as any);
   const first = firstName(name);
-  const stepLine = state.step ? ` Your first step is ${lowerFirst(stripEnd(state.step))}, and I'll ask you about it next time.` : "";
+  const stepLine = state.step ? ` Your first step: ${toYou(lowerFirst(stripEnd(state.step)))}. I'll ask you about it next time.` : "";
   // A photo shared before there was a goal gets checked against it now.
   const released = await releaseHeldPhotos(userId, opts.localDate || new Date().toLocaleDateString("en-CA")).catch((err) => {
     console.error("[GOAL_SETUP] held photo release error:", err);
@@ -369,8 +430,66 @@ async function plant(
   });
   const photoLine = released > 0 ? " The photo you shared earlier counts toward it too, so your seed got water for that as well." : "";
   return {
-    text: `${first ? `${first}, it's planted. ` : "It's planted. "}🌱 ${title} is your first goal, and it just got its first drop of water.${stepLine}${photoLine}`,
+    text: `${first ? `${first}, it's planted. ` : "It's planted. "}🌱 Your first goal: ${title}. It just got its first drop of water.${stepLine}${photoLine}`,
     messageType: "text",
     plantedGoalId: planted.goal.id,
+  };
+}
+
+// The newest step they set in the 3-Day Journal ("Tomorrow, …" dropped),
+// used as the goal's first step so it stays in their own words.
+async function journalStep(userId: string): Promise<string> {
+  const journal = await storage.getGroundingJournalEntries(userId).catch(() => []);
+  const last = journal.filter((e) => e.session === "evening" && e.nextStep)
+    .sort((a, b) => b.dayNumber - a.dayNumber)[0]?.nextStep ?? "";
+  const rest = stripEnd(last.replace(/^(tomorrow|tonight),?\s*/i, ""));
+  return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : "";
+}
+
+/**
+ * The why is in: plant the goal now (first water and Memory come from
+ * plantGoal), then close with a short summary and one first step: their
+ * journal step if they set one, otherwise one last question for it.
+ */
+async function plantAfterWhy(
+  userId: string,
+  name: string | null | undefined,
+  state: GoalSetupState,
+  opts: { localDate?: string; userTimezone?: string },
+): Promise<GoalSetupReply> {
+  const step = await journalStep(userId);
+  const planted = await plant(userId, name, { ...state, step }, opts);
+  if (!planted.plantedGoalId) return planted;
+  const why = state.why ? `\n\nWhy it matters: ${toYou(stripEnd(state.why))}` : "";
+  if (step) {
+    return { ...planted, text: `${planted.text.replace("I'll ask you about it next time.", "That's the step you set in your journal, and I'll ask you about it next time.")}${why}` };
+  }
+  await saveState(userId, { ...state, stage: "step", plantedGoalId: planted.plantedGoalId });
+  return { ...planted, text: `${planted.text}${why}\n\n${QUESTIONS.step()}` };
+}
+
+/** Saves the first step on a goal planted before the step was asked. */
+async function saveFirstStep(
+  userId: string,
+  state: GoalSetupState,
+  opts: { localDate?: string; userTimezone?: string },
+): Promise<GoalSetupReply> {
+  if (state.step) {
+    await storage.updateGoal(state.plantedGoalId!, { microHabit: state.step } as any).catch(() => {});
+    await storage.createEntry({
+      userId,
+      goalId: state.plantedGoalId!,
+      date: opts.localDate || new Date().toLocaleDateString("en-CA"),
+      summary: `First step for your goal (${state.title}): ${state.step}`,
+      mood: "neutral",
+      ...(opts.userTimezone ? { userTimezone: opts.userTimezone } : {}),
+    }).catch(() => {});
+  }
+  await saveState(userId, { ...state, stage: "done" });
+  return {
+    text: state.step
+      ? `Got it. Your first step: ${toYou(lowerFirst(stripEnd(state.step)))}. I'll ask you about it next time.`
+      : "That's okay. When a first step comes to you, just tell me and I'll hold onto it.",
+    messageType: "text",
   };
 }

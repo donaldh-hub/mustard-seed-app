@@ -517,6 +517,15 @@ export default function Chat() {
     enabled: !!userId,
   });
 
+  // Keeps "Jai is typing" up from send until his reply is actually loaded
+  // (the send returns before the message list refetches).
+  const [awaitingReply, setAwaitingReply] = useState(false);
+  useEffect(() => {
+    if (!awaitingReply) return;
+    const t = setTimeout(() => setAwaitingReply(false), 15000);
+    return () => clearTimeout(t);
+  }, [awaitingReply]);
+
   const sendMutation = useMutation({
     mutationFn: (text: string) => {
       const localDate = getLocalDateStr();
@@ -524,6 +533,8 @@ export default function Chat() {
       return api.sendMessage(userId!, text, localDate, userTimezone);
     },
     onSuccess: (data, sentText) => {
+      setAwaitingReply(true);
+      qc.refetchQueries({ queryKey: ["messages", userId] }).finally(() => setAwaitingReply(false));
       const category = data?.titan?.category;
       const jaeId = data?.jaeMessage?.id;
 
@@ -779,10 +790,14 @@ export default function Chat() {
   });
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, sendMutation.isPending, photoMutation.isPending, pendingMessage, composerExtra]);
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    // Again after layout settles (reply buttons, images), so the newest
+    // message is never left below the fold.
+    const raf = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, sendMutation.isPending, awaitingReply, photoMutation.isPending, pendingMessage, composerExtra]);
 
   useEffect(() => {
     if (!pendingMessage) return;
@@ -895,8 +910,8 @@ export default function Chat() {
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 pb-32"
-        style={composerExtra ? { paddingBottom: 128 + composerExtra } : undefined}
+        className="flex-1 overflow-y-auto p-4 space-y-4 pb-48"
+        style={composerExtra ? { paddingBottom: 192 + composerExtra } : undefined}
       >
         {isLoading && (
           <div className="text-center text-muted-foreground text-sm py-8">Loading messages...</div>
@@ -1155,7 +1170,7 @@ export default function Chat() {
           </motion.div>
         )}
 
-        {isTextSending && (
+        {(isTextSending || awaitingReply) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

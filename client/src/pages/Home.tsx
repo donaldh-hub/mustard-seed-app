@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PRICING, formatUsd } from "@shared/pricing";
 import { useLocation } from "wouter";
+import { draftGoalTitle } from "@/lib/goalDraft";
 
 function CircularProgressRing({
   percent,
@@ -480,6 +481,11 @@ export default function Home() {
                   </p>
                 )}
               </>
+            ) : draftGoalTitle(user) ? (
+              // Worded with Jai but not planted yet (server/goalSetup.ts isDraft).
+              <p className="text-sm text-muted-foreground" data-testid="text-goal-draft">
+                <span className="font-medium text-foreground">Goal in progress:</span> {draftGoalTitle(user)}. Finish it with Jai and it's planted.
+              </p>
             ) : (
               // No goal yet: Jai walks them into one (server/goalSetup.ts).
               <p className="text-sm text-muted-foreground" data-testid="text-no-goal">
@@ -497,7 +503,7 @@ export default function Home() {
               size="sm"
               data-testid="button-refine-goal"
             >
-              {goal ? "Refine Goal" : "Plant my first goal with Jai"}
+              {goal ? "Refine Goal" : draftGoalTitle(user) ? "Finish with Jai" : "Plant my first goal with Jai"}
             </Button>
           </motion.div>
 

@@ -20,7 +20,7 @@ export async function buildOpeningLine(userId: string): Promise<string | null> {
   ]);
   const goal = goals.find((g) => g.goalType === "targeted") ?? goals[0];
   if (!user || !goal) return null;
-  const name = (user.name || "").trim().split(/\s+/)[0];
+  const name = (user.name || "").trim().split(/\s+/)[0].replace(/^.*@.*$/, "");
   const hi = (t: string) => (name ? `${name}, ${t.charAt(0).toLowerCase()}${t.slice(1)}` : t);
 
   type Candidate = { at: number; text: string };
@@ -32,7 +32,7 @@ export async function buildOpeningLine(userId: string): Promise<string | null> {
     candidates.push({ at: time(commitment.createdAt), text: `Last time you said you'd ${lowerFirst(stripEnd(commitment.action))}. Did you get to it?` });
   }
   if (goal.microHabit) {
-    candidates.push({ at: time(goal.createdAt), text: `Your first step for ${lowerFirst(stripEnd(goal.title))} was ${lowerFirst(stripEnd(goal.microHabit))}. How did it go?` });
+    candidates.push({ at: time(goal.createdAt), text: `You planned to ${stepText(goal.microHabit)} as your first step. How did it go?` });
   }
   const statement = journal.find((e) => e.session === "grounding_statement");
   const lastEvening = journal.filter((e) => e.session === "evening" && e.nextStep).sort((a, b) => time(b.createdAt) - time(a.createdAt))[0];
@@ -46,7 +46,7 @@ export async function buildOpeningLine(userId: string): Promise<string | null> {
   }
 
   const latest = candidates.sort((a, b) => b.at - a.at)[0];
-  return hi(latest ? latest.text : `What's one small thing you can do for ${lowerFirst(stripEnd(goal.title))} today?`);
+  return hi(latest ? latest.text : `What's one small thing you can do today toward your goal: ${stripEnd(goal.title)}?`);
 }
 
 // For a user with no goal yet: once, the next day, ask about the step they
