@@ -4,7 +4,7 @@ import path from 'path';
 
 /**
  * Vite plugin that updates og:image and twitter:image meta tags
- * to point to the app's opengraph image with the correct Replit domain.
+ * to point to the app's opengraph image on the APP_BASE_URL domain.
  */
 export function metaImagesPlugin(): Plugin {
   return {
@@ -12,7 +12,7 @@ export function metaImagesPlugin(): Plugin {
     transformIndexHtml(html) {
       const baseUrl = getDeploymentUrl();
       if (!baseUrl) {
-        log('[meta-images] no Replit deployment domain found, skipping meta tag updates');
+        log('[meta-images] APP_BASE_URL not set, keeping the image URLs in index.html');
         return html;
       }
 
@@ -55,16 +55,13 @@ export function metaImagesPlugin(): Plugin {
   };
 }
 
+// Only APP_BASE_URL (the custom domain) overrides the image URL. Replit's
+// internal/dev domains are skipped so shared links keep pointing at
+// mustardseeddap.com, which index.html already names.
 function getDeploymentUrl(): string | null {
-  if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    const url = `https://${process.env.REPLIT_INTERNAL_APP_DOMAIN}`;
-    log('[meta-images] using internal app domain:', url);
-    return url;
-  }
-
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    const url = `https://${process.env.REPLIT_DEV_DOMAIN}`;
-    log('[meta-images] using dev domain:', url);
+  if (process.env.APP_BASE_URL) {
+    const url = process.env.APP_BASE_URL.replace(/\/+$/, '');
+    log('[meta-images] using APP_BASE_URL:', url);
     return url;
   }
 

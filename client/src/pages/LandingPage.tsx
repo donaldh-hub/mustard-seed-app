@@ -8,7 +8,7 @@ import { REBUILD_INSTANCES } from "@/content/rebuildContent";
 const HEARTBEATS = [
   { title: "Clarity of Vision & Why", desc: "Know exactly what you're building and why it matters before you move." },
   { title: "Small Steps + Consistency", desc: "Progress compounds when small actions are repeated daily." },
-  { title: "Mindset Over Method", desc: "Your thinking determines your execution more than any tactic ever will." },
+  { title: "Mindset over Method", desc: "Your thinking determines your execution more than any tactic ever will." },
   { title: "Feedback & Adaptation", desc: "Review what happened, adjust what's needed, and keep moving forward." },
   { title: "Courageous Action", desc: "Act even when it's uncomfortable, uncertain, or inconvenient." },
 ];
@@ -306,19 +306,31 @@ export default function LandingPage() {
 
       {/* 3-DAY GROUNDING JOURNAL */}
       <section className="bg-[#f9f6ef] px-6 py-16">
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-10 md:flex-row">
+        <div className="mx-auto max-w-5xl">
+          <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
+            <h2 className="text-center text-3xl font-bold text-stone-900 md:text-left">
+              The 3-Day Grounding Journal
+            </h2>
+            <span className="rounded-full bg-[#c8a84b]/20 px-3 py-1 text-xs font-semibold text-[#8a6f1f]">
+              Free
+            </span>
+          </div>
+          <p className="mt-2 max-w-2xl text-center text-sm text-stone-500 md:text-left">
+            Three days to find your footing before you set a goal. Jai remembers every answer.
+          </p>
+        <div className="mt-8 flex flex-col items-center gap-10 md:flex-row">
           <ol className="flex-1 space-y-6 border-l-2 border-[#c8a84b] pl-6">
             <li>
-              <div className="font-semibold text-stone-900">Day 1 — Where You Actually Are</div>
-              <div className="text-sm text-stone-600">An honest, grace-filled check-in.</div>
+              <div className="font-semibold text-stone-900">Day 1 — Reset</div>
+              <div className="text-sm text-stone-600">Notice where you are and where your attention goes.</div>
             </li>
             <li>
-              <div className="font-semibold text-stone-900">Day 2 — What You Actually Want</div>
-              <div className="text-sm text-stone-600">Name the value underneath the goal.</div>
+              <div className="font-semibold text-stone-900">Day 2 — Refocus</div>
+              <div className="text-sm text-stone-600">Choose what truly matters, and what you're ready to release.</div>
             </li>
             <li>
-              <div className="font-semibold text-stone-900">Day 3 — Your First Small Step</div>
-              <div className="text-sm text-stone-600">Leave with one seed you can plant today.</div>
+              <div className="font-semibold text-stone-900">Day 3 — Rebuild</div>
+              <div className="text-sm text-stone-600">Carry one value through the day. Leave with your grounding statement and a first seed to plant.</div>
             </li>
           </ol>
 
@@ -326,11 +338,11 @@ export default function LandingPage() {
             <img
               src={mustardSeedLogo}
               alt="Mustard Seed App"
-              className="mx-auto h-16 w-16 rounded-xl object-contain"
+              className="mx-auto mb-3 h-16 w-16 rounded-xl object-contain"
             />
             <h3 className="text-xl font-bold text-stone-900">Ready to get grounded?</h3>
             <p className="mt-2 text-sm text-stone-600">
-              Three short sessions with Jai. No pressure, just clarity.
+              A short morning and evening check-in with Jai each day. No pressure, just clarity.
             </p>
             <button
               onClick={goToSignup}
@@ -350,6 +362,7 @@ export default function LandingPage() {
               On the website, you choose the seed. On the phone, you water it.
             </p>
           </div>
+        </div>
         </div>
       </section>
 
