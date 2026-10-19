@@ -37,6 +37,7 @@ export interface IStorage {
   getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  startOver(userId: string): Promise<User | undefined>;
 
   createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
   getPasswordResetToken(token: string): Promise<{ userId: string; expiresAt: Date; usedAt: Date | null } | undefined>;
@@ -187,6 +188,54 @@ export class DatabaseStorage implements IStorage {
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
     const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
     return user;
+  }
+
+  // Wipes everything a user has made (journal, assessment, goals, chat,
+  // photos, entries, Rebuild progress) and puts their progress fields back to
+  // a brand-new account. Keeps login, billing/purchases, and the audit logs
+  // (auth, billing, safety events).
+  async startOver(userId: string): Promise<User | undefined> {
+    return db.transaction(async (tx) => {
+      await tx.delete(groundingJournalEntries).where(eq(groundingJournalEntries.userId, userId));
+      await tx.delete(rebuildInstances).where(eq(rebuildInstances.userId, userId));
+      await tx.delete(messages).where(eq(messages.userId, userId));
+      await tx.delete(photoMemories).where(eq(photoMemories.userId, userId));
+      await tx.delete(goals).where(eq(goals.userId, userId));
+      await tx.delete(entries).where(eq(entries.userId, userId));
+      await tx.delete(weeklyReviews).where(eq(weeklyReviews.userId, userId));
+      await tx.delete(commitments).where(eq(commitments.userId, userId));
+      await tx.delete(assessments).where(eq(assessments.userId, userId));
+      await tx.delete(retentionNudges).where(eq(retentionNudges.userId, userId));
+      await tx.delete(supportInquiries).where(eq(supportInquiries.userId, userId));
+      const [user] = await tx.update(users).set({
+        assessmentCompleted: false,
+        goals: [],
+        struggles: [],
+        commitmentLevel: "serious",
+        isOnboarded: 0,
+        waterLevel: 30,
+        treeStage: 1,
+        streak: 0,
+        previousStreak: 0,
+        driftMarkers: 0,
+        consecutiveIOCount: 0,
+        cBurnActive: 0,
+        lastVerifiedActionAt: null,
+        lastDriftWarningAt: null,
+        driftWarningCount14d: 0,
+        heartbeatCredits: { clarity: 0, consistency: 0, mindset: 0, adaptation: 0, courage: 0 },
+        weeklyCycleStart: null,
+        firstGoalMomentumUsed: false,
+        groundingJournalCompleted: false,
+        hasCompletedRebuild: false,
+        lastRebuildActivityAt: null,
+        lastAssessmentReminderSentAt: null,
+        lastDailyEncouragementSentAt: null,
+        goalSetup: null,
+        lastWeeklySummaryChatAt: null,
+      } as any).where(eq(users.id, userId)).returning();
+      return user;
+    });
   }
 
   async createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
