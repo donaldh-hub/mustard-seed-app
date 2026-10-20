@@ -55,6 +55,9 @@ const BACKTRACK_WINDOW_MS = 30 * 60 * 1000;
 const BACKTRACK_PHRASES =
   /\b(never ?mind|forget (it|that|i said)|i('m| am) fine|i didn'?t mean (it|that)|i was (just )?(joking|kidding)|ignore (that|what i said)|not a big deal|i'?m ok(ay)?( now)?|drop it|it'?s nothing)\b/i;
 
+// A check-in (not a clear-risk flag) is asked at most once per this window.
+const CHECK_IN_GAP_MS = 24 * 60 * 60 * 1000;
+
 // Rows logged before tiering have no tier; they were all full-script flags.
 const isClearFlag = (e: { tier?: string | null }) => !e.tier || e.tier === "clear";
 
@@ -184,6 +187,10 @@ export async function evaluateMessage(
   if (!result) return NOT_TRIGGERED;
 
   if (result.tier === "check_in") {
+    // The "is it the task or something heavier?" question at most once a
+    // day: asked and answered, it isn't asked again.
+    const lastDay = await storage.getRecentSafetyEvents(userId, new Date(Date.now() - CHECK_IN_GAP_MS));
+    if (lastDay.some((e) => e.tier === "check_in")) return NOT_TRIGGERED;
     // Logged for the admin view; no founder email for a check-in.
     const event = await storage.createSafetyEvent({
       userId, category: result.category, responseType: "primary", triggeringMessage: text, surface, alertSent: false, tier: "check_in",
