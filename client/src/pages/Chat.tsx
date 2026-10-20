@@ -222,6 +222,13 @@ function goalSetupButtons(msg: { messageType?: string; text?: string }): string[
       : ["Set up my first goal", "Not yet"];
   }
   if (msg.messageType === "goal_confirm") return ["Plant it", "Change something"];
+  // App tour and Main Struggle offer (server/tour.ts).
+  if (msg.messageType === "tour_welcome") {
+    return /plant your first goal/.test(msg.text ?? "") ? ["Show me around", "Plant my first goal"] : ["Show me around", "I'll explore"];
+  }
+  if (msg.messageType?.startsWith("tour_step_")) return ["Next", "Skip the rest"];
+  if (msg.messageType === "tour_end") return ["Yes, let's do it", "Not yet"];
+  if (msg.messageType === "struggle_offer") return ["Yes, save it", "Not quite"];
   return null;
 }
 
@@ -890,7 +897,7 @@ export default function Chat() {
           <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-current-stage">
             {assessment ? (
               <>
-                Current Stage: {assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)} {stageEmoji[assessment.stage] || ""}
+                Assessment: {assessment.stage.charAt(0).toUpperCase() + assessment.stage.slice(1)} {stageEmoji[assessment.stage] || ""}
               </>
             ) : (
               <>

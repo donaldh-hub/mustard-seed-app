@@ -291,6 +291,8 @@ export interface GoalSetupReply {
   text: string;
   messageType: string;
   plantedGoalId?: string;
+  // The whole setup is done (goal planted and its first step in).
+  finished?: boolean;
 }
 
 /**
@@ -378,7 +380,8 @@ export async function handleGoalSetupTurn(
       if (r.intent === "change" || r.intent === "different" || r.intent === "answer") {
         return move({ ...state, stage: "wording", suggestion: state.title ? { goal: state.title, because: "" } : state.suggestion }, "No problem, let's walk it again. ");
       }
-      return plant(userId, user.name, state, opts);
+      const planted = await plant(userId, user.name, state, opts);
+      return { ...planted, finished: !!planted.plantedGoalId };
     }
   }
   return null;
@@ -462,7 +465,7 @@ async function plantAfterWhy(
   if (!planted.plantedGoalId) return planted;
   const why = state.why ? `\n\nWhy it matters: ${toYou(stripEnd(state.why))}` : "";
   if (step) {
-    return { ...planted, text: `${planted.text.replace("I'll ask you about it next time.", "That's the step you set in your journal, and I'll ask you about it next time.")}${why}` };
+    return { ...planted, finished: true, text: `${planted.text.replace("I'll ask you about it next time.", "That's the step you set in your journal, and I'll ask you about it next time.")}${why}` };
   }
   await saveState(userId, { ...state, stage: "step", plantedGoalId: planted.plantedGoalId });
   return { ...planted, text: `${planted.text}${why}\n\n${QUESTIONS.step()}` };
@@ -491,5 +494,6 @@ async function saveFirstStep(
       ? `Got it. Your first step: ${toYou(lowerFirst(stripEnd(state.step)))}. I'll ask you about it next time.`
       : "That's okay. When a first step comes to you, just tell me and I'll hold onto it.",
     messageType: "text",
+    finished: true,
   };
 }
