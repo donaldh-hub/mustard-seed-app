@@ -562,9 +562,12 @@ export default function GroundingJournal() {
     queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
   };
 
+  // "Enter the Mustard Seed App": Jai welcomes them in Chat and offers the
+  // tour or their first goal (server/tour.ts).
   const handleComplete = async () => {
     await markComplete();
-    setLocation("/home");
+    if (userId) await api.journalWelcome(userId).catch(() => {});
+    setLocation("/chat");
   };
 
   const handlePlantGoal = async () => {

@@ -100,6 +100,8 @@ export const api = {
 
   getActiveGoals: (userId: string) => fetchJson<any[]>(`/users/${userId}/goals`),
   // Opens Jai's guided goal setup in Chat (posts his offer, suggested from Memory).
+  journalWelcome: (userId: string) =>
+    fetchJson<{ posted: boolean }>(`/users/${userId}/journal-welcome`, { method: "POST" }),
   startGoalSetup: (userId: string, source: "chat" | "journal") =>
     fetchJson<{ started: boolean; reason?: string }>(`/users/${userId}/goal-setup/start`, {
       method: "POST",

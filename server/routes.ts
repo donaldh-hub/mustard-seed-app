@@ -10,6 +10,7 @@ import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
 import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
 import { buildOpeningLine, buildJournalStepLine } from "./chatOpening";
+import { handleTourTurn, postJournalWelcome, postStruggleOffer } from "./tour";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
 import { photoReplyText, photoMemoryLines, rewardPhoto, logPhotoDecision, resolveHeldPhotoReply } from "./photoReview";
 import { getActiveStyleGuide, checkContent, runRollingSample } from "./qualitySupervisor";
@@ -641,6 +642,20 @@ export async function registerRoutes(
     return res.json(msgs);
   });
 
+  // "Enter the Mustard Seed App" (journal completion): Jai's welcome in Chat,
+  // offering the tour or the first goal (once).
+  app.post("/api/users/:userId/journal-welcome", async (req, res) => {
+    try {
+      const message = await postJournalWelcome(req.params.userId);
+      // The welcome already offers the goal; don't stack the goal offer on it.
+      (req.session as any).goalOfferAt = Date.now();
+      return res.json({ posted: !!message });
+    } catch (err) {
+      console.error("[TOUR] welcome error:", err);
+      return res.status(500).json({ message: "Couldn't post the welcome." });
+    }
+  });
+
   // "Plant this as my first goal" (journal completion) — opens Jai's guided
   // setup in Chat with a goal suggested from their Memory.
   app.post("/api/users/:userId/goal-setup/start", async (req, res) => {
@@ -684,11 +699,19 @@ export async function registerRoutes(
         return res.json({ userMessage: userMsg, jaeMessage: safeMsg, safetyTriggered: true });
       }
 
+      // ─── App tour buttons, or asking for the tour (server/tour.ts) ───
+      const tourMsgs = await handleTourTurn(userId, rawText);
+      if (tourMsgs && tourMsgs.length > 0) {
+        return res.json({ userMessage: userMsg, jaeMessage: tourMsgs[tourMsgs.length - 1] });
+      }
+
       // ─── Guided goal setup — while it's open, Jai's first priority ───
       const setupReply = await handleGoalSetupTurn(userId, rawText, { localDate: clientLocalDate, userTimezone: clientTimezone });
       if (setupReply) {
         const setupMsg = await storage.createMessage({ userId, text: setupReply.text, sender: "jae", messageType: setupReply.messageType });
-        return res.json({ userMessage: userMsg, jaeMessage: setupMsg, ...(setupReply.plantedGoalId ? { goalPlanted: true } : {}) });
+        // Setup done: once, offer to save the journal's main struggle.
+        const struggleMsg = setupReply.finished ? await postStruggleOffer(userId).catch(() => null) : null;
+        return res.json({ userMessage: userMsg, jaeMessage: struggleMsg ?? setupMsg, ...(setupReply.plantedGoalId ? { goalPlanted: true } : {}) });
       }
 
       // ─── A photo waiting on "Did you make or change this today?" ───
