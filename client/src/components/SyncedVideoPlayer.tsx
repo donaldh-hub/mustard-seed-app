@@ -116,7 +116,7 @@ export function SyncedVideoPlayer({
   }
 
   return (
-    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg relative bg-black">
+    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-lg relative" style={{ background: poster ? "#f3e9dc" : "#000" }}>
       <video
         ref={videoRef}
         src={url}

@@ -43,11 +43,13 @@ const FALLBACK_PATTERNS: { category: SafetyTriggerCategory; re: RegExp }[] = [
   { category: "abuse_in_progress", re: /\b(he'?s hurting me|she'?s hurting me|(is )?hitting me right now|being abused)\b/i },
   { category: "medical_emergency", re: /\b(i('m| am) overdosing|can'?t breathe|chest pain|i'?m dying)\b/i },
   { category: "hopelessness_finality", re: /\b(no point in (anything|trying|living)|nothing matters|better off dead|better off without me)\b/i },
-  { category: "passive_ideation", re: /\b(don'?t see the point (in|of) (anything|living)|wish i (wasn'?t here|could disappear|weren'?t alive))\b/i },
+  { category: "passive_ideation", re: /\b(don'?t see the point (in|of) (anything|living)|wish i (wasn'?t here|could disappear|weren'?t alive)|(don'?t|do not) want to (be here|exist|wake up)( anymore)?|i can'?t go on)\b/i },
   { category: "disordered_eating", re: /\b(haven'?t eaten in (days|\d+ days)|not (going to|gonna) eat|starving myself)\b/i },
 ];
 
-const FALLBACK_CHECK_IN = /\b(too (frustrated|overwhelmed|tired)|overwhelmed|can'?t do this( anymore)?|i'?m done|giving up|give up|what'?s the point|i can'?t anymore)\b/i;
+// Only distress that may be about them, not the task. Plain frustration,
+// overwhelm or doubt ("too frustrated", "this is pointless") is not here.
+const FALLBACK_CHECK_IN = /\b(can'?t do this anymore|i can'?t (take it|go on) anymore|i can'?t anymore|i'?m done with (everything|it all|life)|giving up on (everything|life|myself)|what'?s the point of (anything|living|it all|me))\b/i;
 
 export function fallbackScreen(text: string): SafetyScreen | null {
   for (const { category, re } of FALLBACK_PATTERNS) {
@@ -60,7 +62,7 @@ export function fallbackScreen(text: string): SafetyScreen | null {
 const CLASSIFIER_SYSTEM_PROMPT = `You are a clinical risk-screening classifier embedded in a wellness/accountability app. You do not respond to the user, counsel them, or give advice — you ONLY classify their most recent message.
 
 Categories:
-1. passive_ideation — passive suicidal ideation, no plan or intent ("don't see the point in living," "wish I wasn't here")
+1. passive_ideation — passive suicidal ideation, no plan or intent ("don't see the point in living," "wish I wasn't here," "I don't want to be here anymore," "I can't go on")
 2. active_ideation — active suicidal ideation, wanting to end their life
 3. ideation_with_plan_or_means — suicidal ideation with a specific plan, method, or access to means
 4. hopelessness_finality — hopelessness about life itself, beyond a task ("nothing matters anymore," "everyone would be better off without me")
@@ -68,18 +70,18 @@ Categories:
 6. abuse_in_progress — physical, sexual, or severe emotional abuse happening now or very recently, described as ongoing danger
 7. medical_emergency — a medical emergency happening right now (overdose, can't breathe, chest pain, severe injury)
 8. disordered_eating — active, deliberate self-harm through eating (e.g. extended intentional starvation), not ordinary diet talk
-9. ambiguous_distress — distress that is most likely about a task, goal, or the day, but could be heavier: "I'm too frustrated to think," "I'm overwhelmed," "I can't do this," "I'm done," "giving up," "what's the point" — with NO explicit risk language
+9. ambiguous_distress — distress that could be about themselves or their life, not just the task, with NO explicit risk language: "I can't do this anymore," "I'm done with everything," "I'm giving up on myself," "what's the point of any of it"
 
 Tiers:
 - "clear": explicit risk language — suicide, wanting to die or not be alive, wishing they weren't here, self-harm, a plan or means, abuse happening now, a medical emergency, deliberate starvation, or hopelessness about living itself. Categories 1–8.
 - "check_in": ambiguous distress (category 9). A gentle question will follow, not a crisis script.
-- null: no concern — ordinary venting clearly tied to a task with nothing heavier hinted, hyperbole ("this workout is killing me," "I could die of embarrassment"), or a reply that clarifies a previous check-in was about the task.
+- null: no concern — ordinary venting tied to a task, the day, or this app with nothing heavier hinted; doubt or pushback about the journal or app ("I don't see how writing this down fixes anything," "this is pointless," "idk, this feels like a lot of questions"); frustration or overwhelm with the task or day ("I'm too frustrated to think about this right now," "I was late again," "this is a lot"); hyperbole ("this workout is killing me," "I could die of embarrassment"); or a reply that clarifies a previous check-in was about the task.
 
 Rules — these matter more than any single word:
 - Judge the pattern across ideation, plan, intent, and access to means — not one scary word in isolation.
 - Weigh the recent conversation, not just the last message — risk can build across several turns, and context tells you what "this" refers to.
 - Use "clear" only when there is explicit risk language. Frustration, exhaustion, or "I'm done" with a task is never "clear" on its own.
-- When unsure between null and "check_in", choose "check_in". When unsure between "check_in" and "clear" and there IS explicit risk language, choose "clear".
+- Doubt, frustration, overwhelm, tiredness, or "idk" about the task, day, or app are null, not "unsure". Only when the distress may be about themselves or their life and you truly can't tell, choose "check_in". When unsure between "check_in" and "clear" and there IS explicit risk language, choose "clear".
 - For "check_in" only, also give:
   "phrase": 2–6 words naming their distress in plain lowercase words, close to how they said it (e.g. "too frustrated", "done with this", "overwhelmed"). No quotation marks.
   "topic": 2–6 words for what it seems to be about, written to the user (e.g. "the name", "your writing", "the garden"). "" if you can't tell.
@@ -180,7 +182,7 @@ export async function clarifyReply(ctx: {
   const system = `You are Jai, a calm accountability partner in the Mustard Seed app. Earlier, the user wrote something that triggered a safety check, and you responded. Now they replied.
 
 Decide:
-- "no_risk": their reply clearly says they're okay — it was about the task, frustration, or a figure of speech — and nothing in it hints at anything heavier.
+- "no_risk": their reply points back at the task, not at themselves — they say it was about the task, frustration, or a figure of speech, or they push back on or doubt the journal or app ("I don't see how writing this down fixes anything," "this is pointless") — and nothing in it hints at anything heavier.
 - "unclear": anything else — a bare "fine", "whatever", "never mind" with no explanation, mixed signals, or any hint of something heavier.
 
 If "no_risk", write "ack": 1–2 short sentences. Warm, no shame, no apology, no lecture. Thank them for telling you, normalize the feeling in plain words, and bring them back to their goal${ctx.goal ? "" : " (the work they were doing)"}. Paraphrase, never quote them. No question. Do not mention crisis lines. Plain text.
