@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Crown } from "lucide-react";
@@ -52,6 +52,8 @@ export default function Assessment() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  // The result screen moves on to Home by itself; opening the loop cancels that.
+  const redirectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userId = useStore((s) => s.userId);
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const qc = useQueryClient();
@@ -92,7 +94,7 @@ export default function Assessment() {
 
       completeOnboarding();
 
-      setTimeout(() => {
+      redirectRef.current = setTimeout(() => {
         setLocation("/home", { replace: true });
       }, 3500);
     } catch (e) {
@@ -135,6 +137,17 @@ export default function Assessment() {
               Focus Area: {HEARTBEAT_LABELS[result.weakestHeartbeat] ?? result.weakestHeartbeat}
             </p>
           )}
+
+          <Button
+            onClick={() => {
+              if (redirectRef.current) clearTimeout(redirectRef.current);
+              setLocation("/heartbeats");
+            }}
+            className="w-full rounded-full min-h-11"
+            data-testid="button-see-heartbeats"
+          >
+            See your Five Heartbeats
+          </Button>
 
           <div className="pt-2 text-xs text-muted-foreground/70 border-t border-border/30">
             🌱 Seed 0-15 | 🌿 Sprout 16-30 | 🌳 Growth 31-45 | 🌸 Bloom 46-50

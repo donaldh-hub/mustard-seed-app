@@ -92,6 +92,13 @@ export const api = {
   getEntries: (userId: string) => fetchJson<any[]>(`/users/${userId}/entries`),
 
   getAssessment: (userId: string) => fetchJson<any>(`/users/${userId}/assessment`),
+  // "Talk with Jai about this heartbeat": the server posts Jai's opener using
+  // the saved assessment scores.
+  openHeartbeatChat: (userId: string, heartbeat: string) =>
+    fetchJson<{ message: any; repeated?: boolean }>(`/users/${userId}/heartbeat-chat`, {
+      method: "POST",
+      body: JSON.stringify({ heartbeat }),
+    }),
   getHeartbeatTrends: (userId: string) =>
     fetchJson<{ date: string; totalScore: number; heartbeatScores: Record<string, number> }[]>(`/users/${userId}/heartbeat-trends`),
   submitAssessment: (userId: string, answers: number[]) => fetchJson<any>(`/users/${userId}/assessment`, { method: "POST", body: JSON.stringify({ answers }) }),
