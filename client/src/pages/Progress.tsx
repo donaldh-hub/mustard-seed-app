@@ -525,12 +525,7 @@ function GoalCard({
       <p className="text-sm font-medium text-foreground mb-1" data-testid={`text-goal-title-${type}`}>
         {data.title}
       </p>
-      {data.emotionalWhy && (
-        <p className="text-[11px] text-muted-foreground italic mb-4 leading-snug" data-testid={`text-goal-why-${type}`}>
-          "{data.emotionalWhy}"
-        </p>
-      )}
-      {!data.emotionalWhy && <div className="mb-4" />}
+      <WhyEditor goalId={data.id} why={data.emotionalWhy ?? ""} type={type} />
 
       <div className="flex items-start justify-center gap-6 mb-4">
         <SeedGrowth seedStage={data.seedStage ?? 0} cupsFilled={data.cupsFilled ?? 0} />
@@ -745,5 +740,48 @@ function FormOverlay({
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+// The goal's "why", editable in place: tap to change or clear it.
+function WhyEditor({ goalId, why, type }: { goalId: string; why: string; type: string }) {
+  const queryClient = useQueryClient();
+  const { userId } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(why);
+  const save = useMutation({
+    mutationFn: (emotionalWhy: string) => api.updateGoal(goalId, { emotionalWhy }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["garden", userId] });
+      setEditing(false);
+    },
+  });
+  if (editing) {
+    return (
+      <div className="mb-4 space-y-2" data-testid={`editor-goal-why-${type}`}>
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Why this goal matters to you"
+          className="text-xs"
+          data-testid={`input-goal-why-${type}`}
+        />
+        <div className="flex gap-2">
+          <Button size="sm" className="rounded-full text-xs" disabled={save.isPending} onClick={() => save.mutate(draft.trim())} data-testid={`button-save-why-${type}`}>Save</Button>
+          {why && <Button size="sm" variant="outline" className="rounded-full text-xs" disabled={save.isPending} onClick={() => save.mutate("")} data-testid={`button-clear-why-${type}`}>Clear</Button>}
+          <Button size="sm" variant="ghost" className="rounded-full text-xs" onClick={() => { setDraft(why); setEditing(false); }}>Cancel</Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => { setDraft(why); setEditing(true); }}
+      className="block text-left text-[11px] text-muted-foreground italic mb-4 leading-snug hover:text-foreground"
+      data-testid={`text-goal-why-${type}`}
+    >
+      {why ? `"${why}"` : "+ Add why this matters"} <span className="not-italic underline underline-offset-2 ml-1">{why ? "Edit" : ""}</span>
+    </button>
   );
 }

@@ -183,8 +183,17 @@ export async function evaluateMessage(
     };
   }
 
-  const result = await screen(text, recentMessages);
+  let result = await screen(text, recentMessages);
   if (!result) return NOT_TRIGGERED;
+  // The full message goes out once per risk statement. Right after one,
+  // a line flagged only because of the context before it ("hello", "where
+  // did that come from?") gets a normal reply. Saying the risk words again
+  // still gets the full message every time.
+  if (openPrimaryFlag) {
+    const alone = await screen(text, []);
+    if (!alone) return NOT_TRIGGERED;
+    result = alone;
+  }
 
   if (result.tier === "check_in") {
     // The "is it the task or something heavier?" question at most once a
@@ -193,6 +202,9 @@ export async function evaluateMessage(
     if (lastDay.some((e) => e.tier === "check_in")) return NOT_TRIGGERED;
     // Never on a complaint about Jai or the app ("so you just gon ignore me?").
     if (/\b(ignor(e|ing) me|not listening|robot(ic)?|glitch|this app|you('?re| are) not (here|helping))\b/i.test(text)) return NOT_TRIGGERED;
+    // Doubting the process ("why should I even keep doing this") is doubt,
+    // answered by Jai, not a risk check-in.
+    if (/\b(keep doing this|keep (going|trying) with this|why (should|would) i (even )?(keep|bother|try)|what'?s the point of (this|the app|journaling|writing))\b/i.test(text) && !/\b(life|living|alive|myself|die|anymore|exist)\b/i.test(text)) return NOT_TRIGGERED;
     // Logged for the admin view; no founder email for a check-in.
     const event = await storage.createSafetyEvent({
       userId, category: result.category, responseType: "primary", triggeringMessage: text, surface, alertSent: false, tier: "check_in",

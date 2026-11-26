@@ -107,6 +107,7 @@ export function eveningOpensAt(morningAt: Date, timeZone: string): Date {
 
 export const REFLECTION_CHOICE_COUNT = 3;
 export const KEPT_GRACE_MINUTES = 60;
+export const KEPT_EARLY_MINUTES = 60;
 
 export function reflectionChoices(opensAt: Date): Date[] {
   const quarter = 15 * 60 * 1000;
@@ -118,7 +119,10 @@ export function isCommitmentKept(plannedAt: Date | string | null, eveningAt: Dat
   if (!plannedAt) return false;
   const planned = new Date(plannedAt).getTime();
   if (Number.isNaN(planned)) return false;
-  return eveningAt.getTime() <= planned + KEPT_GRACE_MINUTES * 60 * 1000;
+  // Hours early (e.g. a tester skip at 12:32 AM for an 8:45 AM time) isn't
+  // keeping the word: only from an hour before the time to an hour after.
+  const at = eveningAt.getTime();
+  return at >= planned - KEPT_EARLY_MINUTES * 60 * 1000 && at <= planned + KEPT_GRACE_MINUTES * 60 * 1000;
 }
 
 // Test accounts (comma-separated emails in JOURNAL_PACING_SKIP_EMAILS) still

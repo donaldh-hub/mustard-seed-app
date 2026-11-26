@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { ContinuityRecord } from "./continuityContext";
 import { HEARTBEAT_NAMES } from "./titan";
-import { PLAYBOOK, APP_FACTS, enforceChatRules, opener, type Moment } from "./momentReader";
+import { PLAYBOOK, TENSION_GUIDE, APP_FACTS, enforceChatRules, cleanChatReply, checkChatReply, opener, type Moment } from "./momentReader";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -39,6 +39,11 @@ export interface JaeContext {
   moment?: Moment;
   // Jai's messages from this chat session, oldest first.
   sessionJaiTexts?: string[];
+  // The last Jai message gave crisis resources after this line of theirs;
+  // the user is now pushing back or asking about it.
+  afterSafety?: string;
+  // Goal setup in progress (no goal planted yet): stage and working title.
+  setupPending?: { stage: string; title?: string; question: string; mayInviteBack: boolean };
 }
 
 function buildSystemPrompt(ctx: JaeContext): string {
@@ -367,12 +372,17 @@ export async function generateDepthResponse(
   const momentBlock = m ? `
 
 ═══ READ THE MOMENT FIRST (this overrides every other instruction above) ═══
+People type the way they talk: fragments, no context, often upset before they got here. Infer what they mean and meet them there; don't make them explain.
 Their last message reads as: ${m.state.replace(/_/g, " ")}.
-${PLAYBOOK[m.state]}${m.stake ? `\nThey named a real stake: "${m.stake}". Name it back plainly once and treat it as their why.` : ""}${m.question ? `\nThey asked: "${m.question}". Answer it directly first.` : ""}${m.hostileStreak >= 2 ? `\nThis is the second hostile message in a row. After one calm line, offer them control in one sentence: keep going, keep it short, or pause for today.` : ""}
+${TENSION_GUIDE[m.tension]}
+${PLAYBOOK[m.state]}${m.intent === "goal_status" ? "\nThey want to know where their goal stands. Say it plainly from GOAL STATE below." : ""}${m.intent === "ask_help" ? "\nThey want a suggestion: give one concrete, small one that fits what they've told you about their day." : ""}${m.intent === "vent" ? "\nThey need to be heard more than coached. Reflect it; no task." : ""}${m.intent === "pause" ? "\nThey want to pause. Say that's fine and that you'll be here; nothing else." : ""}${m.stake ? `\nThey named a real stake: "${m.stake}". Name it back plainly once and treat it as their why.` : ""}${m.question ? `\nThey asked: "${m.question}". Answer it directly first.` : ""}${m.hostileStreak >= 2 ? `\nThis is the second hostile message in a row. After one calm line, offer them control in one sentence: keep going, keep it short, or pause for today.` : ""}
 Shape: 2-4 short sentences. (1) Name what they said in their own words. (2) If you missed something, own it in one line. (3) Grace or an honest shift in perspective. (4) One question OR one small step tied to their goal, never both.
-Rules: Answer any direct question. Never praise an action they didn't say they did. Use their words, not new labels. At most one Heartbeat, by its exact full name, only if tied to something they said. No ledger words ("logged", "on the record", "lost this round", "Day N"). Don't swear and don't comment on their language.
+Rules: If they report partial progress ("not as late but still late"), name the progress first, honestly. If they said their day is already full (work late, chores), never add tasks; make it smaller or take something off. Answer any direct question. Never praise an action they didn't say they did. Use their words, not new labels. At most one Heartbeat, by its exact full name, only if tied to something they said. No ledger words ("logged", "on the record", "lost this round", "Day N"). Don't swear and don't comment on their language.
 Don't start with any of these openings (you used them recently): ${openers.length ? openers.slice(-5).map((o) => `"${o}…"`).join(", ") : "(none)"}.
-${m.state === "app_question" ? APP_FACTS : ""}` : "";
+${m.state === "app_question" ? APP_FACTS : ""}${ctx.afterSafety ? `
+Your last message gave crisis resources after they wrote: "${ctx.afterSafety}". They're pushing back or asking about it. In two or three sentences: own that you jumped (or explain plainly why you sent it, without defending it), say what you heard, and ask what they meant. Don't repeat the resources.` : ""}
+GOAL STATE (never claim more than this): ${ctx.targetedGoalTitle || ctx.untargetedGoalTitle ? `a goal is planted: "${ctx.targetedGoalTitle || ctx.untargetedGoalTitle}".` : ctx.setupPending ? `NO goal is planted yet. You're partway through setting one up${ctx.setupPending.title ? ` ("${ctx.setupPending.title}")` : ""}. Never say their goal exists or is "still there".` : "NO goal is planted yet. Never say their goal exists. If it fits, offer to plant one together."}${ctx.setupPending?.mayInviteBack ? `
+If, and only if, this message is calm, you may end by gently inviting them back to the goal question, in your own words: ${ctx.setupPending.question}` : ""}` : "";
   const systemPrompt = buildSystemPrompt(ctx) + momentBlock;
 
   const history = ctx.recentMessages
@@ -397,33 +407,41 @@ ${m.state === "app_question" ? APP_FACTS : ""}` : "";
     const choice = response.choices[0];
     let text = choice?.message?.content?.trim() || "";
     if (m) {
-      // Frustration about their situation isn't a complaint about Jai.
-      if (m.state !== "frustrated_at_jai" && m.state !== "hostile" && /what am i missing|missing something/i.test(text)) {
+      // The AI writes the reply; code only checks it. A draft that breaks a
+      // rule gets one rewrite with the problems named. Only if the rewrite
+      // still fails does the fixed fallback (enforceChatRules) step in.
+      const name = (ctx.userName || "").trim();
+      const sparing = (t: string) => {
+        if (name.length < 2 || !recentJai.slice(-3).some((x) => x.includes(name))) return t;
+        const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return t.replace(new RegExp(`,\\s*${esc}(?=[.!?,])`, "g"), "").replace(new RegExp(`^${esc},\\s*`), "");
+      };
+      const checkCtx = { userText: userMessage, recentJai, afterSafety: !!ctx.afterSafety };
+      text = sparing(cleanChatReply(text, m, userMessage));
+      let problems = checkChatReply(text, m, checkCtx);
+      if (problems.length) {
+        console.log(`[MOMENT] rewrite: ${problems.join("; ")}`);
         const retry = await openai.chat.completions.create({
           model: "gpt-4o",
-          messages: [{ role: "system", content: systemPrompt + "\nThey are NOT upset with you; they're frustrated with their situation. Don't apologize and don't ask what you're missing." }, ...history],
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...history,
+            { role: "assistant", content: text || "(empty)" },
+            { role: "system", content: `Rewrite your last reply. Fix: ${problems.join("; ")}. Keep it warm and natural, like a person talking, in your own words. Their message was: "${userMessage}".` },
+          ],
           max_tokens: 400,
-          temperature: 0.5,
+          temperature: 0.6,
         }).catch(() => null);
-        text = retry?.choices[0]?.message?.content?.trim() || text;
-      }
-      text = enforceChatRules(text, m, recentJai);
-      // Their name, sparingly: not if one of the last three replies used it.
-      const first = (ctx.userName || "").trim();
-      if (first.length > 1 && recentJai.slice(-3).some((t) => t.includes(first))) {
-        const esc = first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        text = text.replace(new RegExp(`,\\s*${esc}(?=[.!?,])`, "g"), "").replace(new RegExp(`^${esc},\\s*`), "");
-      }
-      // A repeated opening gets one retry with a different start.
-      if (openers.includes(opener(text))) {
-        const retry = await openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [{ role: "system", content: systemPrompt + `\nYour draft started like a recent reply ("${opener(text)}…"). Start differently.` }, ...history],
-          max_tokens: 400,
-          temperature: 0.7,
-        }).catch(() => null);
-        const again = enforceChatRules(retry?.choices[0]?.message?.content?.trim() || "", m, recentJai);
-        if (again && !openers.includes(opener(again))) text = again;
+        const again = sparing(cleanChatReply(retry?.choices[0]?.message?.content?.trim() || "", m, userMessage));
+        const againProblems = again ? checkChatReply(again, m, checkCtx) : ["empty"];
+        if (again && againProblems.length <= problems.length) { text = again; problems = againProblems; }
+        // Style misses (wording, openings) keep the AI's natural reply; only
+        // hard misses fall back to the fixed shape.
+        problems = problems.filter((p) => !/^(use their words|don't start with|keep it to 2-4|start by owning)/.test(p));
+        if (problems.length) {
+          console.log(`[MOMENT] fallback: ${problems.join("; ")}`);
+          text = enforceChatRules(text, m, recentJai);
+        }
       }
     }
 

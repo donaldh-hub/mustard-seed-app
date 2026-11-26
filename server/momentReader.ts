@@ -17,8 +17,19 @@ export const MOMENT_STATES = [
 ] as const;
 export type MomentState = (typeof MOMENT_STATES)[number];
 
+// Tension meter: how upset they are, read from the theme of the last few
+// messages, not one line. green = frustrated but working with Jai; yellow =
+// moderately upset; red = very upset. Self-harm is handled separately by the
+// safety screen and is never decided here.
+export type Tension = "green" | "yellow" | "red";
+// What they're trying to get done, inferred even from fragments.
+export const MOMENT_INTENTS = ["none", "finish_goal", "goal_status", "change_goal", "pause", "vent", "ask_help"] as const;
+export type MomentIntent = (typeof MOMENT_INTENTS)[number];
+
 export interface Moment {
   state: MomentState;
+  tension: Tension;
+  intent: MomentIntent;
   stake: string; // their words, if they named a real stake ("I almost got fired")
   question: string; // a direct question they asked, if any
   hostileStreak: number; // hostile / at-Jai messages in a row, this one included
@@ -26,7 +37,7 @@ export interface Moment {
 
 // Keyword read, used when the AI read fails and to count a hostile streak.
 const AT_JAI = /\b(you('?re| are)? (not|never) (\w+ )?(listening|understanding|helping|getting it|here)|you (don'?t|do not|never) (listen|understand|get it)|(gon|going to|gonna) ignore me|ignor(e|ing) me|robot(ic)?|preprogrammed|this app|fuck (you|off)|useless)\b/i;
-const AIMED_AT_JAI = /\b(you|u|ya|your|jai|app|robot\w*|preprogrammed|bot)\b/i;
+const AIMED_AT_JAI = /\b(you|u|ya|your|jai|app|robot\w*|preprogrammed|bot)\b|\bthis (is|feels|seems) (so )?(useless|stupid|pointless|dumb|garbage|trash|a waste)/i;
 const HOSTILE_ONLY = /^\W*(fuck (you|off|this|it)|f(u|\*)?ck off|stfu|shut up|whatever|bs|bullshit)\W*(fuck (you|this|it)\W*)*$/i;
 const CORRECTION = /\b(i (didn'?t|did not|never) (say|mean|said)|that'?s not what i (said|meant)|you('?re| are) (wrong|twisting)|wtf (are )?you talking about|not what i meant)\b/i;
 const QUIT = /\b(i('?m| am)? (gonna|going to|might|may)( just)? (quit|give up|stop)|i quit\b|give up\b|what'?s the point)/i;
@@ -53,7 +64,22 @@ export function readMomentByWords(text: string, previousUserTexts: string[] = []
   else if (FLAT.test(t)) state = "flat";
   else if (APP_Q.test(t)) state = "app_question";
   const stake = t.match(STAKE)?.[0] ?? "";
-  return { state, stake, question: /\?\s*$/.test(t) ? t : "", hostileStreak: hostileStreak(state, previousUserTexts) };
+  const streak = hostileStreak(state, previousUserTexts);
+  return { state, tension: tensionFor(state, streak), intent: intentByWords(t), stake, question: /\?\s*$/.test(t) ? t : "", hostileStreak: streak };
+}
+
+function tensionFor(state: MomentState, streak: number): Tension {
+  if (state === "hostile" || streak >= 2) return "red";
+  if (["frustrated_at_jai", "frustrated_self", "overwhelm", "doubt", "quit_talk", "sarcasm", "correction"].includes(state)) return "yellow";
+  return "green";
+}
+const FINISH_GOAL = /\b(finish|plant|save|set( it)? up|make|lock in|just do)\b.{0,25}\bgoal\b|\bgoal\b.{0,15}\b(done|finished)\b/i;
+const GOAL_STATUS = /\b(what happened to|where'?s|where is|did you (save|plant)|is there|do i (have|even have))\b.{0,20}\bgoal\b/i;
+function intentByWords(t: string): MomentIntent {
+  if (FINISH_GOAL.test(t)) return "finish_goal";
+  if (GOAL_STATUS.test(t)) return "goal_status";
+  if (/\b(pause|stop|take a break|not now|later)\b/i.test(t) && t.split(/\s+/).length <= 6) return "pause";
+  return "none";
 }
 
 function hostileStreak(state: MomentState, previousUserTexts: string[]): number {
@@ -74,7 +100,7 @@ export async function readMoment(text: string, recent: { sender: string; text: s
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0,
-      max_tokens: 120,
+      max_tokens: 160,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -95,7 +121,11 @@ States:
 - app_question: asks how the app or Jai works, or what it saves
 - correction: says Jai got them wrong ("I didn't say that")
 Swearing alone is a tone signal, not hostility, if there is other content. If a stake appears anywhere in the message, choose stake unless the message is a correction or aimed at Jai.
-Return JSON: {"state": "...", "stake": "their exact words for the stake or empty", "question": "the direct question they asked or empty"}`,
+People type the way they talk, often in fragments, often already upset before they arrived. Infer; don't wait for clear context.
+Also read:
+- "tension": the overall heat of the recent conversation's theme (not just this line): "green" (frustrated or flat but still working with Jai), "yellow" (moderately upset: repeated frustration, sarcasm, doubt, feeling unheard), "red" (very upset: hostile, insulting, ready to quit on Jai, several angry lines in a row).
+- "intent": what they're trying to get done: "finish_goal" (wants the goal set up or planted now, e.g. "finish my damn goal"), "goal_status" (asks where their goal is), "change_goal", "pause" (wants to stop for now), "vent" (needs to be heard, no task), "ask_help" (wants a suggestion), or "none".
+Return JSON: {"state": "...", "tension": "green|yellow|red", "intent": "...", "stake": "their exact words for the stake or empty", "question": "the direct question they asked or empty"}`,
         },
         { role: "user", content: `Recent chat:\n${transcript || "(none)"}\n\nLAST message: ${text}` },
       ],
@@ -104,11 +134,21 @@ Return JSON: {"state": "...", "stake": "their exact words for the stake or empty
     let state = (MOMENT_STATES as readonly string[]).includes(parsed.state) ? (parsed.state as MomentState) : byWords.state;
     // "At Jai" needs words aimed at Jai or the app; otherwise it's about their situation.
     if (state === "frustrated_at_jai" && !AIMED_AT_JAI.test(text)) state = "frustrated_self";
+    const streak = hostileStreak(state, previousUserTexts);
+    const order: Tension[] = ["green", "yellow", "red"];
+    const aiTension: Tension = order.includes(parsed.tension) ? parsed.tension : byWords.tension;
+    // The meter never reads cooler than the words themselves.
+    const tension = order[Math.max(order.indexOf(aiTension), order.indexOf(tensionFor(state, streak)))];
+    // "finish_goal" acts (it plants the goal), so only their own words set it.
+    const aiIntent: MomentIntent = (MOMENT_INTENTS as readonly string[]).includes(parsed.intent) && parsed.intent !== "finish_goal" ? parsed.intent : "none";
+    const intent: MomentIntent = byWords.intent !== "none" ? byWords.intent : aiIntent;
     return {
       state,
+      tension,
+      intent,
       stake: typeof parsed.stake === "string" && parsed.stake ? parsed.stake : byWords.stake,
       question: typeof parsed.question === "string" ? parsed.question : byWords.question,
-      hostileStreak: hostileStreak(state, previousUserTexts),
+      hostileStreak: streak,
     };
   } catch (err) {
     console.warn("[MOMENT] AI read failed; using word read:", err instanceof Error ? err.message : err);
@@ -129,14 +169,14 @@ export const PLAYBOOK: Record<MomentState, string> = {
   flat: "Say a flat day is okay. Ask a smaller, easier question. If a Heartbeat fits, it's Small Steps + Consistency.",
   doubt: "Agree honestly that writing alone won't fix it. Say in one line what it's for (seeing the pattern so the next step is the right one). Ask for one concrete thing. If a Heartbeat fits, it's Mindset over Method.",
   frustrated_self: "Reflect the frustration as proof this matters to them. No pep talk. Offer one small step. If a Heartbeat fits, it's Small Steps + Consistency.",
-  frustrated_at_jai: "Stop coaching. Own it in one calm line without defending yourself, in fresh words each time (don't reuse an ownership line you already used). Then ask exactly: \"What am I missing?\" Nothing else. Never tell them a Heartbeat is a gap.",
+  frustrated_at_jai: "Stop coaching. Your first sentence reuses a few of their exact words and owns it, e.g. \"you said that already\" -> \"You're right, I did say that already.\"; \"this is useless\" -> \"If this feels useless right now, that's on me.\"; \"you sound like a fortune cookie\" -> \"Fair, I've been sounding like a fortune cookie.\" Then ask one question: what you're missing, or something more specific to what they said. Fresh words every time. Never call it confusion, never \"sorry for any confusion\", never name a Heartbeat.",
   overwhelm: "Shrink it. Say they don't have to do it all. Offer a one-line option (\"just tell me one word for today\"). If a Heartbeat fits, it's Small Steps + Consistency.",
   sarcasm: "Take the feeling under the words, plainly. Never praise the words or the effort. One small, easy question.",
-  hostile: "Stay calm. No scolding, no comment on language, no coaching. One short line that you're still here.",
+  hostile: "Stay calm. One or two short sentences in your own words: you heard them, you're still here. No scolding, no comment on language, no coaching, no goal talk.",
   quit_talk: "Name it plainly. Ask what makes the hard days hard, so you can plan for the hard day together. If a Heartbeat fits, it's Mindset over Method.",
   stake: "Say the stake is real, in their words. Treat it as their why. Build one small first step around it. If a Heartbeat fits, it's Clarity of Vision & Why.",
   app_question: "Answer the question plainly and truthfully from what the app actually does (below). Never invent a feature. If you don't know, say so.",
-  correction: "One line owning it (\"You're right, I jumped.\"), then ask what they meant. Nothing else.",
+  correction: "Own it in one line in your own words (you jumped, misread, or assumed), say plainly what you actually heard if it helps, then ask what they meant. Two or three sentences. Nothing else.",
 };
 
 export const APP_FACTS = `What the app actually does (answer app questions only from this):
@@ -223,3 +263,80 @@ const OWN_LINES = [
   "Understood. I'm not going anywhere.",
   "You don't owe me patience. I'm still here.",
 ];
+
+// ─── Checking a draft reply (the AI writes; code only checks) ──────────────
+const STOP = new Set("the a an and or but so to of in on at for with my me i im i'm you your it is are was be this that what how why just not dont don't do did".split(" "));
+const contentWords = (t: string) => (t.toLowerCase().match(/[a-z']{4,}/g) ?? []).filter((w) => !STOP.has(w) && !/^(fuck|shit|damn|bullshit)/.test(w));
+const sentencesOf = (t: string) => (t ?? "").split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+const OWNS = /\b(fair|right|missed|miss|on me|hear you|heard|wrong|my bad|not ignoring|still here|jumped|misread|assumed|apolog|sorry)\b/i;
+
+export interface ReplyCheckContext {
+  userText: string;
+  recentJai: string[]; // Jai's messages this session, oldest first
+  afterSafety?: boolean; // the last Jai message was a crisis-resources message
+}
+
+// Drops sentences that are never okay, whatever the state.
+export function cleanChatReply(reply: string, moment: Moment, userText: string): string {
+  return sentencesOf(reply).filter((s) =>
+    !LEDGER.test(s) && !SWEARS.test(s)
+    && !(/\bconfus/i.test(s) && !/\bconfus/i.test(userText))
+    && !/sorry for any/i.test(s)
+    && !(moment.state !== "reported_action" && moment.state !== "engaged" && PRAISE.test(s))
+  ).join(" ").replace(/\s+/g, " ").trim();
+}
+
+// What's wrong with a draft, in plain words the model can fix on a retry.
+export function checkChatReply(reply: string, moment: Moment, c: ReplyCheckContext): string[] {
+  const problems: string[] = [];
+  const sents = sentencesOf(reply);
+  const questions = sents.filter((s) => /\?$/.test(s));
+  const first = sents[0] ?? "";
+  const heartbeats = HEARTBEATS.filter((h) => reply.includes(h));
+  const userWords = contentWords(c.userText);
+  const atJai = moment.state === "frustrated_at_jai" || moment.state === "hostile";
+  if (!reply) problems.push("the reply is empty");
+  if (heartbeats.length > 1) problems.push("name at most one Heartbeat");
+  if (atJai && heartbeats.length) problems.push("don't name a Heartbeat to someone upset with you");
+  if (questions.length > 1) problems.push("ask only one question");
+  if (sents.length > 5) problems.push("keep it to 2-4 short sentences");
+  const seenOpeners = c.recentJai.map(opener);
+  if (seenOpeners.includes(opener(reply)) && !c.afterSafety) problems.push(`don't start with "${opener(reply)}", you already used that opening`);
+  for (const s of sents) {
+    if (s.split(/\s+/).length >= 5 && c.recentJai.some((t) => t.includes(s))) problems.push(`don't repeat "${s}", you already said it`);
+  }
+  if (moment.state === "frustrated_at_jai") {
+    if (!OWNS.test(first)) problems.push("start by owning it in one calm line");
+    if (userWords.length && !userWords.some((w) => reply.toLowerCase().includes(w))) problems.push(`use their words (e.g. "${userWords.slice(0, 3).join('", "')}")`);
+    if (questions.length !== 1 || !/\?$/.test(sents[sents.length - 1] ?? "")) problems.push("end with exactly one question");
+    if (sents.length > 3) problems.push("keep it to three sentences or fewer");
+  }
+  if (moment.state === "hostile") {
+    if (sents.length > 2) problems.push("one or two short sentences only");
+    if (/\b(goal|step|heartbeat)\b/i.test(reply)) problems.push("no coaching or goal talk right now");
+  }
+  if (!atJai && /what am i missing|missing something/i.test(reply)) problems.push("they're not upset with you; don't apologize or ask what you're missing");
+  if (moment.state === "correction" && (!OWNS.test(reply) || !questions.length)) problems.push("own that you got it wrong and ask what they meant");
+  if ((moment.state === "stake" || moment.stake) && !atJai) {
+    const stakeWords = contentWords(moment.stake);
+    if (!/\b(job|fired|work|hours|lose|losing|rent|paycheck)\b/i.test(reply) && !stakeWords.some((w) => reply.toLowerCase().includes(w))) problems.push(`name their stake back plainly: "${moment.stake}"`);
+  }
+  if (moment.tension === "red" && moment.state !== "app_question" && moment.intent !== "finish_goal" && moment.intent !== "goal_status") {
+    if (sents.length > 3) problems.push("very upset: two or three short sentences at most");
+    if (/\b(your step|try (setting|laying|doing)|tonight,? (set|lay|try|do)|tomorrow,? (set|lay|try|do))\b/i.test(reply)) problems.push("very upset: no steps or tasks right now");
+  }
+  if (moment.tension !== "green" && /\b(tonight|before bed|this evening)\b.{0,50}\b(cook|laundry|prep|clean|pack|lay out|set out|plan)\b/i.test(reply) && !/\b(instead|skip|drop|less|lighter|smaller)\b/i.test(reply)) {
+    problems.push("they're upset or stretched: don't add tasks to their evening; make it smaller or take something off");
+  }
+  if (c.afterSafety) {
+    if (/\b988\b|741741/.test(reply)) problems.push("don't repeat the crisis resources");
+    if (sents.length > 3 || !questions.length) problems.push("two or three sentences: own it, say what you heard, ask what they meant");
+  }
+  return problems;
+}
+
+export const TENSION_GUIDE: Record<Tension, string> = {
+  green: "Tension: GREEN (frustrated or flat, still working with you). Normal coaching: name what they said, one small step or one question tied to their goal.",
+  yellow: "Tension: YELLOW (moderately upset). Acknowledge the feeling first, in their words. Make any ask smaller. Never add new tasks to their day. No offers, no lists.",
+  red: "Tension: RED (very upset). No coaching, no goal talk, no steps. Own it or stay present in one or two short sentences. Offer control (keep going, keep it short, or pause) if you haven't recently.",
+};
