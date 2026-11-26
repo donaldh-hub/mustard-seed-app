@@ -81,7 +81,8 @@ Rules — these matter more than any single word:
 - Judge the pattern across ideation, plan, intent, and access to means — not one scary word in isolation.
 - Weigh the recent conversation, not just the last message — risk can build across several turns, and context tells you what "this" refers to.
 - Use "clear" only when there is explicit risk language. Frustration, exhaustion, or "I'm done" with a task is never "clear" on its own.
-- Doubt, frustration, overwhelm, tiredness, or "idk" about the task, day, or app are null, not "unsure". Only when the distress may be about themselves or their life and you truly can't tell, choose "check_in". When unsure between "check_in" and "clear" and there IS explicit risk language, choose "clear".
+- Doubt, frustration, overwhelm, tiredness, or "idk" about the task, day, or app are null, not "unsure".
+- Swearing or profanity is never a risk signal on its own ("this fucking sucks, I'm so tired of being late" is null). Judge the meaning, not the words. Only when the distress may be about themselves or their life and you truly can't tell, choose "check_in". When unsure between "check_in" and "clear" and there IS explicit risk language, choose "clear".
 - For "check_in" only, also give:
   "phrase": 2–6 words naming their distress in plain lowercase words, close to how they said it (e.g. "too frustrated", "done with this", "overwhelmed"). No quotation marks.
   "topic": 2–6 words for what it seems to be about, written to the user (e.g. "the name", "your writing", "the garden"). "" if you can't tell.

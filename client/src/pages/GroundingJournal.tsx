@@ -312,6 +312,14 @@ export default function GroundingJournal() {
   const [videoAcknowledged, setVideoAcknowledged] = useState<Set<string>>(new Set());
   // Tester accounts can step past a wait screen; holds the step index skipped.
   const [skippedLockIndex, setSkippedLockIndex] = useState<number | null>(null);
+  // "Skip the wait (tester)" tapped on Home arrives as ?skipWait=1.
+  const skipRequested = useRef(new URLSearchParams(window.location.search).has("skipWait"));
+  useEffect(() => {
+    const l = journalData?.lockedSession;
+    if (!skipRequested.current || !journalData?.canSkipWait || !l || !journalData.unlocksAt) return;
+    const idx = STEP_ORDER.indexOf(`day${l.day}-${l.session}` as StepId);
+    if (idx !== -1) { setSkippedLockIndex(idx); skipRequested.current = false; }
+  }, [journalData]);
   const [planSaving, setPlanSaving] = useState(false);
   // Evening steps where the user came back by the time they chose (+1 water).
   const [keptCommitments, setKeptCommitments] = useState<Record<string, { plannedAt: string; arrivedAt: string }>>({});
@@ -911,6 +919,7 @@ export default function GroundingJournal() {
                     Before you begin — write one gentle intention:
                   </label>
                   <p className="text-xs text-muted-foreground italic">Over the next three days, I'm grounding myself in...</p>
+                  <p className="text-xs text-muted-foreground" data-testid="text-speak-freely">You can say it how it is. Jai won't judge.</p>
                   <Textarea
                     placeholder="..."
                     value={intention}

@@ -178,13 +178,13 @@ ${stepCheck ? `They answered whether they did it: ${stepCheck.response}. Acknowl
     ? `
 Tonight, end with ONE small next step ("nextStep"):
 - One sentence that starts with "Tomorrow, ". Concrete, doable in 5–10 minutes, tied directly to their goal${ctx.weakestHeartbeat ? ` and, where it fits, to ${ctx.weakestHeartbeat.name}` : ""}. Examples by goal: business name → "Tomorrow, write 3 words that describe who your business serves." Writing → "Tomorrow, write for 10 minutes before you open your phone." Gardening → "Tomorrow, check the soil on your tomato plants and water only the dry ones."
-- Never a list, never two steps, never vague ("reflect more", "keep going"). It must serve their goal (their intention for these 3 days); a step unrelated to the goal is wrong, however calming.
-- Also give "nextStepOptions": exactly 2 OTHER small steps, same rules (start with "Tomorrow, ", goal-linked, built from their words where possible), so they can pick the one that fits.
+- Never a list, never two steps, never vague ("reflect more", "keep going"). It must directly move their goal forward (their intention for these 3 days). For a goal like being on time for work that means sleep, night prep, alarms, getting out the door; a calming or general productivity step that doesn't move the goal is wrong, even on a hard day (make it smaller instead).
+- Also give "nextStepOptions": exactly 2 OTHER small steps, same rules (each must directly move the goal forward too) (start with "Tomorrow, ", goal-linked, built from their words where possible), so they can pick the one that fits.
 - Don't repeat the step inside "reflection" — it is shown on its own.
 - Build the step from THEIR words today: tonight's answers, what they said they'd focus on this morning, or their answer to this morning's follow-up question. If they named a change they want (e.g. not staying up all night doom scrolling), the step IS that change, made small and concrete in your own words (e.g. "Tomorrow, put your phone on the charger by 10:30 PM."), not a different idea of yours. Only suggest your own step when they named nothing usable.
 - If they named their own next step tonight (e.g. "keep one place for my ideas"), lock THAT one in instead of inventing a new one: confirm it in your own words, made small and concrete. It may start with "Tonight, " if it fits tonight (e.g. "Tonight, pick the one place you'll keep your name ideas.").
 - If they say a step they set earlier (this morning, or last night's) did NOT happen: grace first, no shame, and make "nextStep" smaller than the one they missed.
-- Compare this morning's answers with tonight's. If frustration, discouragement, or overwhelm ROSE across the day, set "frustrationRose": true, name the shift in "reflection" with grace in one sentence (e.g. "This morning had some hope in it; tonight feels heavier, and that's real."), and make "nextStep" SMALLER: 2–5 minutes, almost too easy.
+- Compare this morning's answers with tonight's. If frustration, discouragement, or overwhelm ROSE across the day, set "frustrationRose": true, name the shift in "reflection" with grace in one sentence, in your own words, built from what they actually wrote, and make "nextStep" SMALLER: 2–5 minutes, almost too easy.
 `
     : "";
 
@@ -231,7 +231,10 @@ Your job is to:
 
 Rules:
 - Sound like a wise friend, not a therapist or life coach.
-- Never quote the user's words back to them, and never use quotation marks around what they wrote. Paraphrase what they said in your own warm, natural words (their typos and shorthand disappear in your phrasing).
+- Never quote the user's words back to them, and never use quotation marks around what they wrote. Mirror what they said in plain words close to theirs (a short phrase of theirs is fine without quotation marks; their typos and shorthand disappear). Don't add new labels for their state (e.g. "chaos" when they said they couldn't tell left from right).
+- They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic. Never put swearing in "keyTheme", "valueNamed" or "releasePoint".
+- If a line may be sarcastic or exasperated (e.g. "i cant believe im getting this done"), don't praise effort or read it as good news. Reflect the overwhelm in their words, make no judgment about effort, and make your one question smaller.
+- If one answer is a non-answer (e.g. "havent tried", "not sure"), acknowledge it gently and offer one tiny first try for that question; don't skip past it.
 - Don't repeat the journal prompt's wording back to them (for example "most present", "pace or patience", "calm and purpose"). Instead, name the specific insight they gave, in plain words. Example: if they wrote that they got more done because they didn't feel rushed, say something like "not rushing is what made you productive," not "you reflected on your pace or patience."
 - Keep reflection to 2-4 sentences max.
 - Never ask multiple questions. One question only.
@@ -292,9 +295,9 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
     return {
       reflection: parsed.reflection ?? "",
       followUpQuestion: parsed.followUpQuestion ?? "",
-      keyTheme: parsed.keyTheme ?? "",
-      releasePoint: parsed.releasePoint ?? "",
-      valueNamed: parsed.valueNamed ?? "",
+      keyTheme: realValue(parsed.keyTheme),
+      releasePoint: realValue(parsed.releasePoint),
+      valueNamed: realValue(parsed.valueNamed),
       possibleFirstSeed: parsed.possibleFirstSeed ?? "",
       focusSummary: ctx.session === "morning" ? (parsed.focusSummary ?? "") : "",
       userQuestion: typeof parsed.userQuestion === "string" ? parsed.userQuestion : "",
@@ -334,6 +337,8 @@ export async function generateFollowUpAck(ctx: {
   answer: string;
   intention?: string | null;
   weakestHeartbeat?: { name: string; score: number } | null;
+  // Jai's reflection shown above this reply, so the two don't repeat.
+  reflection?: string | null;
   // Set when the question was what got in the way of last night's step.
   missedStep?: { step: string; status: string } | null;
 }): Promise<string> {
@@ -341,10 +346,14 @@ export async function generateFollowUpAck(ctx: {
 ${ctx.userName} just answered your follow-up question in their 3-Day Grounding Journal.
 ${ctx.intention ? `Their goal for these 3 days (reference only, never quote it): ${ctx.intention}\n` : ""}${ctx.weakestHeartbeat ? `Their weakest Heartbeat: ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5).\n` : ""}
 Reply in 1–2 short sentences that acknowledge what they said and affirm the step. Rules:
-- Paraphrase in your own words; never quote them or use quotation marks around their words.
+- Mirror what they said in plain words close to theirs (a short phrase of theirs is fine without quotation marks); never quote them in quotation marks, and don't add new labels for their state.
 - Do not ask a question. Do not give advice lists.
 - If they asked you something, answer it plainly in one sentence.
 - If you name a Heartbeat, name only one, once, by its full name exactly.
+- They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic.
+- If their answer may be sarcastic or exasperated, don't praise effort or call it good news; reflect the overwhelm in plain words close to theirs (no new labels).${ctx.reflection ? `
+- Your reflection is right above this reply on the same screen: ${ctx.reflection}
+Don't repeat its phrasing (e.g. another "is a step toward…") and don't name a Heartbeat it already named.` : ""}
 - If they share something honest or hard about the situation around their goal (e.g. a job they don't like), acknowledge that feeling first in one calm, non-judging sentence. Never tell them to change their situation.
 - If they say it's too many questions, it's a lot, or they're too frustrated right now: say that's fair, that this answer is optional, and that they can tap Continue whenever they're ready. If they doubt it helps, be honest: writing alone doesn't fix it, but naming the pattern is the first step.
 - Grace and accountability, no shame. Plain text only.${ctx.missedStep ? `
@@ -379,4 +388,11 @@ export function isThinAnswer(text: string): boolean {
 export function allThin(prompts: { prompt: string; response: string }[]): boolean {
   const answers = prompts.filter((p) => !p.prompt.startsWith(STEP_CHECK_PREFIX));
   return answers.length > 0 && answers.every((p) => isThinAnswer(p.response));
+}
+
+// "-", "none", "n/a" and the like mean nothing was named: store "" so the
+// "What Jai noticed" row hides instead of showing a dash.
+function realValue(v: unknown): string {
+  const t = typeof v === "string" ? v.trim() : "";
+  return /^([-–—.]+|n\/?a|none|nothing|unknown|not (stated|given|named|specified|mentioned)|no value( named)?)$/i.test(t) ? "" : t;
 }

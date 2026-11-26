@@ -3954,6 +3954,7 @@ export async function registerRoutes(
           question: entry.jaeFollowUpQuestion ?? "",
           answer,
           missedStep,
+          reflection: entry.jaeReflection,
           ...(await journalAssessmentContext(userId, entries)),
         });
       }
