@@ -105,6 +105,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ entryId, nextStep }),
     }),
+  saveGroundingStatement: (userId: string, text: string) =>
+    fetchJson<{ statement: string }>(`/users/${userId}/grounding-journal/statement`, {
+      method: "PATCH",
+      body: JSON.stringify({ text }),
+    }),
   journalWelcome: (userId: string) =>
     fetchJson<{ posted: boolean }>(`/users/${userId}/journal-welcome`, { method: "POST" }),
   startGoalSetup: (userId: string, source: "chat" | "journal") =>

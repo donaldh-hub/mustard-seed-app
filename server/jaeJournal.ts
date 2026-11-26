@@ -67,7 +67,15 @@ export interface JournalJaeResponse {
   // invitation to photograph a physical action for their Memory.
   heartbeatInAction?: string;
   photoInvite: string;
+  // Anger aimed at Jai or the app, summarized: saved as app feedback,
+  // separate from goal data.
+  appFeedback?: string;
+  // Grounding statement only: an honest one-line draft when their answers
+  // don't make a statement; they confirm or edit it.
+  draftStatement?: string;
 }
+
+const HEARTBEAT_FULL_NAMES = ["Clarity of Vision & Why", "Small Steps + Consistency", "Mindset over Method", "Feedback & Adaptation", "Courageous Action"];
 
 export const HEARTBEAT_ACTIONS = `- completed a step they set earlier → Small Steps + Consistency
 - named or sharpened their why, or who it's for → Clarity of Vision & Why
@@ -153,6 +161,10 @@ export async function generateJournalReflection(
     )
     .join("\n");
 
+  // Heartbeats Jai already named in earlier sessions, so Day 3 doesn't
+  // repeat the same diagnosis three times.
+  const namedBefore = HEARTBEAT_FULL_NAMES.filter((h) => (ctx.previousEntries ?? []).some((e) => (e.jaeReflection ?? "").includes(h)));
+
   const responseBlock = ctx.prompts
     .map((p) => `Prompt: ${p.prompt}\nResponse: ${p.response}`)
     .join("\n\n");
@@ -208,10 +220,14 @@ Only when it actually happened. Put the full name you used in "heartbeatInAction
 
 Photo proof — if they report a physical, visible action (wrote a list, planted, wrote pages, built something), set "photoInvite" to one short, optional, no-pressure line inviting a photo for their Memory, e.g. "Want to snap a photo of your list? It'll go in your Memory." Otherwise "". Don't put this line in "reflection".
 `;
+  const statementBlock = ctx.session === "grounding_statement" ? `
+"draftStatement": if their three answers don't add up to a real statement (non-answers like "idk", or complaints instead of learning), write ONE honest sentence in first person from what they actually said across the three days (e.g. "I almost lost my job, and I want to be on time."), with no motivational words they didn't say. Otherwise "".
+Your "possibleFirstSeed" must be a concrete action, never "reflect on…".
+` : "";
   const groundingBlock = ctx.session === "grounding_statement" && ctx.lockedStep
     ? `
 The last small step you and they locked in (reference only): ${ctx.lockedStep}
-Let their possible first seed build on that step where it fits. That step is planned, not done: never assume what it creates already exists (no "keep refining your checklist" if they haven't made it). Phrase the seed as the first concrete action (e.g. "Create a simple nighttime checklist."), tied to their goal.
+Let their possible first seed build on that step where it fits. That step is planned, not done: never assume what it creates already exists (no "keep refining your checklist" if they haven't made it). Phrase the seed as the first concrete action (e.g. "Create a simple nighttime checklist."), tied to their goal. The seed is that step (or its first action), never a thinking task ("reflect on why…").
 `
     : "";
 
@@ -222,7 +238,7 @@ Today is Day ${ctx.dayNumber} (${ctx.dayTheme}), ${ctx.session} session.
 
 ${prevSummary ? `Context from previous sessions:\n${prevSummary}\n` : ""}
 ${ctx.intention ? `Their intention for these 3 days (their goal, in their own words — reference only, never quote it): ${ctx.intention}\n` : ""}
-${ctx.weakestHeartbeat ? `Their assessment: weakest Heartbeat is ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5).\n` : ""}
+${ctx.weakestHeartbeat ? `Their assessment: weakest Heartbeat is ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5).\n` : ""}${namedBefore.length ? `You already named ${namedBefore.join(" and ")} in earlier sessions. Don't repeat that diagnosis; name a Heartbeat only if something they wrote today points to it, and phrase it differently.\n` : ""}
 
 Your job is to:
 1. Reflect briefly on what the user actually wrote — do not add new ideas they didn't mention.
@@ -233,6 +249,8 @@ Rules:
 - Sound like a wise friend, not a therapist or life coach.
 - Never quote the user's words back to them, and never use quotation marks around what they wrote. Mirror what they said in plain words close to theirs (a short phrase of theirs is fine without quotation marks; their typos and shorthand disappear). Don't add new labels for their state (e.g. "chaos" when they said they couldn't tell left from right).
 - They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic. Never put swearing in "keyTheme", "valueNamed" or "releasePoint".
+- If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question what you're missing or what would help. Don't keep coaching past it. Put a short, neutral one-line summary of the complaint in "appFeedback" (else "").
+- If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
 - If a line may be sarcastic or exasperated (e.g. "i cant believe im getting this done"), don't praise effort or read it as good news. Reflect the overwhelm in their words, make no judgment about effort, and make your one question smaller.
 - If one answer is a non-answer (e.g. "havent tried", "not sure"), acknowledge it gently and offer one tiny first try for that question; don't skip past it.
 - Don't repeat the journal prompt's wording back to them (for example "most present", "pace or patience", "calm and purpose"). Instead, name the specific insight they gave, in plain words. Example: if they wrote that they got more done because they didn't feel rushed, say something like "not rushing is what made you productive," not "you reflected on your pace or patience."
@@ -254,7 +272,7 @@ ${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of 
 - When their words show a gap in ${ctx.weakestHeartbeat.name} (for example "I don't have any of that"), name it gently by that exact full name and link it to their goal, with grace and accountability and no shame. Example tone for a business-name goal with low Clarity of Vision & Why: "That's why the name won't come yet. A name follows clarity. Let's find what the business is for first." Only do this when their words actually point to it.
 - Always write a Heartbeat's full name exactly (Clarity of Vision & Why, Small Steps + Consistency, Mindset over Method, Feedback & Adaptation, Courageous Action) — never shorten it.
 ${ctx.dayNumber === 1 && ctx.session === "morning" ? `- This is their first session since the assessment. Even without a gap, if what they wrote today naturally connects to ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5), link it in ONE sentence by that exact full name, as the Heartbeat these three days help them strengthen, never as a flaw. If it would feel forced, leave it out.
-` : ""}` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${eveningStepBlock}
+` : ""}` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${statementBlock}${eveningStepBlock}
 
 Before writing, decide two things and put them FIRST in your JSON:
 - "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.
@@ -273,11 +291,13 @@ Respond ONLY with valid JSON in this exact shape:
   "valueNamed": "...",
   "possibleFirstSeed": "...",
   "focusSummary": "...",
-  "photoInvite": ""${isEvening ? `,
+  "photoInvite": "",
+  "appFeedback": ""${ctx.session === "grounding_statement" ? `,
+  "draftStatement": ""` : ""}${isEvening ? `,
   "nextStep": "Tomorrow, ...",
   "nextStepOptions": ["Tomorrow, ...", "Tomorrow, ..."]` : ""}
 }
-${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, paraphrasing what they said they'll give their attention to today. Never copy their words. If they were unsure, say so kindly (e.g. "You're still finding today's focus — and that's okay.").` : `"focusSummary": "" (morning sessions only).`}`;
+${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, paraphrasing what they said they'll give their attention to today. Never copy their words. If they wrote frustration or doubt instead of a focus, sum that up honestly in their terms. If there's nothing to reflect, return "" (the line is then left off).` : `"focusSummary": "" (morning sessions only).`}`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
@@ -309,6 +329,8 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       frustrationRose: parsed.frustrationRose === true,
       heartbeatInAction: typeof parsed.heartbeatInAction === "string" ? parsed.heartbeatInAction : "",
       photoInvite: ctx.session !== "grounding_statement" && typeof parsed.photoInvite === "string" ? parsed.photoInvite.trim() : "",
+      appFeedback: typeof parsed.appFeedback === "string" ? parsed.appFeedback.trim() : "",
+      draftStatement: ctx.session === "grounding_statement" && typeof parsed.draftStatement === "string" ? parsed.draftStatement.trim() : "",
     };
   } catch {
     return {
@@ -351,6 +373,8 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - If they asked you something, answer it plainly in one sentence.
 - If you name a Heartbeat, name only one, once, by its full name exactly.
 - They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic.
+- If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question what you're missing or what would help. Don't keep coaching past it.
+- If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
 - If their answer may be sarcastic or exasperated, don't praise effort or call it good news; reflect the overwhelm in plain words close to theirs (no new labels).${ctx.reflection ? `
 - Your reflection is right above this reply on the same screen: ${ctx.reflection}
 Don't repeat its phrasing (e.g. another "is a step toward…") and don't name a Heartbeat it already named.` : ""}
