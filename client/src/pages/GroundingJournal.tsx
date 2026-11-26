@@ -177,9 +177,11 @@ function JourneySummary({ entries }: { entries: any[] }) {
     { label: "Day 1 — where you gave your attention", value: answerTo(entries, 1, "morning", MORNING_PROMPTS[1][0], 0) },
     { label: "Day 2 — what truly matters", value: answerTo(entries, 2, "morning", MORNING_PROMPTS[2][0], 0) },
     { label: "Day 3 — the value you carried", value: answerTo(entries, 3, "morning", MORNING_PROMPTS[3][0], 0) },
-    { label: "What you're ready to release", value: answerTo(entries, 2, "evening", EVENING_PROMPTS[2][1], 1) },
-    { label: "What you'll keep nurturing", value: answerTo(entries, 3, "grounding_statement", GROUNDING_STATEMENT_PROMPTS[1], 1) },
+    { label: "Day 2 — what you were ready to release", value: answerTo(entries, 2, "evening", EVENING_PROMPTS[2][1], 1) },
+    { label: "Day 3 — the growth you noticed", value: answerTo(entries, 3, "evening", EVENING_PROMPTS[3][0], 0) },
   ].filter((r) => r.value);
+  // A one-line statement they confirmed replaces the stacked answers.
+  const oneLine = statementAnswers.find((p) => p.prompt === "Your Grounding Statement")?.response;
   if (rows.length === 0 && !statement) return null;
   return (
     <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm text-left space-y-4" data-testid="card-journey-summary">
@@ -191,9 +193,11 @@ function JourneySummary({ entries }: { entries: any[] }) {
         </div>
       ))}
       {statementAnswers.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-testid="recap-statement">
           <p className="text-xs text-muted-foreground font-medium">Your Grounding Statement</p>
-          {statementAnswers.map((p, i) => (
+          {oneLine ? (
+            <p className="text-sm text-foreground leading-relaxed">{oneLine}</p>
+          ) : statementAnswers.map((p, i) => (
             <p key={i} className="text-sm text-foreground leading-relaxed">{p.response}</p>
           ))}
         </div>
@@ -229,18 +233,18 @@ function PlantGoalCard({ onPlant, busy }: { onPlant: () => void; busy: boolean }
 
 function RebuildFunnelCard({ started, onClick }: { started: boolean; onClick: () => void }) {
   return (
-    <div className="bg-[#1a3a2a] rounded-2xl p-5 text-left space-y-3">
+    <div className="bg-white rounded-2xl p-5 text-left space-y-3 border border-border/60" data-testid="card-rebuild-funnel">
       <div className="flex items-center gap-2">
-        <Sparkles className="w-4 h-4 text-[#c8a84b]" />
-        <p className="text-xs font-semibold text-[#c8a84b] uppercase tracking-wider">Ready for more?</p>
+        <Sparkles className="w-4 h-4 text-[#8a6f1f]" />
+        <p className="text-xs font-semibold text-[#8a6f1f] uppercase tracking-wider">Ready for more?</p>
       </div>
-      <p className="text-sm text-white/90 leading-relaxed">
+      <p className="text-sm text-muted-foreground leading-relaxed">
         The 3-Day Journal grounded you. The 7-Day Rebuild turns what you just named into an actual plan —
-        five Heartbeats, with Jai walking beside you the whole way.
+        Five Heartbeats, with Jai walking beside you the whole way.
       </p>
       <Button
-        className="w-full rounded-xl h-12 font-bold"
-        style={{ background: "linear-gradient(180deg, #F5D060 0%, #E8B828 100%)", color: "#1a1a1a" }}
+        variant="outline"
+        className="w-full rounded-xl h-11"
         onClick={onClick}
       >
         {started ? "Continue the 7-Day Rebuild" : "Start the 7-Day Rebuild"}
@@ -289,6 +293,18 @@ export default function GroundingJournal() {
   // Evening: the user can swap Jai's small step for one of his other
   // options, or write their own.
   const [ownStep, setOwnStep] = useState("");
+  // Grounding Statement drafted by Jai from non-answers: edited, then saved.
+  const [statementDraft, setStatementDraft] = useState<string | null>(null);
+  const [statementSaved, setStatementSaved] = useState<string | null>(null);
+  const saveStatement = async (text: string) => {
+    const t = (text ?? "").trim();
+    if (!userId || !t) return;
+    try {
+      await api.saveGroundingStatement(userId, t);
+      setStatementSaved(t);
+      queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
+    } catch {}
+  };
   const [stepSaving, setStepSaving] = useState(false);
   const chooseStep = async (source: string, step: string) => {
     const jae = jaeData[source];
@@ -1289,6 +1305,27 @@ export default function GroundingJournal() {
                   {!jae?.reflectionIsSafety && (
                   <div className="bg-white rounded-2xl p-5 border border-border/40 shadow-sm space-y-4">
                     <p className="text-sm text-foreground leading-relaxed">{jae?.reflection}</p>
+                    {jae?.draftStatement && (
+                      <div className="rounded-xl p-4 border border-border bg-muted/30 space-y-2" data-testid="card-draft-statement">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your Grounding Statement</p>
+                        {statementSaved ? (
+                          <p className="text-sm font-medium text-foreground" data-testid="text-statement-saved">{statementSaved}</p>
+                        ) : (
+                          <>
+                            <p className="text-sm text-foreground">Want me to put it in one line, from what you actually said? Use it, or change it so it's true for you.</p>
+                            <Textarea
+                              value={statementDraft ?? jae.draftStatement}
+                              onChange={(e) => setStatementDraft(e.target.value)}
+                              className="resize-none rounded-xl min-h-[60px] text-sm"
+                              data-testid="input-draft-statement"
+                            />
+                            <Button size="sm" className="rounded-xl" onClick={() => saveStatement(statementDraft ?? jae.draftStatement)} data-testid="button-save-statement">
+                              Use this as my statement
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {jae?.possibleFirstSeed && (
                       <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
                         <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your Possible First Seed</p>
@@ -1353,7 +1390,7 @@ export default function GroundingJournal() {
                   )}
 
                   <Button className="w-full rounded-xl h-12" onClick={handleSaveFollowUp} disabled={followUpReplying || !!safetyHolds}>
-                    Continue to the Mustard Seed App
+                    See your three days
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>
                 </div>

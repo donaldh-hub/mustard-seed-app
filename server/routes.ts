@@ -5,6 +5,8 @@ import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
 import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin } from "./jaeJournal";
+// The prompt label a one-line Grounding Statement is saved under.
+const STATEMENT_PROMPT = "Your Grounding Statement";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
@@ -3756,6 +3758,11 @@ export async function registerRoutes(
         nextStep: session === "evening" && jaeResponse.nextStep ? jaeResponse.nextStep : null,
       });
 
+      // Anger at Jai or the app: kept as app feedback, apart from goal data.
+      if ((jaeResponse as any).appFeedback) {
+        await storage.createSupportInquiry({ userId, text: `[Journal Day ${dayNumber} ${session}] ${(jaeResponse as any).appFeedback}`.slice(0, 500), outcome: "app_feedback" }).catch(() => {});
+      }
+
       // Mirror to the entries table so Calendar/Memory Bank shows journal
       // activity — the journal has its own table, but Calendar only reads
       // from `entries`. Skipped on a safety trigger: there's no real theme to
@@ -3794,6 +3801,24 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
       return res.status(500).json({ message: "Journal entry error" });
+    }
+  });
+
+  // Their Grounding Statement in one line (Jai's draft, as is or edited),
+  // kept on the statement entry; the recap shows it instead of the answers.
+  app.patch("/api/users/:userId/grounding-journal/statement", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const text = String(req.body?.text ?? "").trim().slice(0, 400);
+      if (!text) return res.status(400).json({ message: "Statement is empty." });
+      const entry = (await storage.getGroundingJournalEntries(userId)).find((e) => e.session === "grounding_statement");
+      if (!entry) return res.status(404).json({ message: "Grounding statement not found." });
+      const prompts = ((entry.prompts as { prompt: string; response: string }[]) ?? []).filter((p) => p.prompt !== STATEMENT_PROMPT);
+      await storage.updateGroundingJournalEntry(entry.id, { prompts: [...prompts, { prompt: STATEMENT_PROMPT, response: text }] } as any);
+      return res.json({ statement: text });
+    } catch (err) {
+      console.error("[JOURNAL] statement_error:", err);
+      return res.status(500).json({ message: "Could not save your statement." });
     }
   });
 

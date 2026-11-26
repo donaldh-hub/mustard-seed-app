@@ -3,7 +3,7 @@
 // goal "being on time for work": thin answers, rich answers, and a negative
 // one. Prints Jai's reply with simple automatic checks under each.
 //
-// Run in the Replit Shell (needs the app's AI key; 5 short AI calls):
+// Run in the Replit Shell (needs the app's AI key; 7 short AI calls):
 //   npx tsx scripts/journal-evening-check.ts
 // Writes nothing to the database. Crisis wording is covered separately by
 // scripts/safety-trigger-check.ts.
@@ -77,6 +77,43 @@ console.log(`\n(e) sarcastic follow-up reply\n  Jai: ${ack}`);
 check(!/(great|good|proud|awesome).{0,40}(push|getting|done|keep)/i.test(ack), "no praise for effort on a sarcastic line");
 check(!/\bchaos|chaotic\b/i.test(ack), "no new labels (e.g. chaos)");
 check(!/is a step toward/i.test(ack) && !ack.includes("Clarity of Vision & Why"), "doesn't repeat the reflection's phrasing or Heartbeat");
+
+// (f) Day 3 evening: anger at Jai and a real stake.
+const prior = [{ dayNumber: 3, session: "morning", jaeReflection: "Clarity of Vision & Why might be what's missing here.", answers: "how about being on time for once / obviously a cant. idk how you not fucking understanding" }];
+const f = await generateJournalReflection({
+  userName: "Donald", dayNumber: 3, dayTheme: "REBUILD", session: "evening",
+  prompts: [
+    { prompt: "Where did I notice growth, even in small ways?", response: "growth...i almost got fuckin fired." },
+    { prompt: "How can I keep building from this place of calm awareness?", response: "fuck you. fuck this." },
+  ],
+  intention: "being on time for work",
+  weakestHeartbeat: { name: "Clarity of Vision & Why", score: 3 },
+  previousEntries: prior,
+});
+const fAll = `${f.reflection} ${f.followUpQuestion}`;
+console.log(`\n(f) anger at Jai + "almost got fired"\n  Jai: ${f.reflection}\n  Question: ${f.followUpQuestion}\n  Step: ${f.nextStep}\n  appFeedback: ${f.appFeedback}`);
+check(/fair|missing|hear you|not listening|getting wrong/i.test(fAll), "acknowledges the anger at Jai");
+check(/(job|fired|work)/i.test(f.reflection), "names the real stake (the job)");
+check(!/what would being on time change|why does being on time matter/i.test(f.followUpQuestion), "doesn't ask a why it was already told");
+check(!/Clarity of Vision & Why/.test(fAll), "doesn't repeat the earlier Heartbeat diagnosis");
+check(!!f.appFeedback, "anger saved as app feedback");
+
+// (g) Grounding Statement made of non-answers.
+const g = await generateJournalReflection({
+  userName: "Donald", dayNumber: 3, dayTheme: "REBUILD", session: "grounding_statement",
+  prompts: [
+    { prompt: "What you've learned:", response: "Ive learned this app is bullshit and not helpful" },
+    { prompt: "What you'll keep nurturing:", response: "idk" },
+    { prompt: "One thing you're ready to carry forward:", response: "fuck if i know" },
+  ],
+  intention: "being on time for work",
+  lockedStep: "Tomorrow, set your alarm 10 minutes earlier and place it across the room.",
+  previousEntries: [{ dayNumber: 3, session: "evening", answers: "growth...i almost got fuckin fired. / fuck you. fuck this." }],
+});
+console.log(`\n(g) non-answer Grounding Statement\n  Jai: ${g.reflection}\n  Draft: ${g.draftStatement}\n  Seed: ${g.possibleFirstSeed}\n  appFeedback: ${g.appFeedback}`);
+check(!!g.draftStatement && !/\b(journey|thrive|empower|unstoppable)\b/i.test(g.draftStatement ?? ""), "offers an honest one-line draft");
+check(!/^reflect|reflect on/i.test(g.possibleFirstSeed) && /(alarm|clock|bed|night|wake|leave|work|time)/i.test(g.possibleFirstSeed), "seed is a concrete on-goal action, matching the chosen step");
+check(/fair|missing|helpful|didn'?t help/i.test(g.reflection) && !!g.appFeedback, "acknowledges the app feedback");
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll checks passed");
 process.exit(failed ? 1 : 0);
