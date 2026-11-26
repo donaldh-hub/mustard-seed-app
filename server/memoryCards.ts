@@ -30,14 +30,15 @@ type JournalLike = {
   jaeFollowUpReply?: string | null; nextStep?: string | null; possibleFirstSeed?: string | null;
 };
 
-const SWEARS = /\b(fuck\w*|shit\w*|damn\w*|goddamn|bullshit)\b/gi;
 const STEP_CHECK = /^Last night's step:/;
 const SESSION_LABEL: Record<string, string> = { intention: "Your intention", morning: "Morning", evening: "Evening", grounding_statement: "Grounding Statement" };
 
-// One short line in their words: the first sentence, cut at a clause or word
-// boundary (never "…"), swearing removed.
-export function shortLine(text: string, max = 110): string {
-  let t = (text ?? "").replace(SWEARS, "").replace(/\s{2,}/g, " ").replace(/\s+([.,!?])/g, "$1").trim();
+// One short line in their exact words (swearing kept: Speak Freely). A whole
+// answer up to 180 characters stays whole; longer ones keep whole sentences,
+// cut at a clause or word boundary only as a last resort (never "…").
+export function shortLine(text: string, max = 160): string {
+  let t = (text ?? "").replace(/\s{2,}/g, " ").trim();
+  if (t.length <= 180) return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
   // Sentences end at . ! ? followed by a space (so "growth...i almost got
   // fired" stays whole); take as many whole sentences as fit.
   const parts = t.split(/(?<=[.!?])\s+/);
@@ -63,6 +64,7 @@ export function buildMemoryCards(entries: EntryLike[], journal: JournalLike[]): 
   const byDate = new Map<string, EntryLike[]>();
   for (const e of entries) byDate.set(e.date, [...(byDate.get(e.date) ?? []), e]);
 
+  const seenSessions = new Set<string>();
   for (const [date, list] of byDate) {
     const chat: EntryLike[] = [];
     const planted = list.find((e) => /^Goal planted: /.test(e.summary));
@@ -72,6 +74,11 @@ export function buildMemoryCards(entries: EntryLike[], journal: JournalLike[]): 
       const j = s.match(/^Grounding Journal — Day (\d+) (Morning|Evening|Grounding Statement)/);
       if (j) {
         const session = j[2] === "Morning" ? "morning" : j[2] === "Evening" ? "evening" : "grounding_statement";
+        // One card per session: Jai's follow-up reply and any duplicate copy
+        // fold into the session card (its full view shows the reply).
+        const key = `${j[1]}:${session}`;
+        if (seenSessions.has(key)) continue;
+        seenSessions.add(key);
         const row = journal.find((r) => r.dayNumber === Number(j[1]) && r.session === session);
         cards.push(journalCard(date, Number(j[1]), session, row, e));
         continue;

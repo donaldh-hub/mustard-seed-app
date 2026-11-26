@@ -186,6 +186,11 @@ export default function Home() {
     prevStreakRef.current = currentStreak;
   }, [currentStreak]);
 
+  const { data: memoryCards = [] } = useQuery({
+    queryKey: ["entries", userId, "cards"],
+    queryFn: () => api.getMemoryCards(userId!),
+    enabled: !!userId,
+  });
   if (!userId || assessmentLoading) return null;
   if (!assessment) return null;
 
@@ -207,6 +212,9 @@ export default function Home() {
   const weakestScore = heartbeatScores[weakest] ?? 0;
   const goal = garden?.targeted?.title || garden?.untargeted?.title || "";
 
+  // Recent Memory shows the distilled card line (server/memoryCards.ts), not
+  // a raw chat message.
+  const recentCard = (memoryCards as any[]).find((c) => c.kind !== "raw");
   const recentEntry = entries.length > 0
     ? entries.sort((a: any, b: any) => (b.createdAt > a.createdAt ? 1 : -1))[0]
     : null;
@@ -633,7 +641,9 @@ export default function Home() {
             {recentEntry ? (
               <div>
                 <p className="text-xs text-muted-foreground" data-testid="text-memory-date">{recentEntry.date}</p>
-                <p className="text-sm text-foreground mt-1" data-testid="text-memory-summary">{recentEntry.summary}</p>
+                <p className="text-sm text-foreground mt-1" data-testid="text-memory-summary">
+                  {recentCard ? `${recentCard.icon ? `${recentCard.icon} ` : ""}${recentCard.title}${recentCard.lines?.[0] ? `: ${recentCard.lines[0]}` : ""}` : recentEntry.summary}
+                </p>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground italic" data-testid="text-no-memory">No memories yet</p>

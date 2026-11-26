@@ -11,7 +11,7 @@ const TEMPLATES = /this is a sign|had some hope in it|\b(language|watch your|pro
 const PACE = /\b(quick(ly)?|fast|rushed|hurried)\b/i;
 const CHANGE_SITUATION = /\b(quit|find a new job|change jobs|new job)\b/i;
 const CANNED_QUESTION = /full permission to slow down/i;
-const ANGER_OWNED = /\b(fair|missing|hear you|not listening|getting wrong)\b/i;
+const ANGER_OWNED = /\b(fair|missing|missed|right|hear you|not listening|getting wrong|on me|got (that|it) wrong)\b/i;
 const JOB_STAKE = /\b((almost|nearly) (got|get|been|getting) (\w+ )?fired|(almost|nearly) lost (my|the) job|(could|might|gonna|going to) (lose|get fired from) (my|the) job|(really )?need (the|those|these|my) (hours|job|paycheck|money))\b/i;
 const JOB_FEELING = /\b(hate|can'?t stand|dread\w*|sick of)\b.{0,30}\b(job|work)\b|\b(job|work)\b.{0,20}\b(sucks|is awful|is miserable)\b/i;
 const WHY_QUESTION = /^(why\b|what would .{0,60}change|why does .{0,60}matter)/i;
@@ -25,7 +25,7 @@ const join = (parts: string[]) => parts.join("").replace(/\s+/g, " ").trim();
 // Drops sentences that break a rule. `paceOk` is true when the user's own
 // words mention rushing, so Jai may too.
 function clean(text: string, paceOk: boolean): string {
-  return join(sentences(text).filter((s) => !SWEARS.test(s) && !TEMPLATES.test(s) && !CHANGE_SITUATION.test(s) && (paceOk || !PACE.test(s))));
+  return join(sentences(text).filter((s) => !/\bI may be missing something\b/i.test(s) && !SWEARS.test(s) && !TEMPLATES.test(s) && !CHANGE_SITUATION.test(s) && (paceOk || !PACE.test(s))));
 }
 
 export function withStake(reflection: string, answers: string[], priorReflections: string[] = []): string {
@@ -74,6 +74,9 @@ export interface GuardInput {
   userAsked?: boolean; // they typed a direct question (answered separately)
   isStatement?: boolean; // Grounding Statement session
   priorReflections?: string[]; // Jai's reflections from earlier sessions
+  formText?: string; // the journal's own question wording
+  stepCheck?: { step: string; status: string } | null; // "Last night's step" answer
+  latestStep?: string; // the step already set (its size is kept)
 }
 
 export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: GuardInput): T {
@@ -114,7 +117,7 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
   // Anger at Jai: own it first, ask what's missing, save it as feedback.
   let appFeedback = r.appFeedback;
   if (g.angerAtJai) {
-    if (!ANGER_OWNED.test(sentences(reflection)[0] ?? "")) reflection = `Fair. I may be missing something. ${reflection}`.trim();
+    if (!ANGER_OWNED.test(sentences(reflection)[0] ?? "")) reflection = `You're right, I missed something there. ${reflection}`.trim();
     if (!ANGER_OWNED.test(question) && !/\bhelp\b/i.test(question)) question = "What am I missing?";
     if (!appFeedback) appFeedback = g.angerLine || "User pushed back on Jai or the app.";
   }
@@ -155,6 +158,23 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
   // Values only from their own words (never the form's wording or Jai's pick).
   const theirWords = new Set(all.join(" ").toLowerCase().match(/[a-z]{4,}/g) ?? []);
   const fromThem = (v: string) => !v || (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => theirWords.has(w));
+  // Never the form's own wording as their value ("calm" from "calm awareness").
+  const formWords = new Set(((g.formText ?? "").toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["what", "where", "when", "your", "today", "this", "that", "have", "with", "from", "about", "tomorrow", "small", "ways"].includes(w)));
+  const fromForm = (v: string) => (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => formWords.has(w));
+  // Negation: "I'm NOT releasing the book" can never become "ready to release the book".
+  const negated = new Set(g.answers.flatMap((a) => [...a.matchAll(/\b(not|never|no longer|stop|won'?t|don'?t|isn'?t|aren'?t|can'?t)\b([^.!?]{0,60})/gi)].flatMap((m) => m[2].toLowerCase().match(/[a-z]{4,}/g) ?? [])));
+  const contradicts = (v: string) => (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => negated.has(w) && !["releasing", "release", "letting", "go"].includes(w));
+
+  // "Yes, I did it": name the specific thing.
+  if (g.stepCheck && /^yes/i.test(g.stepCheck.status)) {
+    const step = g.stepCheck.step.replace(/^(tomorrow|tonight),?\s*/i, "").replace(/[.!]+$/, "");
+    const key = (step.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["your", "with", "before", "after", "minutes", "minute"].includes(w));
+    if (step && !key.some((w) => reflection.toLowerCase().includes(w))) {
+      reflection = `You said you'd ${step.charAt(0).toLowerCase() + step.slice(1)}, and you did. ${reflection}`.trim();
+    }
+  }
+  // Minutes in the text match the step that's set (5 stays 5).
+  reflection = keepStepSize(reflection, r.nextStep || g.latestStep || "");
 
   // Grounding Statement draft keeps the hard truths and an honest "not sure".
   let draftStatement = r.draftStatement;
@@ -173,12 +193,13 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
     ...(r.draftStatement !== undefined ? { draftStatement } : {}),
     reflection,
     followUpQuestion: question,
+    valueNamed: fromThem(r.valueNamed) && !fromForm(r.valueNamed) ? tag(r.valueNamed) : "",
+    releasePoint: contradicts(r.releasePoint) ? "" : tag(r.releasePoint),
     keyTheme: tag(r.keyTheme),
-    releasePoint: tag(r.releasePoint),
-    valueNamed: fromThem(r.valueNamed) ? tag(r.valueNamed) : "",
     possibleFirstSeed: seed,
     nextStep,
-    nextStepOptions: options,
+    // No lifted alternates ("reflect on what calm means for you").
+    nextStepOptions: options.filter((o) => !/\breflect\b|\bwhat .{0,25} means\b/i.test(o) && !(formWords.size && /\bcalm\b/i.test(o) && !theirWords.has("calm"))),
     appFeedback,
   };
 }
@@ -224,4 +245,11 @@ export function addsEveningTask(step: string): boolean {
 }
 export function isOverloaded(answers: string[]): boolean {
   return OVERLOAD.test(answers.join(" "));
+}
+
+// Any "N minutes" larger than the set step's minutes becomes the step's.
+export function keepStepSize(text: string, step: string): string {
+  const m = Number((step ?? "").match(/(\d+)\s*min/i)?.[1] ?? 0);
+  if (!m) return text;
+  return (text ?? "").replace(/(\d+)(\s*-?\s*min(ute)?s?)/gi, (all, n, rest) => (Number(n) > m ? `${m}${rest}` : all));
 }

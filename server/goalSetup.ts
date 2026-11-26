@@ -20,7 +20,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-export type GoalSetupStage = "offered" | "wording" | "new_goal" | "why" | "step" | "date" | "confirm" | "declined" | "done";
+export type GoalSetupStage = "offered" | "wording" | "new_goal" | "why" | "why_after" | "step" | "date" | "confirm" | "declined" | "done";
 
 export interface GoalSetupState {
   stage: GoalSetupStage;
@@ -61,7 +61,7 @@ export const GOAL_SETUP_BUTTONS = {
   change: "Change something",
 } as const;
 
-const ACTIVE_STAGES: GoalSetupStage[] = ["offered", "wording", "new_goal", "why", "step", "date", "confirm"];
+const ACTIVE_STAGES: GoalSetupStage[] = ["offered", "wording", "new_goal", "why", "why_after", "step", "date", "confirm"];
 
 // An email typed into the Name field is never used as a greeting.
 const firstName = (name: string | null | undefined) => { const f = (name || "").trim().split(/\s+/)[0] || ""; return f.includes("@") ? "" : f; };
@@ -306,6 +306,7 @@ function questionFor(stage: GoalSetupStage, s: GoalSetupState): string {
     case "wording": return QUESTIONS.wording(s);
     case "new_goal": return QUESTIONS.new_goal();
     case "why": return QUESTIONS.why(s);
+    case "why_after": return whyQuestion(s.title);
     case "step": return QUESTIONS.step();
     case "date": return QUESTIONS.date();
     case "confirm": return QUESTIONS.confirm(s);
@@ -336,7 +337,7 @@ export async function handleGoalSetupTurn(
   if (!user) return null;
   const state = getState(user);
   if (!state || !ACTIVE_STAGES.includes(state.stage)) return null;
-  const plantedStepOpen = state.stage === "step" && !!state.plantedGoalId;
+  const plantedStepOpen = (state.stage === "step" || state.stage === "why_after") && !!state.plantedGoalId;
   if (!plantedStepOpen && (await storage.getActiveGoals(userId)).length > 0) {
     await saveState(userId, null);
     return null;
@@ -362,7 +363,9 @@ export async function handleGoalSetupTurn(
     return plantAfterWhy(userId, user.name, { ...state, title, why, whyFromStake: !state.why && !!why }, opts);
   }
   // A later line isn't the answer to a question asked a while ago.
-  if (state.awaiting === false && !buttonIntent(text)) return null;
+  // ...unless it's plainly the why ("money, and I'm sick of saying I'll finish it").
+  const lateWhy = (state.stage === "why" || state.stage === "why_after") && WHY_MARKER.test(text) && !!cleanWhy(text);
+  if (state.awaiting === false && !buttonIntent(text) && !lateWhy) return null;
   if (moment && STEP_ASIDE.has(moment.state) && !(state.stage === "why" && moment.stake)) {
     await saveState(userId, { ...state, awaiting: false });
     return null;
@@ -413,6 +416,17 @@ export async function handleGoalSetupTurn(
       // already named (no extra question), or leave it for later.
       const why = said || (stake ? stripSwears(stake) : "");
       return plantAfterWhy(userId, user.name, { ...state, why, whyFromStake: !said && !!why }, opts);
+    }
+    case "why_after": {
+      const w = r.intent === "skip" ? "" : cleanWhy(r.value || text.trim());
+      if (w) await storage.updateGoal(state.plantedGoalId!, { emotionalWhy: w } as any).catch(() => {});
+      const saved = w ? `Saved. Your why: ${toYou(stripEnd(w))}.` : "No problem. You can add it anytime on Growth.";
+      if (state.step) {
+        await saveState(userId, { ...state, stage: "done", why: w });
+        return { text: saved, messageType: "text", finished: true };
+      }
+      await saveState(userId, { ...state, stage: "step", why: w, awaiting: true });
+      return { text: `${saved}\n\n${QUESTIONS.step()}`, messageType: "text" };
     }
     case "step": {
       const step = r.intent === "skip" ? "" : r.value || text.trim();
@@ -513,7 +527,13 @@ async function plantAfterWhy(
   if (!planted.plantedGoalId) return planted;
   const why = state.why
     ? `\n\nWhy it matters: ${toYou(stripEnd(state.why))}${state.whyFromStake ? " (from what you told me earlier; you can change it in Refine Goal)" : ""}`
-    : "\n\nYou can add why it matters anytime in Refine Goal.";
+    : "";
+  if (!state.why) {
+    // Ask once; their next line is saved as the why (see "why_after").
+    await saveState(userId, { ...state, stage: "why_after", step, plantedGoalId: planted.plantedGoalId, awaiting: true });
+    const base = step ? planted.text.replace("I'll ask you about it next time.", "That's the step you set in your journal, and I'll ask you about it next time.") : planted.text;
+    return { ...planted, text: `${base}\n\nOne thing before you go: ${lowerFirst(whyQuestion(state.title))} A few words is plenty, and I'll save it with your goal.` };
+  }
   if (step) {
     return { ...planted, finished: true, text: `${planted.text.replace("I'll ask you about it next time.", "That's the step you set in your journal, and I'll ask you about it next time.")}${why}` };
   }
@@ -551,8 +571,12 @@ async function saveFirstStep(
 // Goals are actions, not thinking tasks.
 const REFLECTIVE = /^(reflect|explore|understand|think( about)?|figure out|learn (why|more)|consider|discover|journal about)\b/i;
 // "being on time for work" -> "Be on time for work".
+// Doubt tails are cut ("finish my book. honestly not sure why i bother" ->
+// "Finish my book"), swearing removed, "I want to" dropped.
 export function goalFromIntention(intention: string): string {
-  const t = stripEnd(intention).replace(/^being\b/i, "be").replace(/^getting\b/i, "get");
+  let t = stripSwears(intention ?? "").split(/[.!?;]|,?\s+(?:but|honestly|idk|not sure|though|lol|tbh|i guess)\b|\s+-\s+/i)[0] ?? "";
+  t = stripEnd(t.trim()).replace(/^(i (really )?(want|need|would like|wanna|am trying|'?m trying|plan) to|my goal is( to)?|to)\s+/i, "");
+  t = t.replace(/^being\b/i, "be").replace(/^getting\b/i, "get").replace(/^finishing\b/i, "finish").replace(/^writing\b/i, "write").replace(/^starting\b/i, "start");
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
@@ -607,4 +631,42 @@ export async function pendingSetupForChat(userId: string, calm: boolean): Promis
   // If chat invites them back, their next line may be the answer.
   await saveState(userId, { ...state, awaiting: mayInviteBack, ...(mayInviteBack ? { invitedBackAt: new Date().toISOString() } : {}) });
   return { stage: state.stage, title: state.title, question: questionFor(state.stage, state).replace(/ That's your .*$/, ""), mayInviteBack };
+}
+
+// ─── Plant from chat ("plant the damn thing", "now set the goal") ─────────
+const WHY_MARKER = /\b(because|cuz|cause|money|so i|so that|for my|for the|i need|need the|sick of|tired of|matters|my (kids?|family|son|daughter|job))\b/i;
+
+/**
+ * Plants the goal right now, from what they've already said: the goal they
+ * stated (this message, the setup in progress, or their journal), and a why
+ * from their own reasons or stake (never an angry line). Returns null if a
+ * goal already exists or there's nothing to plant.
+ */
+export async function plantFromChat(
+  userId: string,
+  text: string,
+  recentUserTexts: string[],
+  stakeFromMoment: string,
+  opts: { localDate?: string; userTimezone?: string },
+): Promise<GoalSetupReply | null> {
+  const user = await storage.getUser(userId);
+  if (!user || (await storage.getActiveGoals(userId)).length > 0) return null;
+  const state = getState(user);
+  // A goal named in this message ("plant the damn thing. finish the book").
+  const stated = text.split(/(?<=[.!?])\s+|\n+/)
+    .filter((x) => !/\b(plant|set|lock|save|official|finish (setting|the setup))\b.{0,30}\b(goal|it|this|that|thing)\b/i.test(x))
+    .map((x) => goalFromIntention(x))
+    .find((x) => x.split(/\s+/).length >= 2 && !/\b(you|this app|jai)\b/i.test(x));
+  let title = stated || state?.title || "";
+  if (!title) {
+    const suggestion = await suggestGoalFromMemory(userId).catch(() => null);
+    title = suggestion?.goal ?? "";
+  }
+  title = goalFromIntention(title);
+  if (!title) return null;
+  const said = state?.why || recentUserTexts.slice(-6).reverse().map((t) => (WHY_MARKER.test(t) ? cleanWhy(t) : "")).find(Boolean) || "";
+  const stake = stakeFromMoment ? toYou(stakeFromMoment.toLowerCase().replace(/^i\b/, "I")) : (state?.stake ?? (await journalStake(userId)));
+  const why = said || (stake ? stripSwears(stake) : "");
+  const base: GoalSetupState = state ?? { stage: "why", source: "chat", suggestion: null, lastOfferedAt: new Date().toISOString() };
+  return plantAfterWhy(userId, user.name, { ...base, stage: "why", title, why, whyFromStake: !said && !!why }, opts);
 }

@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep } from "./journalGuards";
+import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize } from "./journalGuards";
 export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
@@ -210,6 +210,7 @@ async function redoStep(ctx: JournalSessionContext, answers: string[], prior: st
 }
 
 async function answerJournalQuestion(question: string, ctx: JournalSessionContext): Promise<string> {
+  const latest = ctx.lockedStep || [...(ctx.previousEntries ?? [])].reverse().find((e) => e.nextStep)?.nextStep || "";
   const said = ctx.prompts.map((p) => p.response).filter(Boolean).join(" / ");
   const earlier = (ctx.previousEntries ?? []).map((e) => e.answers).filter(Boolean).join(" / ");
   const completion = await openai.chat.completions.create({
@@ -217,11 +218,12 @@ async function answerJournalQuestion(question: string, ctx: JournalSessionContex
     temperature: 0.4,
     max_tokens: 90,
     messages: [
-      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening). No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
       { role: "user", content: `Their question: ${question}\nWhat they wrote today: ${said}\nEarlier: ${earlier.slice(0, 1200)}` },
     ],
   });
-  return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+  const out = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+  return keepStepSize(out, latest);
 }
 
 async function generateJournalReflectionInner(
@@ -330,7 +332,7 @@ Rules:
 - Sound like a wise friend, not a therapist or life coach.
 - Never quote the user's words back to them, and never use quotation marks around what they wrote. Mirror what they said in plain words close to theirs (a short phrase of theirs is fine without quotation marks; their typos and shorthand disappear). Don't add new labels for their state (e.g. "chaos" when they said they couldn't tell left from right).
 - They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic. Never put swearing in "keyTheme", "valueNamed" or "releasePoint".
-- If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question what you're missing or what would help. Don't keep coaching past it. Put a short, neutral one-line summary of the complaint in "appFeedback" (else "").
+- If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line in your own fresh words (e.g. "You're right, I missed that.") and make your one question what you're missing or what would help. Don't keep coaching past it. Put a short, neutral one-line summary of the complaint in "appFeedback" (else "").
 - If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
 - If a line may be sarcastic or exasperated (e.g. "i cant believe im getting this done"), don't praise effort or read it as good news (never "impressive", "proud of you", "great job", "keep pushing", "push through"). Reflect the overwhelm in their words, make no judgment about effort, and make your one question smaller.
 - If one answer is a non-answer (e.g. "havent tried", "not sure"), acknowledge it gently and offer one tiny first try for that question; don't skip past it.
@@ -356,7 +358,7 @@ ${ctx.dayNumber === 1 && ctx.session === "morning" ? `- This is their first sess
 ` : ""}` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${statementBlock}${eveningStepBlock}
 
 Before writing, decide three things and put them FIRST in your JSON:
-- "angerAtJai": true if any line insults, blames or swears at you or the app ("fuck you", "you're not listening", "you don't understand", "this app is bullshit"), else false. "fuck you" in this journal is aimed at you. If true, the FIRST sentence of "reflection" must own it calmly and without defensiveness (e.g. "Fair. I may be missing something."), "followUpQuestion" must ask what you're missing or what would help, and "appFeedback" must summarize the complaint in one neutral line.
+- "angerAtJai": true if any line insults, blames or swears at you or the app ("fuck you", "you're not listening", "you don't understand", "this app is bullshit"), else false. "fuck you" in this journal is aimed at you. If true, the FIRST sentence of "reflection" must own it calmly and without defensiveness in your own fresh words (e.g. "You're right, I missed that."), "followUpQuestion" must ask what you're missing or what would help, and "appFeedback" must summarize the complaint in one neutral line.
 - "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.
 - "heartbeatGap": ${ctx.weakestHeartbeat ? `true if their words today show a gap in ${ctx.weakestHeartbeat.name} (see what a gap sounds like above), else false. If true, "reflection" must name ${ctx.weakestHeartbeat.name} by that exact full name and link it to their goal, gently.` : `always false.`}
 
@@ -380,7 +382,7 @@ Respond ONLY with valid JSON in this exact shape:
   "nextStep": "Tomorrow, ...",
   "nextStepOptions": ["Tomorrow, ...", "Tomorrow, ..."]` : ""}
 }
-${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, paraphrasing what they said they'll give their attention to today. Never copy their words. If they wrote frustration or doubt instead of a focus, sum that up honestly in their terms. If there's nothing to reflect, return "" (the line is then left off).` : `"focusSummary": "" (morning sessions only).`}`;
+${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, naming what they'll give their attention to today, as a focus in their terms (e.g. "Finish the book. Money is the reason."). Never a complaint or a problem statement ("X is overshadowing Y"). If they wrote only frustration or doubt, return "" (the line is then left off).` : `"focusSummary": "" (morning sessions only).`}`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
@@ -403,7 +405,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       releasePoint: realValue(parsed.releasePoint),
       valueNamed: realValue(parsed.valueNamed),
       possibleFirstSeed: parsed.possibleFirstSeed ?? "",
-      focusSummary: ctx.session === "morning" ? (parsed.focusSummary ?? "") : "",
+      focusSummary: ctx.session === "morning" && !/\b(overshadow\w*|getting in the way|struggl\w*|frustrat\w*|concerns?|worr\w*|doubt\w*|complain\w*)\b/i.test(parsed.focusSummary ?? "") ? (parsed.focusSummary ?? "") : "",
       userQuestion: typeof parsed.userQuestion === "string" ? parsed.userQuestion : "",
       heartbeatGap: parsed.heartbeatGap === true,
       nextStep: isEvening && typeof parsed.nextStep === "string" ? parsed.nextStep.trim() : "",
@@ -425,6 +427,12 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       isEvening,
       priorSteps: (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean),
       priorReflections: (ctx.previousEntries ?? []).map((e) => e.jaeReflection ?? "").filter(Boolean),
+      formText: ctx.prompts.map((p) => p.prompt ?? "").join(" "),
+      stepCheck: (() => {
+        const sc = ctx.prompts.find((p) => p.prompt.startsWith(STEP_CHECK_PREFIX));
+        return sc ? { step: sc.prompt.slice(STEP_CHECK_PREFIX.length).replace(/\s*Did you get to it\?$/, "").trim(), status: sc.response ?? "" } : null;
+      })(),
+      latestStep: ctx.lockedStep || [...(ctx.previousEntries ?? [])].reverse().find((e) => e.nextStep)?.nextStep || "",
       userAsked: !!userQ,
       isStatement: ctx.session === "grounding_statement",
     });
@@ -469,7 +477,7 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - If they asked you something, answer it plainly in one sentence.
 - If you name a Heartbeat, name only one, once, by its full name exactly.
 - They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic.
-- If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question what you're missing or what would help. Don't keep coaching past it.
+- If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line in your own fresh words (e.g. "You're right, I missed that.") and make your one question what you're missing or what would help. Don't keep coaching past it.
 - If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
 - Never comment on their effort or on how they are coping or getting through it (no "you're managing", "getting through it", "an achievement", "in itself"); talk about what they said, not how well they are doing.
 - If their answer may be sarcastic or exasperated, don't praise effort or call it good news (never "impressive", "proud of you", "great job", "keep pushing", "push through", "you're still managing"); reflect the overwhelm in plain words close to theirs (no new labels).${ctx.reflection ? `
@@ -539,3 +547,31 @@ export function angerAtJaiFrom(prompts: { prompt: string; response: string }[]):
   return hit ? `User pushed back on Jai or the app: ${hit.trim().slice(0, 200)}` : "";
 }
 
+
+// "I'm NOT releasing the book" after Jai wrote "Ready to release: the book":
+// find what they're pointing at in "What Jai noticed", fix it, and say what
+// changed in one sentence.
+export const CORRECTS = /\b(backwards|got (it|that) wrong|you('?re| are) wrong|that'?s wrong|not what i (said|meant)|i never said|i didn'?t say|i('?m| am) not (releasing|letting|giving)|stop asking me to)\b/i;
+export async function fixNoticed(
+  answer: string,
+  noticed: { keyTheme?: string | null; valueNamed?: string | null; releasePoint?: string | null },
+): Promise<{ field: "keyTheme" | "valueNamed" | "releasePoint" | null; newValue: string; reply: string }> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0,
+    max_tokens: 140,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: `Jai showed the user "What Jai noticed": Theme="${noticed.keyTheme ?? ""}", Value="${noticed.valueNamed ?? ""}", Ready to release="${noticed.releasePoint ?? ""}". The user says Jai got something wrong. Find which line they mean and fix it from their words. If they say they are NOT letting go of something, "releasePoint" becomes "" (never the thing they're keeping). Return JSON {"field": "keyTheme|valueNamed|releasePoint|none", "newValue": "corrected text, or empty to remove the line", "heard": "what they actually said, in a few of their words, second person (e.g. you're not releasing the book)"}.` },
+      { role: "user", content: answer },
+    ],
+  });
+  const p = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+  const field = ["keyTheme", "valueNamed", "releasePoint"].includes(p.field) ? p.field : null;
+  const heard = typeof p.heard === "string" && p.heard.trim() ? p.heard.trim().replace(/[.!]+$/, "") : "";
+  return {
+    field,
+    newValue: typeof p.newValue === "string" ? p.newValue.trim() : "",
+    reply: field ? `You said ${heard || "I had that wrong"}. I had that backwards, and I've fixed it.` : "",
+  };
+}

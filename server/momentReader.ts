@@ -73,7 +73,8 @@ function tensionFor(state: MomentState, streak: number): Tension {
   if (["frustrated_at_jai", "frustrated_self", "overwhelm", "doubt", "quit_talk", "sarcasm", "correction"].includes(state)) return "yellow";
   return "green";
 }
-const FINISH_GOAL = /\b(finish|plant|save|set( it)? up|make|lock in|just do)\b.{0,25}\bgoal\b|\bgoal\b.{0,15}\b(done|finished)\b/i;
+// "plant the damn thing", "now set the goal", "lock it in", "make it official".
+const FINISH_GOAL = /\b(plant|set|lock in|save|finish setting up|finish the setup)\b.{0,25}\b(goal|it|this|that|thing)\b|\b(finish|plant|set( it)? up|make|lock in|just do)\b.{0,25}\bgoal\b|\b(lock|set) it in\b|\bmake it official\b|\bgoal\b.{0,15}\b(done|finished)\b/i;
 const GOAL_STATUS = /\b(what happened to|where'?s|where is|did you (save|plant)|is there|do i (have|even have))\b.{0,20}\bgoal\b/i;
 function intentByWords(t: string): MomentIntent {
   if (FINISH_GOAL.test(t)) return "finish_goal";
@@ -169,7 +170,7 @@ export const PLAYBOOK: Record<MomentState, string> = {
   flat: "Say a flat day is okay. Ask a smaller, easier question. If a Heartbeat fits, it's Small Steps + Consistency.",
   doubt: "Agree honestly that writing alone won't fix it. Say in one line what it's for (seeing the pattern so the next step is the right one). Ask for one concrete thing. If a Heartbeat fits, it's Mindset over Method.",
   frustrated_self: "Reflect the frustration as proof this matters to them. No pep talk. Offer one small step. If a Heartbeat fits, it's Small Steps + Consistency.",
-  frustrated_at_jai: "Stop coaching. Your first sentence reuses a few of their exact words and owns it, e.g. \"you said that already\" -> \"You're right, I did say that already.\"; \"this is useless\" -> \"If this feels useless right now, that's on me.\"; \"you sound like a fortune cookie\" -> \"Fair, I've been sounding like a fortune cookie.\" Then ask one question: what you're missing, or something more specific to what they said. Fresh words every time. Never call it confusion, never \"sorry for any confusion\", never name a Heartbeat.",
+  frustrated_at_jai: "Stop coaching. Never open with \"Fair. I may be missing something.\" Your first sentence reuses a few of their exact words and owns it, e.g. \"you said that already\" -> \"You're right, I did say that already.\"; \"this is useless\" -> \"If this feels useless right now, that's on me.\"; \"you sound like a fortune cookie\" -> \"Fair, I've been sounding like a fortune cookie.\" Then ask one question: what you're missing, or something more specific to what they said. Fresh words every time. Never call it confusion, never \"sorry for any confusion\", never name a Heartbeat.",
   overwhelm: "Shrink it. Say they don't have to do it all. Offer a one-line option (\"just tell me one word for today\"). If a Heartbeat fits, it's Small Steps + Consistency.",
   sarcasm: "Take the feeling under the words, plainly. Never praise the words or the effort. One small, easy question.",
   hostile: "Stay calm. One or two short sentences in your own words: you heard them, you're still here. No scolding, no comment on language, no coaching, no goal talk.",
@@ -196,7 +197,8 @@ export function opener(text: string): string {
   return (text ?? "").toLowerCase().replace(/[^a-z' ]/g, " ").split(/\s+/).filter(Boolean).slice(0, 4).join(" ");
 }
 
-export function enforceChatRules(reply: string, moment: Moment, recentJai: string[] = []): string {
+export function enforceChatRules(reply: string, moment: Moment, recentJai: string[] = [], userText = ""): string {
+  const tired = TIRED.test(userText);
   const recentOpeners = recentJai.slice(-5).map(opener);
   const parts = (reply ?? "").split(/(?<=[.!?])\s+|\n+/).filter((s) => s.trim());
   let heartbeat: string | null = null;
@@ -229,7 +231,8 @@ export function enforceChatRules(reply: string, moment: Moment, recentJai: strin
     // One calm line (+ one plain line for a complaint), then one question.
     const wantsControl = moment.hostileStreak >= 2 && !offeredControl && (askedMissing || moment.state === "hostile");
     const body = moment.state === "hostile" || wantsControl ? [own] : [own, ...rest.slice(0, 1)];
-    const ask = wantsControl ? CONTROL : moment.state === "frustrated_at_jai" ? "What am I missing?" : "";
+    // Worn out: offer to stop, ask nothing.
+    const ask = tired ? (/\b(stop|break|pause|rest)\b/i.test(body.join(" ")) ? "" : "We can stop here for tonight.") : wantsControl ? CONTROL : moment.state === "frustrated_at_jai" ? "What am I missing?" : "";
     out = [...body, ask].filter(Boolean).join(" ");
   } else {
     // A stake they named is named back, in plain words, once.
@@ -252,7 +255,6 @@ const JOB_WORDS = /\b(fired|job|work|boss)\b/i;
 const CONTROL = "Want to keep going, keep it short, or pause for today?";
 const OWNED = /\b(fair|missing|hear you|my fault|i jumped|you'?re right|not ignoring|got that wrong|on me|still here)\b/i;
 const OWN_LINES = [
-  "Fair. I may be missing something.",
   "That's on me. I'm not getting it right yet.",
   "You're right to call that out.",
   "Okay. I hear that this isn't landing.",
@@ -274,6 +276,9 @@ export interface ReplyCheckContext {
   userText: string;
   recentJai: string[]; // Jai's messages this session, oldest first
   afterSafety?: boolean; // the last Jai message was a crisis-resources message
+  afterSafetyText?: string; // what they said that led to it
+  goalPlanted?: boolean; // a goal record exists
+  currentStep?: string; // the step already set (its size is kept)
 }
 
 // Drops sentences that are never okay, whatever the state.
@@ -315,6 +320,7 @@ export function checkChatReply(reply: string, moment: Moment, c: ReplyCheckConte
     if (sents.length > 2) problems.push("one or two short sentences only");
     if (/\b(goal|step|heartbeat)\b/i.test(reply)) problems.push("no coaching or goal talk right now");
   }
+  if (/\bI may be missing something\b/i.test(reply)) problems.push("don't use the stock line \"I may be missing something\"; say what you actually missed, in their words");
   if (!atJai && /what am i missing|missing something/i.test(reply)) problems.push("they're not upset with you; don't apologize or ask what you're missing");
   if (moment.state === "correction" && (!OWNS.test(reply) || !questions.length)) problems.push("own that you got it wrong and ask what they meant");
   if ((moment.state === "stake" || moment.stake) && !atJai) {
@@ -325,12 +331,27 @@ export function checkChatReply(reply: string, moment: Moment, c: ReplyCheckConte
     if (sents.length > 3) problems.push("very upset: two or three short sentences at most");
     if (/\b(your step|try (setting|laying|doing)|tonight,? (set|lay|try|do)|tomorrow,? (set|lay|try|do))\b/i.test(reply)) problems.push("very upset: no steps or tasks right now");
   }
-  if (moment.tension !== "green" && /\b(tonight|before bed|this evening)\b.{0,50}\b(cook|laundry|prep|clean|pack|lay out|set out|plan)\b/i.test(reply) && !/\b(instead|skip|drop|less|lighter|smaller)\b/i.test(reply)) {
+  if ((moment.tension !== "green" || TIRED.test(c.userText)) && /\b(tonight|before bed|this evening)\b.{0,60}\b(cook\w*|laundry|prep\w*|clean\w*|pack\w*|lay(ing)? out|set(ting)? out|plan\w*)\b/i.test(reply) && !/\b(instead|skip|drop|less|lighter|smaller)\b/i.test(reply)) {
     problems.push("they're upset or stretched: don't add tasks to their evening; make it smaller or take something off");
   }
+  if (c.goalPlanted === false && /\b(it'?s planted|is planted|planted it|is set( up)?|it'?s set|locked in|your goal is now|as your goal|goal is saved)\b/i.test(reply)) {
+    problems.push("no goal is planted yet: don't say or imply it is; say it isn't set up yet and offer to plant it now");
+  }
+  // One question, never one already asked or answered.
+  for (const q of questions) {
+    if (c.recentJai.slice(-6).some((t) => sentencesOf(t).some((p) => /\?$/.test(p) && sameQuestion(p, q)))) problems.push(`don't ask again: "${q}" was already asked`);
+  }
+  // Exhausted or "you keep asking": offer to stop, ask nothing.
+  if (TIRED.test(c.userText) && questions.length && !/\b(stop|pause|rest|leave it|come back)\b/i.test(reply)) problems.push("they're worn out: offer to stop for tonight and don't ask anything");
+  // Keep the step's size: never more minutes than the step already set.
+  const stepMin = Number((c.currentStep ?? "").match(/(\d+)\s*min/i)?.[1] ?? 0);
+  const replyMin = Math.max(0, ...[...reply.matchAll(/(\d+)\s*min/gi)].map((m) => Number(m[1])));
+  if (stepMin && replyMin > stepMin && !/\b(more|longer|bigger|harder)\b/i.test(c.userText)) problems.push(`keep their step at ${stepMin} minutes; don't make it bigger`);
+  if (/how did (it|that|the step) go|did you (do|get to|try) (it|the step)/i.test(reply) && c.currentStep && /^tomorrow/i.test(c.currentStep)) problems.push("don't ask how the step went before its day");
   if (c.afterSafety) {
     if (/\b988\b|741741/.test(reply)) problems.push("don't repeat the crisis resources");
     if (sents.length > 3 || !questions.length) problems.push("two or three sentences: own it, say what you heard, ask what they meant");
+    if (c.afterSafetyText && !/\byou (said|wrote|told me)\b|\bwhen you said\b/i.test(reply)) problems.push(`say plainly what you heard and why you responded that way (e.g. "When you said '${c.afterSafetyText.slice(0, 60)}', I took it as…")`);
   }
   return problems;
 }
@@ -340,3 +361,11 @@ export const TENSION_GUIDE: Record<Tension, string> = {
   yellow: "Tension: YELLOW (moderately upset). Acknowledge the feeling first, in their words. Make any ask smaller. Never add new tasks to their day. No offers, no lists.",
   red: "Tension: RED (very upset). No coaching, no goal talk, no steps. Own it or stay present in one or two short sentences. Offer control (keep going, keep it short, or pause) if you haven't recently.",
 };
+
+const TIRED = /\b(exhausted|so tired|i'?m tired|worn out|too much|asks? (me )?(too much|so much)|keeps? asking (me )?(for )?more|enough questions|leave me alone|i'?m done for (today|tonight))\b/i;
+function sameQuestion(a: string, b: string): boolean {
+  const w = (t: string) => (t.toLowerCase().match(/[a-z']{4,}/g) ?? []).filter((x) => !STOP.has(x));
+  const A = w(a), B = new Set(w(b));
+  if (A.length < 3) return false;
+  return A.filter((x) => B.has(x)).length / Math.min(A.length, B.size || 1) >= 0.6;
+}
