@@ -56,7 +56,7 @@ test("only one Heartbeat, never one named in an earlier session", () => {
 });
 
 test("swearing never stored as a theme", () => {
-  const r = enforceReflectionRules({ ...base, reflection: "Ok.", keyTheme: "bullshit lateness", valueNamed: "being on time" }, input);
+  const r = enforceReflectionRules({ ...base, reflection: "Ok.", keyTheme: "bullshit lateness", valueNamed: "being on time" }, { ...input, answers: ["I want to be on time"] });
   assert.equal(r.keyTheme, "");
   assert.equal(r.valueNamed, "being on time");
 });
@@ -76,4 +76,47 @@ test("follow-up reply: no effort talk, no repeated Heartbeat", () => {
   assert.equal(enforceAckRules("Feeling disoriented can be overwhelming. Your focus on Clarity of Vision & Why is a starting point.", reflection), "Feeling disoriented can be overwhelming.");
   assert.equal(enforceAckRules("It sounds like everything feels upside down right now, and you're surprised you're managing to get through it. That's real.", reflection), "It sounds like everything feels upside down right now. That's real.");
   assert.doesNotMatch(enforceAckRules("Left and right feel mixed up. Getting it done anyway was an achievement in itself.", reflection), /achievement/);
+});
+
+test("value only from their words, never the form's wording", () => {
+  const r = enforceReflectionRules({ ...base, reflection: "Ok.", valueNamed: "calm awareness" }, { ...input, answers: ["work runs late", "idk"] });
+  assert.equal(r.valueNamed, "");
+});
+
+test("a step from an earlier day isn't repeated; overloaded evenings get no new task", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Ok.", nextStep: "Tomorrow, set your alarm 10 minutes earlier.", nextStepOptions: ["Tonight, cook lunch and lay out clothes.", "Tomorrow, keep your keys in your coat pocket so they go out the door with you."] },
+    { ...input, answers: ["work runs late and I still gotta cook, laundry, shower"], priorSteps: ["Tomorrow, set an alarm 10 minutes earlier than usual."] },
+  );
+  assert.doesNotMatch(r.nextStep, /alarm/i);
+  assert.doesNotMatch(r.nextStep, /^Tonight/i);
+  assert.ok(!r.nextStepOptions.some((o) => /alarm/i.test(o)));
+});
+
+test("form's own question is never credited to them", () => {
+  const r = enforceReflectionRules({ ...base, reflection: "Your question about slowing down is a good one. Mornings feel rushed." }, { ...input, answers: ["rushed"] });
+  assert.doesNotMatch(r.reflection, /your question/i);
+});
+
+test("statement draft keeps 'but it's hard' and an honest 'not sure'", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Ok.", draftStatement: "I want to reduce doom scrolling." },
+    { ...input, isEvening: false, isStatement: true, answers: ["not sure", "more less doom scrolling. but its hard", "idk"] },
+  );
+  assert.match(r.draftStatement ?? "", /hard/);
+  assert.match(r.draftStatement ?? "", /not sure/i);
+});
+
+test("first seed always matches the chosen step", () => {
+  const r = enforceReflectionRules({ ...base, reflection: "Ok.", possibleFirstSeed: "Create a simple nighttime checklist for work prep" }, { ...input, isEvening: false, lockedStep: "Tomorrow, put your phone on the charger by 10:30 PM." });
+  assert.equal(r.possibleFirstSeed, "Put your phone on the charger by 10:30 PM.");
+});
+
+test("a line from an earlier session isn't reused", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Some days don't hand you a clear insight, and that's okay to say out loud. Reducing doom scrolling is a real step." },
+    { ...input, isEvening: false, priorReflections: ["Some days don't hand you a bright spot, and that's okay to say out loud."] },
+  );
+  assert.doesNotMatch(r.reflection, /some days/i);
+  assert.match(r.reflection, /doom scrolling/);
 });

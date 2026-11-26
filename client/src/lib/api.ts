@@ -90,6 +90,7 @@ export const api = {
   getPhotoMemories: (userId: string) => fetchJson<any[]>(`/users/${userId}/photo-memories`),
 
   getEntries: (userId: string) => fetchJson<any[]>(`/users/${userId}/entries`),
+  getMemoryCards: (userId: string) => fetchJson<any[]>(`/users/${userId}/memory-cards`),
 
   getAssessment: (userId: string) => fetchJson<any>(`/users/${userId}/assessment`),
   getHeartbeatTrends: (userId: string) =>

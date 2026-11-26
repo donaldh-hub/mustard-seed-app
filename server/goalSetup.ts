@@ -3,6 +3,7 @@ import { storage } from "./storage";
 import { plantGoal } from "./goalPlanting";
 import { HEARTBEAT_NAMES } from "./titan";
 import { releaseHeldPhotos } from "./photoReview";
+import type { Moment, MomentState } from "./momentReader";
 
 // ─── Guided goal setup with Jai ─────────────────────────────────────────────
 // A user with no active goal gets one gentle offer: Jai suggests a goal from
@@ -34,6 +35,14 @@ export interface GoalSetupState {
   // A real stake they named in the journal ("you almost got fired"),
   // offered back when Jai asks for the why.
   stake?: string;
+  // The why came from their stake, not their answer to the why question.
+  whyFromStake?: boolean;
+  // When chat last invited them back to the setup question (once per
+  // conversation, never right after anger).
+  invitedBackAt?: string;
+  // Jai just asked the setup question, so their next message may be the
+  // answer. False once the chat moved on (a later line isn't the answer).
+  awaiting?: boolean;
   // Set once the goal is planted (right after the why); the "step" stage
   // then fills in its first step.
   plantedGoalId?: string;
@@ -98,8 +107,9 @@ export async function suggestGoalFromMemory(userId: string): Promise<{ goal: str
   const s = await suggestGoalFromLines(lines);
   // Never a reflection exercise as a goal: fall back to their own intention.
   const intention = ((journal.find((e) => e.session === "intention")?.prompts as { response?: string }[] | undefined)?.[0]?.response ?? "").trim();
-  if (s && REFLECTIVE.test(s.goal) && intention) return { goal: goalFromIntention(intention), because: s.because };
-  if (!s && intention) return { goal: goalFromIntention(intention), because: lowerFirst(stripEnd(intention)) };
+  // Their own journal goal is the title ("being on time for work" -> "Be on
+  // time for work"), never Jai's step text.
+  if (intention) return { goal: goalFromIntention(intention), because: s?.because || lowerFirst(stripEnd(intention)) };
   return s;
 }
 
@@ -157,11 +167,11 @@ export async function startGoalSetup(userId: string, source: "chat" | "journal")
   // Tapping "Plant" after the journal already said yes: go straight to the
   // wording instead of asking again.
   if (source === "journal" && suggestion) {
-    const next: GoalSetupState = { stage: "wording", source, suggestion, title: suggestion.goal, stake, lastOfferedAt: new Date().toISOString() };
+    const next: GoalSetupState = { stage: "wording", source, suggestion, title: suggestion.goal, stake, awaiting: true, lastOfferedAt: new Date().toISOString() };
     await saveState(userId, next);
     return storage.createMessage({ userId, text: QUESTIONS.wording(next), sender: "jae" });
   }
-  await saveState(userId, { stage: "offered", source, suggestion, stake, lastOfferedAt: new Date().toISOString() });
+  await saveState(userId, { stage: "offered", source, suggestion, stake, awaiting: true, lastOfferedAt: new Date().toISOString() });
   return storage.createMessage({
     userId,
     text: offerText(firstName(user.name), source, suggestion),
@@ -320,6 +330,7 @@ export async function handleGoalSetupTurn(
   userId: string,
   text: string,
   opts: { localDate?: string; userTimezone?: string },
+  moment?: Moment,
 ): Promise<GoalSetupReply | null> {
   const user = await storage.getUser(userId);
   if (!user) return null;
@@ -336,9 +347,26 @@ export async function handleGoalSetupTurn(
     messageType: next.stage === "confirm" ? GOAL_CONFIRM_MESSAGE : next.stage === "offered" ? GOAL_OFFER_MESSAGE : "text",
   });
   const move = async (next: GoalSetupState, prefix = "") => {
-    await saveState(userId, next);
+    await saveState(userId, { ...next, awaiting: true });
     return ask(next, prefix);
   };
+
+  // Anger, complaints, corrections, questions and the like are answered by
+  // the normal chat (Moment Reader), not by the setup script. The setup
+  // question waits; Jai invites them back once, when it fits.
+  // "finish my damn goal": plant it now with what we have; no more questions.
+  if (moment?.intent === "finish_goal" && (state.title || state.suggestion?.goal) && state.stage !== "step") {
+    const title = state.title || state.suggestion!.goal;
+    const stake = moment.stake ? toYou(moment.stake.toLowerCase().replace(/^i\b/, "I")) : state.stake;
+    const why = state.why || (stake ? stripSwears(stake) : "");
+    return plantAfterWhy(userId, user.name, { ...state, title, why, whyFromStake: !state.why && !!why }, opts);
+  }
+  // A later line isn't the answer to a question asked a while ago.
+  if (state.awaiting === false && !buttonIntent(text)) return null;
+  if (moment && STEP_ASIDE.has(moment.state) && !(state.stage === "why" && moment.stake)) {
+    await saveState(userId, { ...state, awaiting: false });
+    return null;
+  }
 
   const r = await interpret(state.stage, questionFor(state.stage, state), text);
 
@@ -350,21 +378,12 @@ export async function handleGoalSetupTurn(
     text: `${lead} ${RETURN_TO[state.stage]?.(state) ?? questionFor(state.stage, state)}`.trim(),
     messageType: "text",
   });
-  if (r.intent === "app_help") return comeBack(APP_GUIDE);
-  if (AT_JAI.test(text)) {
-    return { text: "Fair. I may be missing something. What am I missing?", messageType: "text" };
-  }
-  if (r.intent === "off_topic") {
-    // At the offer, let the normal conversation answer; the offer comes back
-    // at the next chat open. Mid-setup, answer briefly, then come back.
-    if (state.stage === "offered") {
-      await saveState(userId, { ...state, stage: "declined" });
-      return null;
-    }
-    return comeBack(r.reply || "Thanks for telling me.");
-  }
-  if (r.intent === "question") {
-    return r.reply ? comeBack(r.reply) : ask(state);
+  void comeBack;
+  if (r.intent === "app_help" || r.intent === "question" || r.intent === "off_topic" || AT_JAI.test(text)) {
+    // The chat answers; the setup question waits and is invited back once.
+    // At the offer, it comes back at the next chat open instead.
+    await saveState(userId, { ...state, stage: state.stage === "offered" ? "declined" : state.stage, awaiting: false });
+    return null;
   }
 
   switch (state.stage) {
@@ -375,7 +394,11 @@ export async function handleGoalSetupTurn(
       return move({ ...state, stage: "new_goal" });
     }
     case "wording": {
-      if (r.intent === "different") return move({ ...state, stage: r.value ? "why" : "new_goal", title: r.value || state.title });
+      if (r.intent === "different" && r.value) return move({ ...state, stage: "why", title: r.value });
+      if (r.intent === "different" || /^\s*(no|nah|nope|not really)\b/i.test(text)) {
+        await saveState(userId, { ...state, stage: "new_goal", awaiting: true });
+        return { text: "Okay. How would you say it, in your own words?", messageType: "text" };
+      }
       const title = r.intent === "answer" && r.value ? r.value : state.title ?? state.suggestion?.goal ?? "";
       return move({ ...state, stage: "why", title });
     }
@@ -383,8 +406,14 @@ export async function handleGoalSetupTurn(
       if (!r.value) return ask(state);
       return move({ ...state, stage: "why", title: r.value });
     }
-    case "why":
-      return plantAfterWhy(userId, user.name, { ...state, why: r.intent === "skip" ? "" : r.value || text.trim() }, opts);
+    case "why": {
+      const said = r.intent === "skip" ? "" : cleanWhy(r.value || text.trim());
+      const stake = moment?.stake ? toYou(moment.stake.toLowerCase().replace(/^i\b/, "I")) : state.stake;
+      // An angry line or "finish my goal" isn't a why: use the stake they
+      // already named (no extra question), or leave it for later.
+      const why = said || (stake ? stripSwears(stake) : "");
+      return plantAfterWhy(userId, user.name, { ...state, why, whyFromStake: !said && !!why }, opts);
+    }
     case "step": {
       const step = r.intent === "skip" ? "" : r.value || text.trim();
       if (state.plantedGoalId) return saveFirstStep(userId, { ...state, step }, opts);
@@ -482,7 +511,9 @@ async function plantAfterWhy(
   const step = await journalStep(userId);
   const planted = await plant(userId, name, { ...state, step }, opts);
   if (!planted.plantedGoalId) return planted;
-  const why = state.why ? `\n\nWhy it matters: ${toYou(stripEnd(state.why))}` : "";
+  const why = state.why
+    ? `\n\nWhy it matters: ${toYou(stripEnd(state.why))}${state.whyFromStake ? " (from what you told me earlier; you can change it in Refine Goal)" : ""}`
+    : "\n\nYou can add why it matters anytime in Refine Goal.";
   if (step) {
     return { ...planted, finished: true, text: `${planted.text.replace("I'll ask you about it next time.", "That's the step you set in your journal, and I'll ask you about it next time.")}${why}` };
   }
@@ -530,10 +561,11 @@ const AT_JAI = /\b(fuck (you|off)|ignor(e|ing) me|you('?re| are)? not (\w+ )?(li
 
 // A real stake named in the journal, e.g. "i almost got fuckin fired" ->
 // "you almost got fuckin fired".
-const STAKE = /\bi (almost|nearly|could have|was about to) (got |get |been |be )?(\w+ )?(fired|let go|evicted)\b|\bi (almost|nearly) lost (my|the) (job|house|place)\b/i;
+const STAKE = /\bi (almost|nearly|could have|was about to) (got |get |been |be )?(\w+ )?(fired|let go|evicted)\b|\bi (almost|nearly) lost (my|the) (job|house|place)\b|\bi (really )?need (the|those|these|my) (hours|job|money|paycheck)\b|\bi can'?t (afford to )?lose (this|my|the) job\b/i;
 export async function journalStake(userId: string): Promise<string | undefined> {
   const journal = await storage.getGroundingJournalEntries(userId).catch(() => []);
-  for (const e of journal) {
+  const chat = (await storage.getMessages(userId).catch(() => [])).filter((m) => m.sender === "user").map((m) => m.text);
+  for (const e of [...journal, { prompts: chat.map((response) => ({ response })), userFollowUpResponse: "" } as any]) {
     const texts = [...((e.prompts as { response?: string }[]) ?? []).map((p) => p.response ?? ""), e.userFollowUpResponse ?? ""];
     for (const t of texts) {
       const m = STAKE.exec(t);
@@ -541,4 +573,38 @@ export async function journalStake(userId: string): Promise<string | undefined> 
     }
   }
   return undefined;
+}
+
+// States the setup script never answers; the chat does (see momentReader).
+const STEP_ASIDE: ReadonlySet<MomentState> = new Set<MomentState>([
+  "frustrated_at_jai", "hostile", "correction", "app_question", "overwhelm", "quit_talk", "doubt", "sarcasm",
+]);
+
+const SWEAR_WORDS = /\b(fuck\w*|f\*+k\w*|shit\w*|damn\w*|goddamn|bullshit|ass(hole)?|hell|crap|bitch\w*)\b/gi;
+export function stripSwears(t: string): string {
+  return t.replace(SWEAR_WORDS, "").replace(/\s{2,}/g, " ").replace(/\s+([.,!?])/g, "$1").trim();
+}
+// A why worth saving: their words, swearing removed, not anger at Jai, not
+// just the goal said again ("finish my damn goal"), not "idk".
+export function cleanWhy(raw: string): string {
+  const t = stripSwears(stripEnd(raw ?? ""));
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return "";
+  if (AT_JAI.test(raw) || /\b(this app|you('?re| are)|fuck (you|this|off))\b/i.test(raw)) return "";
+  if (/\bgoal\b/i.test(t) && words.length <= 5) return "";
+  if (/^(idk|i don'?t know|not sure|whatever|nothing|because)\b/i.test(t)) return "";
+  return t;
+}
+
+// Setup in progress with no goal planted: what chat needs to stay honest and
+// to invite them back once, at a calm moment.
+export async function pendingSetupForChat(userId: string, calm: boolean): Promise<{ stage: string; title?: string; question: string; mayInviteBack: boolean } | undefined> {
+  const user = await storage.getUser(userId);
+  const state = user ? getState(user) : null;
+  if (!state || !ACTIVE_STAGES.includes(state.stage) || state.plantedGoalId) return undefined;
+  const recent = state.invitedBackAt && Date.now() - new Date(state.invitedBackAt).getTime() < 12 * 60 * 60 * 1000;
+  const mayInviteBack = calm && !recent;
+  // If chat invites them back, their next line may be the answer.
+  await saveState(userId, { ...state, awaiting: mayInviteBack, ...(mayInviteBack ? { invitedBackAt: new Date().toISOString() } : {}) });
+  return { stage: state.stage, title: state.title, question: questionFor(state.stage, state).replace(/ That's your .*$/, ""), mayInviteBack };
 }

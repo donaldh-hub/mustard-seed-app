@@ -129,6 +129,8 @@ test("commitment kept: by the chosen time plus a 60-minute grace", () => {
   assert.equal(isCommitmentKept(planned, new Date("2026-10-15T00:00:00Z")), true);
   assert.equal(isCommitmentKept(planned, new Date("2026-10-15T00:01:00Z")), false);
   assert.equal(isCommitmentKept(null, new Date("2026-10-14T22:30:00Z")), false);
+  // Hours early is not keeping the word.
+  assert.equal(isCommitmentKept(planned, new Date("2026-10-14T16:00:00Z")), false);
 });
 
 test("tester list matches emails case-insensitively", () => {

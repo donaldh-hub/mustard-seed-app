@@ -67,6 +67,19 @@ export default function CalendarPage() {
     enabled: !!userId,
   });
 
+  // Memory cards (server/memoryCards.ts): the day as a short story.
+  const { data: memoryCards = [] } = useQuery({
+    queryKey: ["entries", userId, "cards"],
+    queryFn: () => api.getMemoryCards(userId!),
+    enabled: !!userId,
+  });
+  const cardsByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    memoryCards.forEach((c: any) => { (map[c.date] ||= []).push(c); });
+    Object.values(map).forEach((arr) => arr.sort((a: any, b: any) => a.at - b.at));
+    return map;
+  }, [memoryCards]);
+
   const { data: photoMemories = [] } = useQuery({
     queryKey: ["photo-memories", userId],
     queryFn: () => api.getPhotoMemories(userId!),
@@ -130,6 +143,7 @@ export default function CalendarPage() {
 
   const selectedDateKey = dateKey(selectedDay);
   const selectedEntries = entriesByDate[selectedDateKey] || [];
+  const selectedCards = cardsByDate[selectedDateKey] || [];
   const selectedPhotos = photosByDate[selectedDateKey] || [];
 
   const prevMonth = () => {
@@ -225,7 +239,7 @@ export default function CalendarPage() {
               const isSelected = selectedDay === day;
               const hasReview = !!reviewsByDate[dk];
 
-              const entryCount = (entriesByDate[dk]?.filter((e: any) => !isPhotoEntry(e.summary)).length ?? 0) + (photosByDate[dk]?.length ?? 0);
+              const entryCount = (cardsByDate[dk]?.filter((c: any) => !(c.kind === "raw" && isPhotoEntry(c.title))).length ?? 0) + (photosByDate[dk]?.length ?? 0);
 
               return (
                 <button
@@ -271,7 +285,9 @@ export default function CalendarPage() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {expandedEntry._isPhoto ? (
+              {expandedEntry._card ? (
+                <MemoryCardDetail card={expandedEntry} onClose={() => setExpandedEntry(null)} />
+              ) : expandedEntry._isPhoto ? (
                 <PhotoMemoryDetail
                   memory={expandedEntry}
                   onClose={() => setExpandedEntry(null)}
@@ -350,35 +366,54 @@ export default function CalendarPage() {
                   <p className="text-xs mt-1">Chat with Jai to create moments worth remembering.</p>
                 </div>
               ) : (
-                selectedEntries.filter((e: any) => !isPhotoEntry(e.summary)).map((entry: any) => {
-                  const isReview = isWeeklyReviewEntry(entry.summary) && !!reviewsByDate[entry.date];
-                  return (
+                <>
+                  {selectedCards.filter((c: any) => c.kind === "chip").length > 0 && (
+                    <div className="flex flex-wrap gap-2" data-testid="memory-chips">
+                      {selectedCards.filter((c: any) => c.kind === "chip").map((c: any) => (
+                        <button
+                          key={c.id}
+                          onClick={() => setExpandedEntry({ ...c, _card: true })}
+                          className="text-xs px-3 py-1.5 rounded-full bg-primary/10 text-foreground border border-primary/20 text-left"
+                          data-testid={`chip-memory-${c.id}`}
+                        >
+                          <span className="mr-1">{c.icon}</span>{c.title}{c.lines?.[0] ? ` · ${c.lines[0]}` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedCards.filter((c: any) => c.kind === "journal" || c.kind === "chat").map((c: any) => (
                     <button
-                      key={entry.id}
-                      onClick={() => setExpandedEntry(entry)}
+                      key={c.id}
+                      onClick={() => setExpandedEntry({ ...c, _card: true })}
                       className="w-full text-left p-4 bg-white rounded-xl border border-border/40 shadow-sm flex gap-3 hover:shadow-md transition-shadow active:scale-[0.99]"
-                      data-testid={`button-memory-${entry.id}`}
+                      data-testid={`card-memory-${c.id}`}
                     >
-                      <div className={`w-1 rounded-full shrink-0 ${isReview ? "bg-amber-500" : moodColor(entry.mood)}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          {isReview ? (
-                            <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" data-testid="badge-weekly-review">
-                              Weekly Review
-                            </span>
-                          ) : (
-                            <span className="text-xs" data-testid={`text-mood-${entry.id}`}>{moodEmoji(entry.mood)}</span>
-                          )}
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(entry.createdAt).toLocaleTimeString("default", { hour: "numeric", minute: "2-digit" })}
-                          </span>
-                        </div>
-                        <p className="text-sm line-clamp-2 text-foreground">{entry.summary}</p>
+                      <div className={`w-1 rounded-full shrink-0 ${c.kind === "journal" ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-xs font-semibold text-foreground">{c.title}</p>
+                        {c.lines.map((l: string, i: number) => (
+                          <p key={i} className="text-sm text-foreground leading-snug">{l}</p>
+                        ))}
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 self-center" />
                     </button>
-                  );
-                })
+                  ))}
+                  {selectedEntries.filter((e: any) => isWeeklyReviewEntry(e.summary) && !!reviewsByDate[e.date]).map((entry: any) => (
+                    <button
+                      key={entry.id}
+                      onClick={() => setExpandedEntry(entry)}
+                      className="w-full text-left p-4 bg-white rounded-xl border border-border/40 shadow-sm flex gap-3 hover:shadow-md transition-shadow"
+                      data-testid={`button-memory-${entry.id}`}
+                    >
+                      <div className="w-1 rounded-full shrink-0 bg-amber-500" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full" data-testid="badge-weekly-review">Weekly Review</span>
+                        <p className="text-sm text-foreground mt-1">{entry.summary}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 self-center" />
+                    </button>
+                  ))}
+                </>
               )}
             </motion.div>
           )}
@@ -634,6 +669,27 @@ function MemoryDetail({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// Full view of a Memory card: everything they wrote, and Jai's reply.
+function MemoryCardDetail({ card, onClose }: { card: any; onClose: () => void }) {
+  return (
+    <div className="space-y-4">
+      <button onClick={onClose} className="flex items-center gap-1 text-sm text-primary font-medium hover:underline" data-testid="button-back-to-list">
+        <ChevronLeft className="w-4 h-4" />
+        Back
+      </button>
+      <div className="bg-white rounded-2xl border border-border/40 shadow-sm p-5 space-y-3" data-testid="memory-card-full">
+        <p className="text-sm font-semibold text-foreground">{card.icon ? `${card.icon} ` : ""}{card.title}</p>
+        {card.full.map((f: any, i: number) => (
+          <div key={i} className="space-y-0.5">
+            {f.label && <p className="text-xs text-muted-foreground font-medium">{f.label}</p>}
+            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{f.text}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

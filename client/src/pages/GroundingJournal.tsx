@@ -42,9 +42,9 @@ function pastStep(step: string): string {
 function keptLine({ plannedAt, arrivedAt }: { plannedAt: string; arrivedAt: string }): string {
   const fmt = (d: string) => new Date(d).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const diffMin = (new Date(arrivedAt).getTime() - new Date(plannedAt).getTime()) / 60000;
-  if (diffMin < -10) return `You said ${fmt(plannedAt)}, and you showed up early, at ${fmt(arrivedAt)}. That's discipline.`;
-  if (diffMin > 10) return `You said ${fmt(plannedAt)}, and you came back at ${fmt(arrivedAt)}, still within the hour. You kept your word.`;
-  return `You said ${fmt(plannedAt)}, and you showed up. That's discipline.`;
+  if (diffMin < -10) return `You said ${fmt(plannedAt)}, and you came back a little early, at ${fmt(arrivedAt)}.`;
+  if (diffMin > 10) return `You said ${fmt(plannedAt)}, and you came back at ${fmt(arrivedAt)}, still within the hour.`;
+  return `You said ${fmt(plannedAt)}, and you came back right then.`;
 }
 
 function downloadReminder(at: Date, title: string) {
@@ -1159,9 +1159,6 @@ export default function GroundingJournal() {
                       <p className="font-semibold">You kept your word. +1 water 💧</p>
                       <p className="text-blue-800/80 mt-0.5">
                         {keptLine(keptCommitments[sourceStep])}
-                      </p>
-                      <p className="text-xs text-blue-800/70 mt-2" data-testid="text-rebuild-water-teaser">
-                        This 3-day journal is a taste. The 7-Day Rebuild and Premium give you the full experience: a real goal you water every day, cups that fill, and a seed you watch grow.
                       </p>
                     </div>
                   )}

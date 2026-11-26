@@ -4,14 +4,15 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
-import { readMoment, ANSWER_THE_MOMENT } from "./momentReader";
+import { readMoment, readMomentByWords, ANSWER_THE_MOMENT } from "./momentReader";
+import { buildMemoryCards, memoryContextLines } from "./memoryCards";
 import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom } from "./jaeJournal";
 // The prompt label a one-line Grounding Statement is saved under.
 const STATEMENT_PROMPT = "Your Grounding Statement";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
-import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup } from "./goalSetup";
+import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup, pendingSetupForChat } from "./goalSetup";
 import { buildOpeningLine, buildJournalStepLine } from "./chatOpening";
 import { handleTourTurn, postJournalWelcome, postStruggleOffer } from "./tour";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
@@ -719,21 +720,22 @@ export async function registerRoutes(
       // ─── Moment Reader: read the last message before any other branch ───
       const moment = await readMoment(rawText, safetyRecentMessages.slice(-8).map((m) => ({ sender: m.sender, text: m.text })));
       const lastJai = [...safetyRecentMessages].reverse().find((m) => m.sender === "jae")?.text ?? "";
-      console.log(`[MOMENT] state=${moment.state} streak=${moment.hostileStreak}${moment.stake ? ` stake="${moment.stake}"` : ""}`);
+      console.log(`[MOMENT] state=${moment.state} tension=${moment.tension} intent=${moment.intent} streak=${moment.hostileStreak}${moment.stake ? ` stake="${moment.stake}"` : ""}`);
 
-      // ─── A correction is owned, never answered with a template ───
-      if (moment.state === "correction" && !CORRECTION.test(rawText) && !/\b988\b/.test(lastJai)) {
-        const msg = await storage.createMessage({ userId, sender: "jae", text: "You're right, I jumped. What did you mean?" });
-        return res.json({ userMessage: userMsg, jaeMessage: msg });
-      }
-      // ─── Right after a safety reply, a correction is owned, not ignored ───
-      if (CORRECTION.test(rawText) || (moment.state === "correction" && /\b988\b/.test(lastJai))) {
-        const recentSafety = await storage.getRecentSafetyEvents(userId, new Date(Date.now() - 30 * 60 * 1000));
-        if (recentSafety.length > 0 || /\b988\b/.test(lastJai)) {
-          const msg = await storage.createMessage({ userId, sender: "jae", text: "You're right, you didn't say that, and I jumped. I'd rather understand than assume. What did you mean?" });
-          return res.json({ userMessage: userMsg, jaeMessage: msg });
-        }
-      }
+      // After a crisis-resources reply, pushback ("where did that come from?",
+      // "I didn't say anything about suicide") is answered by Jai in plain
+      // words (see afterSafety in jaeCoach), never with a template.
+      const lastJaiIdx = safetyRecentMessages.map((m) => m.sender).lastIndexOf("jae");
+      if (CORRECTION.test(rawText) && moment.state !== "correction") moment.state = "correction";
+      const pushback = ["correction", "app_question", "frustrated_at_jai", "hostile", "doubt"].includes(moment.state);
+      const afterSafety = pushback && /\b988\b|741741/.test(lastJai)
+        ? ([...safetyRecentMessages.slice(0, Math.max(0, lastJaiIdx))].reverse().find((m) => m.sender === "user")?.text ?? "")
+        : "";
+      const angerNearby = moment.state === "frustrated_at_jai" || moment.state === "hostile"
+        || safetyRecentMessages.filter((m) => m.sender === "user").slice(-3, -1).some((m) => {
+          const s2 = readMomentByWords(m.text).state;
+          return s2 === "frustrated_at_jai" || s2 === "hostile";
+        });
 
       // ─── "Why are you recording my responses?" — a plain, true answer ───
       if (RECORDING_QUESTION.test(rawText)) {
@@ -748,12 +750,14 @@ export async function registerRoutes(
       }
 
       // ─── Guided goal setup — while it's open, Jai's first priority ───
-      const setupReply = await handleGoalSetupTurn(userId, rawText, { localDate: clientLocalDate, userTimezone: clientTimezone });
+      const setupReply = await handleGoalSetupTurn(userId, rawText, { localDate: clientLocalDate, userTimezone: clientTimezone }, moment);
       if (setupReply) {
         const setupMsg = await storage.createMessage({ userId, text: setupReply.text, sender: "jae", messageType: setupReply.messageType });
         // Setup done: once, offer to save the journal's main struggle.
-        const struggleMsg = setupReply.finished ? await postStruggleOffer(userId).catch(() => null) : null;
-        return res.json({ userMessage: userMsg, jaeMessage: struggleMsg ?? setupMsg, ...(setupReply.plantedGoalId ? { goalPlanted: true } : {}) });
+        // The struggle offer only at a calm (green) moment, after the planted
+        // message; the reply shown is the planted message itself.
+        if (setupReply.finished && moment.tension === "green") await postStruggleOffer(userId).catch(() => null);
+        return res.json({ userMessage: userMsg, jaeMessage: setupMsg, ...(setupReply.plantedGoalId ? { goalPlanted: true } : {}) });
       }
 
       // ─── A photo waiting on "Did you make or change this today?" ───
@@ -1135,7 +1139,10 @@ export async function registerRoutes(
 
       // Canned branches step aside when the moment needs a real answer.
       const answerMoment = ANSWER_THE_MOMENT.has(moment.state);
-      if ((asksGoal || asksObstacle) && !answerMoment) {
+      // Goal/obstacle questions are answered by Jai from the real goal state
+      // (jaeCoach GOAL STATE), not from canned status lines.
+      const cannedGoalStatus = false;
+      if (cannedGoalStatus && (asksGoal || asksObstacle) && !answerMoment) {
         let goalStatusText = "";
         if (targetedGoal && untargetedGoal) {
           const goalBothPresent = [
@@ -1522,27 +1529,12 @@ export async function registerRoutes(
         // The 8 newest Memory records of any kind — journal sessions (their
         // own words), Memory Bank entries, and photos — so Jai never asks
         // about something they already reported.
+        // Jai reads the distilled Memory cards (6-8 newest), not raw
+        // transcripts, plus recent photos.
         const recentMemory = [
-          ...journalEntries.filter((e: any) => e.session !== "intention").map((e: any) => {
-            const answers = ((e.prompts as { response: string }[]) ?? []).map((p) => p.response).filter(Boolean).join(" / ");
-            const label = e.session === "grounding_statement" ? "Grounding Statement" : `Day ${e.dayNumber} ${e.session}`;
-            return {
-              at: new Date(e.createdAt ?? 0).getTime(),
-              line: `Grounding Journal ${label}: ${answers}${e.userFollowUpResponse ? ` / follow-up: ${e.userFollowUpResponse}` : ""}${e.nextStep ? ` / step Jai set: ${e.nextStep}` : ""}${e.possibleFirstSeed ? ` / first seed: ${e.possibleFirstSeed}` : ""}`,
-            };
-          }),
-          ...allEntries.filter((e: any) => e.summary && !String(e.summary).startsWith("Grounding Journal —")).map((e: any) => ({
-            at: new Date(e.createdAt ?? 0).getTime(),
-            line: `Memory (${e.date}): ${e.summary}`,
-          })),
-          ...recentPhotoMemories.map((p: any) => ({
-            at: new Date(p.createdAt ?? 0).getTime(),
-            line: `Photo (${p.dateKey}): ${photoSummary(p)}`,
-          })),
-        ]
-          .sort((a, b) => b.at - a.at)
-          .slice(0, 8)
-          .map((r) => r.line.slice(0, 300));
+          ...memoryContextLines(buildMemoryCards(allEntries as any, journalEntries as any), 7),
+          ...recentPhotoMemories.slice(0, 1).map((p: any) => `Photo (${p.dateKey}): ${photoSummary(p)}`.slice(0, 300)),
+        ];
 
         // Build the 6–8 record continuity context
         const continuityCtx = buildContinuityContext({
@@ -1620,6 +1612,8 @@ export async function registerRoutes(
           groundingJournalInsights: journalInsights,
           recentMemory,
           moment,
+          afterSafety: afterSafety || undefined,
+          setupPending: await pendingSetupForChat(userId, !angerNearby && !afterSafety).catch(() => undefined),
           sessionJaiTexts: safetyRecentMessages
             .filter((m) => m.sender === "jae" && m.createdAt && Date.now() - new Date(m.createdAt).getTime() < 12 * 60 * 60 * 1000)
             .slice(-20).map((m) => m.text),
@@ -2264,6 +2258,16 @@ export async function registerRoutes(
       console.error("[SUPPORT] ask error:", err);
       return res.status(500).json({ message: "Support request failed" });
     }
+  });
+
+  // Memory as cards (server/memoryCards.ts): one per journal session, chips
+  // for single moments, one "From chat" card per day. Stored records unchanged.
+  app.get("/api/users/:userId/memory-cards", async (req, res) => {
+    const [list, journal] = await Promise.all([
+      storage.getEntries(req.params.userId),
+      storage.getGroundingJournalEntries(req.params.userId),
+    ]);
+    return res.json(buildMemoryCards(list as any, journal as any));
   });
 
   app.get("/api/users/:userId/entries", async (req, res) => {

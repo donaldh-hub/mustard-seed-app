@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { enforceReflectionRules, enforceAckRules } from "./journalGuards";
+import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep } from "./journalGuards";
 export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
@@ -152,6 +152,82 @@ If (and only if) one of these is genuinely relevant to what they just wrote, tur
 export async function generateJournalReflection(
   ctx: JournalSessionContext
 ): Promise<JournalJaeResponse> {
+  // A direct question typed into a field is answered first, in plain words,
+  // by its own small call (so it's never skipped).
+  const userQ = directQuestion(ctx.prompts.map((p) => p.response ?? ""));
+  const answer = userQ ? await answerJournalQuestion(userQ, ctx).catch(() => "") : "";
+  const r = await generateJournalReflectionInner(ctx, userQ);
+  if (answer) r.reflection = `${answer} ${r.reflection}`.trim();
+  // A step that still lands on an overloaded evening or repeats an earlier
+  // day gets one focused redo.
+  if (ctx.session === "evening" && r.nextStep) {
+    const answers = ctx.prompts.map((p) => p.response ?? "");
+    const prior = (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean);
+    const overloaded = isOverloaded(answers);
+    const fits = (x: string) => !!x && /^(tomorrow|tonight),/i.test(x) && !(overloaded && addsEveningTask(x)) && !prior.some((p) => similarStep(p, x));
+    // The other options follow the same rules.
+    r.nextStepOptions = (r.nextStepOptions ?? []).filter(fits);
+    if (!fits(r.nextStep)) {
+      let picked = (r.nextStepOptions ?? []).find(fits) ?? "";
+      for (let i = 0; !picked && i < 2; i++) {
+        const redo = await redoStep(ctx, answers, prior).catch(() => "");
+        console.log(`[JOURNAL] step redo ${i + 1}: ${redo}`);
+        if (fits(redo)) picked = redo;
+      }
+      if (picked) {
+        r.nextStepOptions = (r.nextStepOptions ?? []).filter((o) => o !== picked);
+        r.nextStep = picked;
+      }
+    }
+  }
+  return r;
+}
+
+const RHETORICAL = /\b(listening|understand(ing)?|fuck\w*|bullshit|wtf|kidding me)\b/i;
+const ASKS = /\?\s*$|^(why|what|how|do you|does|can you|should i|is this|are you)\b/i;
+export function directQuestion(answers: string[]): string {
+  for (const a of answers) {
+    const parts = (a ?? "").split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
+    // "are you even fucking listening" is anger at Jai, owned by the anger
+    // rule, not a question to answer.
+    const q = parts.find((x) => ASKS.test(x) && x.split(/\s+/).length >= 3 && !RHETORICAL.test(x));
+    if (q) return q;
+  }
+  return "";
+}
+
+async function redoStep(ctx: JournalSessionContext, answers: string[], prior: string[]): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0.5,
+    max_tokens: 60,
+    messages: [
+      { role: "system", content: `Write ONE small next step for this person's goal: "${ctx.intention ?? ""}". One sentence starting with "Tomorrow, ". 2-5 minutes, concrete, moves the goal forward. Their evenings are already full: it must NOT happen tonight, before bed, or in the evening, and must not add a chore (do it in the morning or on the way, or make something easier). Different from these earlier steps: ${prior.join(" | ") || "(none)"}. Reply with the sentence only.` },
+      { role: "user", content: answers.join(" / ") },
+    ],
+  });
+  return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+}
+
+async function answerJournalQuestion(question: string, ctx: JournalSessionContext): Promise<string> {
+  const said = ctx.prompts.map((p) => p.response).filter(Boolean).join(" / ");
+  const earlier = (ctx.previousEntries ?? []).map((e) => e.answers).filter(Boolean).join(" / ");
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0.4,
+    max_tokens: 90,
+    messages: [
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening). No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
+      { role: "user", content: `Their question: ${question}\nWhat they wrote today: ${said}\nEarlier: ${earlier.slice(0, 1200)}` },
+    ],
+  });
+  return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+}
+
+async function generateJournalReflectionInner(
+  ctx: JournalSessionContext,
+  userQ: string,
+): Promise<JournalJaeResponse> {
   const prevSummary = (ctx.previousEntries ?? [])
     .map(
       (e) =>
@@ -166,6 +242,7 @@ export async function generateJournalReflection(
   // repeat the same diagnosis three times.
   const namedBefore = HEARTBEAT_FULL_NAMES.filter((h) => (ctx.previousEntries ?? []).some((e) => (e.jaeReflection ?? "").includes(h)));
 
+  const questionNote = userQ ? `\nThey asked: "${userQ}". It is answered separately, right before your reflection; don't answer or restate it.\n` : "";
   const responseBlock = ctx.prompts
     .map((p) => `Prompt: ${p.prompt}\nResponse: ${p.response}`)
     .join("\n\n");
@@ -194,6 +271,9 @@ Tonight, end with ONE small next step ("nextStep"):
 - Never a list, never two steps, never vague ("reflect more", "keep going"). It must directly move their goal forward (their intention for these 3 days). For a goal like being on time for work that means sleep, night prep, alarms, getting out the door; a calming or general productivity step that doesn't move the goal is wrong, even on a hard day (make it smaller instead).
 - Also give "nextStepOptions": exactly 2 OTHER small steps, same rules (each must directly move the goal forward too) (start with "Tomorrow, ", goal-linked, built from their words where possible), so they can pick the one that fits.
 - Don't repeat the step inside "reflection" — it is shown on its own.
+- Never repeat a step Jai already set on an earlier day (see [step Jai set: …] above); pick a different angle on the same goal.
+- If they said their evenings are already full or they're overloaded (work runs late, cooking, laundry, showering, no time), never ADD an evening task. Shrink or swap: move it to the morning, make it one minute, or take something off their night.
+- If they report partial progress (e.g. "not as late but still late"), name that progress first in "reflection", honestly and plainly.
 - Build the step from THEIR words today: tonight's answers, what they said they'd focus on this morning, or their answer to this morning's follow-up question. If they named a change they want (e.g. not staying up all night doom scrolling), the step IS that change, made small and concrete in your own words (e.g. "Tomorrow, put your phone on the charger by 10:30 PM."), not a different idea of yours. Only suggest your own step when they named nothing usable.
 - If they named their own next step tonight (e.g. "keep one place for my ideas"), lock THAT one in instead of inventing a new one: confirm it in your own words, made small and concrete. It may start with "Tonight, " if it fits tonight (e.g. "Tonight, pick the one place you'll keep your name ideas.").
 - If they say a step they set earlier (this morning, or last night's) did NOT happen: grace first, no shame, and make "nextStep" smaller than the one they missed.
@@ -306,7 +386,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
     model: "gpt-4o",
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `Here are my responses:\n\n${responseBlock}` },
+      { role: "user", content: `Here are my responses:\n\n${responseBlock}${questionNote}` },
     ],
     temperature: 0.4,
     max_tokens: 800,
@@ -343,6 +423,10 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       angerLine,
       lockedStep: ctx.lockedStep,
       isEvening,
+      priorSteps: (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean),
+      priorReflections: (ctx.previousEntries ?? []).map((e) => e.jaeReflection ?? "").filter(Boolean),
+      userAsked: !!userQ,
+      isStatement: ctx.session === "grounding_statement",
     });
   } catch {
     return {
