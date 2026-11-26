@@ -429,7 +429,10 @@ export function withoutEcho(reply: string, reflection?: string | null): string {
   if (!reflection) return reply;
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
   const seen = new Set((reflection.match(/[^.!?]+[.!?]*/g) ?? []).map(norm).filter((t) => t.length > 12));
-  const kept = (reply.match(/[^.!?]+[.!?]*/g) ?? [reply]).filter((sentence) => !seen.has(norm(sentence)));
+  // A Heartbeat the reflection already named isn't named again right below it.
+  const named = HEARTBEAT_FULL_NAMES.filter((h) => reflection.includes(h));
+  const kept = (reply.match(/[^.!?]+[.!?]*/g) ?? [reply])
+    .filter((sentence) => !seen.has(norm(sentence)) && !named.some((h) => sentence.includes(h)));
   return kept.join("").trim();
 }
 
