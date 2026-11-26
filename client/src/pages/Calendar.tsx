@@ -145,6 +145,7 @@ export default function CalendarPage() {
   const selectedEntries = entriesByDate[selectedDateKey] || [];
   const selectedCards = cardsByDate[selectedDateKey] || [];
   const selectedPhotos = photosByDate[selectedDateKey] || [];
+  const memoryCount = selectedCards.filter((c: any) => c.kind !== "raw" || isWeeklyReviewEntry(c.title)).length + selectedPhotos.length;
 
   const prevMonth = () => {
     setSelectedDay(1);
@@ -315,9 +316,9 @@ export default function CalendarPage() {
                     ? "Today's Memories"
                     : `${new Date(viewYear, viewMonth, selectedDay).toLocaleDateString("default", { weekday: "long", month: "short", day: "numeric" })}`}
                 </h3>
-                {(selectedEntries.length > 0 || selectedPhotos.length > 0) && (
+                {memoryCount > 0 && (
                   <span className="text-xs text-muted-foreground" data-testid="text-entry-count">
-                    {selectedEntries.length + selectedPhotos.length} {(selectedEntries.length + selectedPhotos.length) === 1 ? "memory" : "memories"}
+                    {memoryCount} {memoryCount === 1 ? "memory" : "memories"}
                   </span>
                 )}
               </div>
@@ -360,7 +361,7 @@ export default function CalendarPage() {
                 </div>
               )}
 
-              {selectedEntries.length === 0 && selectedPhotos.length === 0 ? (
+              {memoryCount === 0 ? (
                 <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border" data-testid="text-no-memories">
                   <p className="text-sm">No memories for this day.</p>
                   <p className="text-xs mt-1">Chat with Jai to create moments worth remembering.</p>
