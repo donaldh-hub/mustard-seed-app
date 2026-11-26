@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize } from "./journalGuards";
+import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings } from "./journalGuards";
 export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
@@ -164,13 +164,18 @@ export async function generateJournalReflection(
     const answers = ctx.prompts.map((p) => p.response ?? "");
     const prior = (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean);
     const overloaded = isOverloaded(answers);
-    const fits = (x: string) => !!x && /^(tomorrow|tonight),/i.test(x) && !(overloaded && addsEveningTask(x)) && !prior.some((p) => similarStep(p, x));
+    // No more than two research/plan steps in a row; after a day they took
+    // action, the next step is a doing step.
+    const researchRun = prior.slice(-2).length === 2 && prior.slice(-2).every((p) => RESEARCH.test(p));
+    const actedToday = /\bi (planted|drilled|wrote|did|bought|ran|walked|made|built|cleaned|cooked|finished|started|watered|dug|lifted|trained)\b|\b(planted|drilled|wrote|bought|watered)\b/i.test(answers.join(" "));
+    const needsDoing = researchRun || actedToday;
+    const fits = (x: string) => !!x && /^(tomorrow|tonight),/i.test(x) && !(overloaded && addsEveningTask(x)) && !prior.some((p) => similarStep(p, x)) && !(needsDoing && RESEARCH.test(x));
     // The other options follow the same rules.
     r.nextStepOptions = (r.nextStepOptions ?? []).filter(fits);
     if (!fits(r.nextStep)) {
       let picked = (r.nextStepOptions ?? []).find(fits) ?? "";
       for (let i = 0; !picked && i < 2; i++) {
-        const redo = await redoStep(ctx, answers, prior).catch(() => "");
+        const redo = await redoStep(ctx, answers, prior, needsDoing).catch(() => "");
         console.log(`[JOURNAL] step redo ${i + 1}: ${redo}`);
         if (fits(redo)) picked = redo;
       }
@@ -184,7 +189,7 @@ export async function generateJournalReflection(
 }
 
 const RHETORICAL = /\b(listening|understand(ing)?|fuck\w*|bullshit|wtf|kidding me)\b/i;
-const ASKS = /\?\s*$|^(why|what|how|do you|does|can you|should i|is this|are you)\b/i;
+const ASKS = /\?\s*$|^(why|what|how|do you|do i|does|can you|can i|should i|is this|is it|are you|which|when)\b|\b(just tell me|tell me what|answer (it|me|the question)|yes or no|what do i (buy|do|need|use|get) first)\b/i;
 export function directQuestion(answers: string[]): string {
   for (const a of answers) {
     const parts = (a ?? "").split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
@@ -196,13 +201,13 @@ export function directQuestion(answers: string[]): string {
   return "";
 }
 
-async function redoStep(ctx: JournalSessionContext, answers: string[], prior: string[]): Promise<string> {
+async function redoStep(ctx: JournalSessionContext, answers: string[], prior: string[], doing = false): Promise<string> {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
     temperature: 0.5,
     max_tokens: 60,
     messages: [
-      { role: "system", content: `Write ONE small next step for this person's goal: "${ctx.intention ?? ""}". One sentence starting with "Tomorrow, ". 2-5 minutes, concrete, moves the goal forward. Their evenings are already full: it must NOT happen tonight, before bed, or in the evening, and must not add a chore (do it in the morning or on the way, or make something easier). Different from these earlier steps: ${prior.join(" | ") || "(none)"}. Reply with the sentence only.` },
+      { role: "system", content: `Write ONE small next step for this person's goal: "${ctx.intention ?? ""}". One sentence starting with "Tomorrow, ". 2-5 minutes, concrete, moves the goal forward. ${isOverloaded(answers) ? "Their evenings are already full: it must NOT happen tonight, before bed, or in the evening, and must not add a chore (do it in the morning or on the way, or make something easier). " : ""}${doing ? "It must be a hands-on DOING step that builds on what they just did, not research, planning, listing or reading. " : ""} Different from these earlier steps: ${prior.join(" | ") || "(none)"}. Reply with the sentence only.` },
       { role: "user", content: answers.join(" / ") },
     ],
   });
@@ -218,7 +223,7 @@ async function answerJournalQuestion(question: string, ctx: JournalSessionContex
     temperature: 0.4,
     max_tokens: 90,
     messages: [
-      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. If they ask yes or no, start with "Yes." or "No." (or, if it truly depends, "It depends on …" in one sentence). No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
       { role: "user", content: `Their question: ${question}\nWhat they wrote today: ${said}\nEarlier: ${earlier.slice(0, 1200)}` },
     ],
   });
@@ -305,7 +310,7 @@ Photo proof — if they report a physical, visible action (wrote a list, planted
 `;
   const statementBlock = ctx.session === "grounding_statement" ? `
 "draftStatement": if their three answers don't add up to a real statement (non-answers like "idk", or complaints instead of learning), write ONE honest sentence in first person from what they actually said across the three days (e.g. "I almost lost my job, and I want to be on time."), with no motivational words they didn't say. Otherwise "".
-Your "possibleFirstSeed" must be a concrete action, never "reflect on…".
+Your "possibleFirstSeed" must be a concrete action built from what they said they'll keep nurturing and carry forward (their words), never "reflect on…" and never research or planning.
 ` : "";
   const groundingBlock = ctx.session === "grounding_statement" && ctx.lockedStep
     ? `
@@ -497,7 +502,7 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
       max_tokens: 120,
     });
     const raw = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
-    const reply = enforceAckRules(raw, ctx.reflection);
+    const reply = enforceAckRules(raw, ctx.reflection, `${ctx.answer} ${ctx.question}`);
     if (!reply) console.warn("[JOURNAL] follow-up ack came back empty or only echoed the reflection; using fallback");
     return reply || FOLLOW_UP_ACK_FALLBACK;
   } catch (err) {
@@ -551,7 +556,7 @@ export function angerAtJaiFrom(prompts: { prompt: string; response: string }[]):
 // "I'm NOT releasing the book" after Jai wrote "Ready to release: the book":
 // find what they're pointing at in "What Jai noticed", fix it, and say what
 // changed in one sentence.
-export const CORRECTS = /\b(backwards|got (it|that) wrong|you('?re| are) wrong|that'?s wrong|not what i (said|meant)|i never said|i didn'?t say|i('?m| am) not (releasing|letting|giving)|stop asking me to)\b/i;
+export const CORRECTS = /\?\s*no\b|\bi was(n'?t)? \w+,? not\b|\bnot (overwhelmed|stressed|anxious|sad|frustrated)\b|\b(backwards|got (it|that) wrong|you('?re| are) wrong|that'?s wrong|not what i (said|meant)|i never said|i didn'?t say|i('?m| am) not (releasing|letting|giving)|stop asking me to)\b/i;
 export async function fixNoticed(
   answer: string,
   noticed: { keyTheme?: string | null; valueNamed?: string | null; releasePoint?: string | null },
@@ -574,4 +579,19 @@ export async function fixNoticed(
     newValue: typeof p.newValue === "string" ? p.newValue.trim() : "",
     reply: field ? `You said ${heard || "I had that wrong"}. I had that backwards, and I've fixed it.` : "",
   };
+}
+
+// "overwhelmed? no. I was annoyed": swap Jai's feeling word for theirs in the
+// reflection text (the card shows it).
+export function fixFeeling(answer: string, reflection: string): { reflection: string; reply: string } | null {
+  const m = answer.match(/\b(overwhelm\w*|stress\w*|anxi\w*|sad|frustrat\w*|discourag\w*)\??\s*(?:no|nope|nah|not really)?[.,!]?\s*(?:i was|i'?m|just|more like)\s+(?:just\s+)?(\w+)/i)
+    ?? answer.match(/\bnot (overwhelm\w*|stress\w*|anxi\w*|sad|frustrat\w*)[,.]?\s*(?:i was|i'?m|just)?\s*(\w+)/i);
+  if (!m) return null;
+  const wrong = m[1].toLowerCase().slice(0, 6), theirs = m[2].toLowerCase();
+  const re = new RegExp(`\\b(felt |feeling |feels? |was |is )?${wrong}\\w*`, "gi");
+  if (!re.test(reflection)) return null;
+  const fixed = reflection
+    .replace(new RegExp(`\\b(it |this |that |the \\w+ )?(felt|feels|was|is|seemed|seems) (so |really |a bit )?${wrong}\\w*`, "gi"), `you were ${theirs}`)
+    .replace(new RegExp(`\\b${wrong}\\w*`, "gi"), theirs);
+  return { reflection: fixed, reply: `You said you were ${theirs}, not ${m[1].toLowerCase().replace(/\?$/, "")}. I had that wrong, and I've fixed it.` };
 }

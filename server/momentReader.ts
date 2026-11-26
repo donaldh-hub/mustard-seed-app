@@ -5,6 +5,7 @@
 // reply that comes out of it.
 
 import OpenAI from "openai";
+import { goalClauseFrom } from "./goalSetup";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -65,7 +66,8 @@ export function readMomentByWords(text: string, previousUserTexts: string[] = []
   else if (APP_Q.test(t)) state = "app_question";
   const stake = t.match(STAKE)?.[0] ?? "";
   const streak = hostileStreak(state, previousUserTexts);
-  return { state, tension: tensionFor(state, streak), intent: intentByWords(t), stake, question: /\?\s*$/.test(t) ? t : "", hostileStreak: streak };
+  const ask = /\?\s*$/.test(t) || DIRECT_ASK.test(t);
+  return { state, tension: tensionFor(state, streak), intent: DIRECT_ASK.test(t) ? "ask_help" : intentByWords(t), stake, question: ask ? t : "", hostileStreak: streak };
 }
 
 function tensionFor(state: MomentState, streak: number): Tension {
@@ -148,7 +150,8 @@ Return JSON: {"state": "...", "tension": "green|yellow|red", "intent": "...", "s
       tension,
       intent,
       stake: typeof parsed.stake === "string" && parsed.stake ? parsed.stake : byWords.stake,
-      question: typeof parsed.question === "string" ? parsed.question : byWords.question,
+      // "just tell me what to buy first" is a question even without "?".
+      question: byWords.question || (typeof parsed.question === "string" ? parsed.question : ""),
       hostileStreak: streak,
     };
   } catch (err) {
@@ -282,9 +285,13 @@ export interface ReplyCheckContext {
 }
 
 // Drops sentences that are never okay, whatever the state.
-export function cleanChatReply(reply: string, moment: Moment, userText: string): string {
+export function cleanChatReply(reply: string, moment: Moment, userText: string, theirWords = ""): string {
+  const said = `${userText} ${theirWords}`.toLowerCase();
   return sentencesOf(reply).filter((s) =>
     !LEDGER.test(s) && !SWEARS.test(s)
+    && !/\bthis (journal|app) (helps|is here|is about|is meant|is designed|can help)\b/i.test(s)
+    // Feelings only in their words ("annoyed", not "overwhelmed").
+    && !((s.match(FEELING_WORDS)?.[0] ?? "") && !said.includes((s.match(FEELING_WORDS)?.[0] ?? "").toLowerCase().slice(0, 6)))
     && !(/\bconfus/i.test(s) && !/\bconfus/i.test(userText))
     && !/sorry for any/i.test(s)
     && !(moment.state !== "reported_action" && moment.state !== "engaged" && PRAISE.test(s))
@@ -334,6 +341,12 @@ export function checkChatReply(reply: string, moment: Moment, c: ReplyCheckConte
   if ((moment.tension !== "green" || TIRED.test(c.userText)) && /\b(tonight|before bed|this evening)\b.{0,60}\b(cook\w*|laundry|prep\w*|clean\w*|pack\w*|lay(ing)? out|set(ting)? out|plan\w*)\b/i.test(reply) && !/\b(instead|skip|drop|less|lighter|smaller)\b/i.test(reply)) {
     problems.push("they're upset or stretched: don't add tasks to their evening; make it smaller or take something off");
   }
+  // A direct ask ("just tell me", "yes or no") gets the answer first.
+  if (moment.question && DIRECT_ASK.test(c.userText)) {
+    if (/\?$/.test(first)) problems.push("they asked you to just tell them: answer in your FIRST sentence with one clear answer; don't turn it into a question");
+    if (/\byes or no\b/i.test(c.userText) && !/^(yes|no|it depends)\b/i.test(first)) problems.push('they asked yes or no: start with "Yes." or "No." (or "It depends on …")');
+  }
+  if (/\bwhat do you mean\b/i.test(reply) && goalClauseFrom(c.userText)) problems.push("they stated their goal clearly; don't ask what they mean");
   if (c.goalPlanted === false && /\b(it'?s planted|is planted|planted it|is set( up)?|it'?s set|locked in|your goal is now|as your goal|goal is saved)\b/i.test(reply)) {
     problems.push("no goal is planted yet: don't say or imply it is; say it isn't set up yet and offer to plant it now");
   }
@@ -369,3 +382,7 @@ function sameQuestion(a: string, b: string): boolean {
   if (A.length < 3) return false;
   return A.filter((x) => B.has(x)).length / Math.min(A.length, B.size || 1) >= 0.6;
 }
+
+// "just tell me what to buy first", "answer it", "yes or no".
+export const DIRECT_ASK = /^(do i|should i|is it|can i)\b|\b(just tell me|tell me what|answer (it|me|the question)|yes or no|what do i (buy|do|need|use|get) first|which (one|is better|first)|soil or seeds)\b/i;
+const FEELING_WORDS = /\b(overwhelm\w*|stress\w*|anxi\w*|discourag\w*|hopeless\w*|defeat\w*|depress\w*|burn(ed|t) out)\b/i;

@@ -7,7 +7,7 @@
 export const HEARTBEATS = ["Clarity of Vision & Why", "Small Steps + Consistency", "Mindset over Method", "Feedback & Adaptation", "Courageous Action"];
 
 const SWEARS = /\b(fuck\w*|shit\w*|damn\w*|bullshit|hell|ass)\b/i;
-const TEMPLATES = /this is a sign|had some hope in it|\b(language|watch your|profan\w*)\b|is a step toward|\bchao(s|tic)\b/i;
+const TEMPLATES = /this is a sign|had some hope in it|\bthis journal (helps|is here|is about|is meant|is designed|can help)|\bnaming (the |a )?pattern|\b(language|watch your|profan\w*)\b|is a step toward|\bchao(s|tic)\b/i;
 const PACE = /\b(quick(ly)?|fast|rushed|hurried)\b/i;
 const CHANGE_SITUATION = /\b(quit|find a new job|change jobs|new job)\b/i;
 const CANNED_QUESTION = /full permission to slow down/i;
@@ -85,6 +85,8 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
   // Never credit the form's own question to them ("Your question about…"),
   // and never reuse a line from an earlier session's reflection.
   let reflection = clean(r.reflection, paceOk);
+  // Feelings only in their words: never "overwhelmed" (etc.) unless they said it.
+  reflection = withoutInventedFeelings(reflection, all);
   const priorSentences = (g.priorReflections ?? []).flatMap((t) => sentences(t));
   const fresh = join(sentences(reflection).filter((s) => !priorSentences.some((p) => sameLine(p, s))));
   if (fresh) reflection = fresh;
@@ -128,9 +130,23 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
   // Swearing is a tone signal, never a stored theme.
   const tag = (v: string) => (SWEARS.test(v ?? "") ? "" : v);
 
-  // The first seed is their goal's chosen step, never a new invented task.
+  // The first seed comes from what they'll keep nurturing and carry forward
+  // (their Grounding Statement answers), else their chosen step; never a
+  // research task or an invented one.
   let seed = r.possibleFirstSeed;
-  if (g.lockedStep) {
+  const [, nurture = "", carry = ""] = g.isStatement ? g.answers : [];
+  const realAnswer = (a: string) => a.trim().split(/\s+/).length >= 2 && !/\b(idk|don'?t know|if i know|not sure|nothing|no idea|whatever|who knows|dunno)\b/i.test(a) && !SWEARS.test(a.replace(/\b(damn|shit)\b/gi, ""));
+  const fromFields = [carry, nurture].filter(realAnswer);
+  const seedWords = new Set(fromFields.join(" ").toLowerCase().match(/[a-z]{4,}/g) ?? []);
+  const seedFromThem = !!seed && (seed.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => seedWords.has(w)) && !RESEARCH.test(seed);
+  const locked = g.lockedStep ? g.lockedStep.replace(/^(tomorrow|tonight),\s*/i, "").replace(/^./, (c) => c.toUpperCase()) : "";
+  if (g.isStatement && !seedFromThem) {
+    // Their carry-forward / nurture answer when it reads as an action, else
+    // the step they chose; never a non-answer or research.
+    const actionField = fromFields.find((a) => /\b(grow|keep|plant|water|finish|write|walk|run|do|make|build|clean|cook|save|practice|pushups?|read|leave|get|start|prep\w*|stretch|lift)\b/i.test(a));
+    seed = actionField ? actionField.trim().replace(/^./, (c) => c.toUpperCase()).replace(/[.!]*$/, ".") : (locked || seed);
+    if (RESEARCH.test(seed) && locked) seed = locked;
+  } else if (!g.isStatement && g.lockedStep) {
     seed = g.lockedStep.replace(/^(tomorrow|tonight),\s*/i, "").replace(/^./, (c) => c.toUpperCase());
   }
 
@@ -206,7 +222,8 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
 
 // Follow-up reply: no swearing, templates, effort talk, or repeats of the
 // reflection (sentences or a Heartbeat it already named).
-export function enforceAckRules(reply: string, reflection?: string | null): string {
+export function enforceAckRules(reply: string, reflection?: string | null, answer = ""): string {
+  reply = withoutInventedFeelings(reply, [answer]);
   let out = join(sentences(reply).filter((s) => !SWEARS.test(s) && !TEMPLATES.test(s) && !CHANGE_SITUATION.test(s)));
   if (reflection) {
     const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
@@ -252,4 +269,17 @@ export function keepStepSize(text: string, step: string): string {
   const m = Number((step ?? "").match(/(\d+)\s*min/i)?.[1] ?? 0);
   if (!m) return text;
   return (text ?? "").replace(/(\d+)(\s*-?\s*min(ute)?s?)/gi, (all, n, rest) => (Number(n) > m ? `${m}${rest}` : all));
+}
+
+export const RESEARCH = /\b(research|plan|planning|look up|read (up )?about|list|explore|find out|learn about|think about|sketch|look into|brainstorm|reflect)\b/i;
+// Feeling words Jai may only use if they used them first.
+const FEELINGS = /\b(overwhelm\w*|stress\w*|anxi\w*|discourag\w*|hopeless\w*|defeat\w*|sad(ness)?|depress\w*|frustrat\w*|burn(ed|t) out)\b/i;
+export function withoutInventedFeelings(text: string, theirs: string[]): string {
+  const said = theirs.join(" ").toLowerCase();
+  return join(sentences(text).filter((s) => {
+    const m = s.match(FEELINGS);
+    if (!m) return true;
+    const stem = m[0].toLowerCase().slice(0, 6);
+    return said.includes(stem);
+  }));
 }

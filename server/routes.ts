@@ -6,13 +6,13 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { readMoment, readMomentByWords, ANSWER_THE_MOMENT } from "./momentReader";
 import { buildMemoryCards, memoryContextLines } from "./memoryCards";
-import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom, CORRECTS, fixNoticed } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom, CORRECTS, fixNoticed, fixFeeling } from "./jaeJournal";
 // The prompt label a one-line Grounding Statement is saved under.
 const STATEMENT_PROMPT = "Your Grounding Statement";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
-import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup, pendingSetupForChat, plantFromChat } from "./goalSetup";
+import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup, pendingSetupForChat, plantFromChat, fixGoalFromChat } from "./goalSetup";
 import { buildOpeningLine, buildJournalStepLine } from "./chatOpening";
 import { handleTourTurn, postJournalWelcome, postStruggleOffer } from "./tour";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
@@ -753,6 +753,12 @@ export async function registerRoutes(
       }
 
       // ─── Guided goal setup — while it's open, Jai's first priority ───
+      // "That's not my goal, my goal is X" / "my why is Y" / a proposed fix + "yes".
+      const goalFix = await fixGoalFromChat(userId, rawText, safetyRecentMessages.filter((m) => m.sender === "user").map((m) => m.text)).catch((err) => { console.error("[GOAL] fixGoalFromChat:", err); return null; });
+      if (goalFix) {
+        const msg = await storage.createMessage({ userId, sender: "jae", text: goalFix });
+        return res.json({ userMessage: userMsg, jaeMessage: msg });
+      }
       // "plant the damn thing" / "now set the goal": plant it now, if no goal yet.
       const planted = moment.intent === "finish_goal"
         ? await plantFromChat(userId, rawText, safetyRecentMessages.filter((m) => m.sender === "user").map((m) => m.text), moment.stake, { localDate: clientLocalDate, userTimezone: clientTimezone }).catch((err) => { console.error("[GOAL] plantFromChat:", err); return null; })
@@ -4033,7 +4039,9 @@ export async function registerRoutes(
         : null;
       // "You got it backwards": fix the noticed line and say what changed.
       let fixed: Record<string, string> = {};
-      if (answer && CORRECTS.test(answer) && (entry.keyTheme || entry.valueNamed || entry.releasePoint)) {
+      const feeling = answer ? fixFeeling(answer, entry.jaeReflection ?? "") : null;
+      if (feeling) { fixed = { jaeReflection: feeling.reflection }; reply = feeling.reply; }
+      else if (answer && CORRECTS.test(answer) && (entry.keyTheme || entry.valueNamed || entry.releasePoint)) {
         const f = await fixNoticed(answer, entry).catch(() => null);
         if (f?.field) { fixed = { [f.field]: f.newValue }; reply = f.reply; }
       }

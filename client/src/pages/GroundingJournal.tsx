@@ -195,10 +195,13 @@ function JourneySummary({ entries }: { entries: any[] }) {
       {statementAnswers.length > 0 && (
         <div className="space-y-1.5" data-testid="recap-statement">
           <p className="text-xs text-muted-foreground font-medium">Your Grounding Statement</p>
-          {oneLine ? (
-            <p className="text-sm text-foreground leading-relaxed">{oneLine}</p>
-          ) : statementAnswers.map((p, i) => (
-            <p key={i} className="text-sm text-foreground leading-relaxed">{p.response}</p>
+          {oneLine && <p className="text-sm text-foreground leading-relaxed">{oneLine}</p>}
+          {/* All three of their answers, labeled, in their own words. */}
+          {statementAnswers.filter((p) => p.prompt !== "Your Grounding Statement" && p.response?.trim()).map((p, i) => (
+            <div key={i} className="space-y-0.5" data-testid={`recap-statement-field-${i}`}>
+              <p className="text-[11px] text-muted-foreground">{p.prompt.replace(/:$/, "")}</p>
+              <p className="text-sm text-foreground leading-relaxed">{p.response}</p>
+            </div>
           ))}
         </div>
       )}
@@ -577,7 +580,7 @@ export default function GroundingJournal() {
       const { reply, safetyTriggered, safetyTier, safetyThread, entry: saved } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim(), getLocalDateStr()) as any;
       // A correction ("you got it backwards") can fix "What Jai noticed".
       const src = stepId.replace("-jae", "");
-      if (saved) setJaeData((prev) => prev[src] ? ({ ...prev, [src]: { ...prev[src], keyTheme: saved.keyTheme ?? "", valueNamed: saved.valueNamed ?? "", releasePoint: saved.releasePoint ?? "" } }) : prev);
+      if (saved) setJaeData((prev) => prev[src] ? ({ ...prev, [src]: { ...prev[src], keyTheme: saved.keyTheme ?? "", valueNamed: saved.valueNamed ?? "", releasePoint: saved.releasePoint ?? "", ...(saved.jaeReflection ? { reflection: saved.jaeReflection } : {}) } }) : prev);
       if (safetyTriggered && safetyThread) {
         // Jai checks in first; Continue waits for the user's reply and his answer.
         setFollowUpSafety((prev) => ({ ...prev, [stepId]: { entryId: currentEntryId, tier: safetyTier!, thread: safetyThread } }));
