@@ -489,7 +489,9 @@ export default function Home() {
             ) : (
               // No goal yet: Jai walks them into one (server/goalSetup.ts).
               <p className="text-sm text-muted-foreground" data-testid="text-no-goal">
-                No active goal yet. Your water, your seed, and Jai's check-ins all grow from one. Jai can help you plant it in a couple of minutes.
+                {(user as any)?.groundingJournalCompleted
+                  ? "No active goal yet. Your water, your seed, and Jai's check-ins all grow from one. Jai can help you plant it in a couple of minutes."
+                  : "No goal planted yet. Finish your 3-Day Journal, and Jai will help you turn what you named into your first goal."}
               </p>
             )}
             <Button

@@ -286,6 +286,24 @@ export default function GroundingJournal() {
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [jaeData, setJaeData] = useState<Record<string, any>>({});
   const [followUpText, setFollowUpText] = useState("");
+  // Evening: the user can swap Jai's small step for one of his other
+  // options, or write their own.
+  const [ownStep, setOwnStep] = useState("");
+  const [stepSaving, setStepSaving] = useState(false);
+  const chooseStep = async (source: string, step: string) => {
+    const jae = jaeData[source];
+    const s = step.trim();
+    if (!userId || !jae?.entryId || !s || stepSaving) return;
+    setStepSaving(true);
+    try {
+      await api.saveJournalNextStep(userId, jae.entryId, s);
+      const others = [jae.nextStep, ...(jae.nextStepOptions ?? [])].filter((o: string) => o && o !== s);
+      setJaeData((prev) => ({ ...prev, [source]: { ...prev[source], nextStep: s, nextStepOptions: others.slice(0, 2) } }));
+      setOwnStep("");
+      queryClient.invalidateQueries({ queryKey: ["grounding-journal", userId] });
+    } catch {}
+    setStepSaving(false);
+  };
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
@@ -1187,8 +1205,34 @@ export default function GroundingJournal() {
                   {isLastStepOfDay && jae?.nextStep && !jae?.reflectionIsSafety && (
                     <div className="rounded-2xl p-4 bg-primary/5 border border-primary/20" data-testid="card-next-step">
                       <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{isDay3Evening ? "Your next small step" : "Your small step for tomorrow"}</p>
-                      <p className="text-sm font-medium text-foreground leading-relaxed">{jae.nextStep}</p>
+                      <p className="text-sm font-medium text-foreground leading-relaxed" data-testid="text-next-step">{jae.nextStep}</p>
                       <p className="text-xs text-muted-foreground mt-1">{isDay3Evening ? "Jai will ask about it in Chat tomorrow." : "Jai will ask about it tomorrow morning."}</p>
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-muted-foreground">It's your step. Pick another, or write your own:</p>
+                        {(jae.nextStepOptions ?? []).map((o: string) => (
+                          <button
+                            key={o}
+                            onClick={() => chooseStep(sourceStep, o)}
+                            disabled={stepSaving}
+                            className="block w-full text-left text-xs px-3 py-2 rounded-xl border border-primary/30 bg-white text-foreground hover:bg-primary/5 disabled:opacity-50"
+                            data-testid="button-step-option"
+                          >
+                            {o}
+                          </button>
+                        ))}
+                        <div className="flex gap-2">
+                          <input
+                            value={ownStep}
+                            onChange={(e) => setOwnStep(e.target.value)}
+                            placeholder="My own step..."
+                            className="flex-1 min-w-0 text-xs px-3 py-2 rounded-xl border border-border bg-white"
+                            data-testid="input-own-step"
+                          />
+                          <Button size="sm" variant="outline" className="rounded-xl" disabled={!ownStep.trim() || stepSaving} onClick={() => chooseStep(sourceStep, ownStep)} data-testid="button-own-step">
+                            Use mine
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1196,7 +1240,7 @@ export default function GroundingJournal() {
                     {isDay3Evening
                       ? "Continue to Final Reflection"
                       : isLastStepOfDay
-                      ? `Day ${day} Complete — Continue to Day ${day + 1}`
+                      ? `Finish Day ${day}`
                       : "Continue to Evening Reflection"}
                     <ChevronRight className="w-4 h-4 ml-1" />
                   </Button>

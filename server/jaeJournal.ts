@@ -59,6 +59,8 @@ export interface JournalJaeResponse {
   // Evening only: one small goal-linked step for tomorrow (saved, then asked
   // about the next morning), and whether frustration rose since the morning.
   nextStep: string;
+  // Evening only: two other goal-linked steps the user can pick instead.
+  nextStepOptions?: string[];
   frustrationRose?: boolean;
   // Jai's decisions behind the Day 3 coaching: an action they took that
   // lives out a Heartbeat (named in the reflection), and a short optional
@@ -176,7 +178,8 @@ ${stepCheck ? `They answered whether they did it: ${stepCheck.response}. Acknowl
     ? `
 Tonight, end with ONE small next step ("nextStep"):
 - One sentence that starts with "Tomorrow, ". Concrete, doable in 5–10 minutes, tied directly to their goal${ctx.weakestHeartbeat ? ` and, where it fits, to ${ctx.weakestHeartbeat.name}` : ""}. Examples by goal: business name → "Tomorrow, write 3 words that describe who your business serves." Writing → "Tomorrow, write for 10 minutes before you open your phone." Gardening → "Tomorrow, check the soil on your tomato plants and water only the dry ones."
-- Never a list, never two steps, never vague ("reflect more", "keep going").
+- Never a list, never two steps, never vague ("reflect more", "keep going"). It must serve their goal (their intention for these 3 days); a step unrelated to the goal is wrong, however calming.
+- Also give "nextStepOptions": exactly 2 OTHER small steps, same rules (start with "Tomorrow, ", goal-linked, built from their words where possible), so they can pick the one that fits.
 - Don't repeat the step inside "reflection" — it is shown on its own.
 - Build the step from THEIR words today: tonight's answers, what they said they'd focus on this morning, or their answer to this morning's follow-up question. If they named a change they want (e.g. not staying up all night doom scrolling), the step IS that change, made small and concrete in your own words (e.g. "Tomorrow, put your phone on the charger by 10:30 PM."), not a different idea of yours. Only suggest your own step when they named nothing usable.
 - If they named their own next step tonight (e.g. "keep one place for my ideas"), lock THAT one in instead of inventing a new one: confirm it in your own words, made small and concrete. It may start with "Tonight, " if it fits tonight (e.g. "Tonight, pick the one place you'll keep your name ideas.").
@@ -232,6 +235,9 @@ Rules:
 - Don't repeat the journal prompt's wording back to them (for example "most present", "pace or patience", "calm and purpose"). Instead, name the specific insight they gave, in plain words. Example: if they wrote that they got more done because they didn't feel rushed, say something like "not rushing is what made you productive," not "you reflected on your pace or patience."
 - Keep reflection to 2-4 sentences max.
 - Never ask multiple questions. One question only.
+- Reflect only what they actually wrote. Never add facts they didn't give (how fast the day went, how they felt, what happened). If they said "nothing really", the honest read is a flat day with no bright spot, not a rushed one.
+- Thin or non-answers ("nothing really", "not sure yet", "idk") are real answers. Say so plainly and with grace in one sentence (e.g. "Some days don't hand you a bright spot, and that's okay to say out loud."), then give one gentle way to look for one tomorrow. Never call a thin answer "a sign" of anything, and don't name a Heartbeat unless something they wrote earns it.
+- Your "followUpQuestion" must fit what they actually wrote and connect to their goal. Never use a question that assumes things they didn't say (e.g. asking about slowing down when they never said the day was fast). For a thin answer, ask something concrete and goal-linked (e.g. "What's one thing that would make tomorrow morning a little easier for getting to work on time?").
 - If they doubt this helps, say it's a lot, or are too frustrated or tired right now (doubt and frustration are normal here, not a crisis): acknowledge it honestly in plain words. For doubt, give a real reason: writing alone doesn't fix it, but naming the pattern is step one, and next you pick one small step. If they're overloaded, offer a shorter path (one line is enough tonight). Grace, no shame, no hype, then your one small, accountable question. Mindset over Method is the Heartbeat if you name one.
 - If they share something honest or hard about the situation around their goal (a job they don't like, a tough season, a hard home life), acknowledge that feeling in ONE calm, non-judging sentence before moving on. Don't skip past it, and never tell them to change their situation.
 - Name at most ONE Heartbeat in a reply, once, by its full name: the one that fits best. Don't also echo it in a shorter form (e.g. "clarity" and then "Clarity of Vision & Why").
@@ -265,7 +271,8 @@ Respond ONLY with valid JSON in this exact shape:
   "possibleFirstSeed": "...",
   "focusSummary": "...",
   "photoInvite": ""${isEvening ? `,
-  "nextStep": "Tomorrow, ..."` : ""}
+  "nextStep": "Tomorrow, ...",
+  "nextStepOptions": ["Tomorrow, ...", "Tomorrow, ..."]` : ""}
 }
 ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words), second person, clean grammar, paraphrasing what they said they'll give their attention to today. Never copy their words. If they were unsure, say so kindly (e.g. "You're still finding today's focus — and that's okay.").` : `"focusSummary": "" (morning sessions only).`}`;
 
@@ -293,6 +300,9 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       userQuestion: typeof parsed.userQuestion === "string" ? parsed.userQuestion : "",
       heartbeatGap: parsed.heartbeatGap === true,
       nextStep: isEvening && typeof parsed.nextStep === "string" ? parsed.nextStep.trim() : "",
+      nextStepOptions: isEvening && Array.isArray(parsed.nextStepOptions)
+        ? parsed.nextStepOptions.filter((o: unknown): o is string => typeof o === "string" && o.trim().length > 0).map((o: string) => o.trim()).slice(0, 2)
+        : [],
       frustrationRose: parsed.frustrationRose === true,
       heartbeatInAction: typeof parsed.heartbeatInAction === "string" ? parsed.heartbeatInAction : "",
       photoInvite: ctx.session !== "grounding_statement" && typeof parsed.photoInvite === "string" ? parsed.photoInvite.trim() : "",
@@ -356,4 +366,17 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
     console.error("[JOURNAL] follow-up ack failed; using fallback:", err instanceof Error ? err.message : err);
     return FOLLOW_UP_ACK_FALLBACK;
   }
+}
+
+// Answers with nothing to tag ("nothing really", "not sure yet", "idk"):
+// "What Jai noticed" stays empty instead of inventing a theme, value or
+// release from them, so no-signal entries don't pollute theme data.
+const THIN = /^(nothing( really| much)?|not (really|sure|much)( yet)?|idk|i don'?t know|no idea|none|n\/?a|no|nope|meh|same|nothing to (say|add|release)|not sure what( to say)?)$/i;
+export function isThinAnswer(text: string): boolean {
+  const t = (text ?? "").trim().replace(/[.!?,\s]+$/, "");
+  return t.length === 0 || THIN.test(t);
+}
+export function allThin(prompts: { prompt: string; response: string }[]): boolean {
+  const answers = prompts.filter((p) => !p.prompt.startsWith(STEP_CHECK_PREFIX));
+  return answers.length > 0 && answers.every((p) => isThinAnswer(p.response));
 }

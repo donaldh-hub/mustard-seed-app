@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
-import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin } from "./jaeJournal";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
@@ -3731,6 +3731,11 @@ export async function registerRoutes(
             ...journalJaiContext,
           });
 
+      // Thin answers: nothing to tag (see allThin).
+      if (!safetyReflection && allThin(prompts)) {
+        Object.assign(jaeResponse, { keyTheme: "", valueNamed: "", releasePoint: "" });
+      }
+
       const entry = await storage.createGroundingJournalEntry({
         userId,
         dayNumber,
@@ -3789,6 +3794,28 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[JOURNAL] entry error:", err);
       return res.status(500).json({ message: "Journal entry error" });
+    }
+  });
+
+  // The user picked a different small step (one of Jai's options, or their
+  // own words). Updates the evening entry and its Memory line.
+  app.patch("/api/users/:userId/grounding-journal/next-step", async (req, res) => {
+    try {
+      const userId = req.params.userId;
+      const { entryId, nextStep } = req.body as { entryId: string; nextStep: string };
+      const step = String(nextStep ?? "").trim().slice(0, 300);
+      if (!step) return res.status(400).json({ message: "Step is empty." });
+      const entries = await storage.getGroundingJournalEntries(userId);
+      const entry = entries.find((e) => e.id === entryId && e.session === "evening");
+      if (!entry) return res.status(404).json({ message: "Evening entry not found." });
+      await storage.updateGroundingJournalEntry(entry.id, { nextStep: step } as any);
+      const prefix = `Grounding Journal — Day ${entry.dayNumber} Evening`;
+      const memory = (await storage.getEntries(userId)).find((m) => m.summary.startsWith(prefix) && m.summary.includes(" · Your small step: "));
+      if (memory) await storage.updateEntry(memory.id, { summary: `${memory.summary.split(" · Your small step: ")[0]} · Your small step: ${step}` });
+      return res.json({ nextStep: step });
+    } catch (err) {
+      console.error("[JOURNAL] next_step_error:", err);
+      return res.status(500).json({ message: "Could not save your step." });
     }
   });
 

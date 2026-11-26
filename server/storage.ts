@@ -366,7 +366,13 @@ export class DatabaseStorage implements IStorage {
     const diffMs = now.getTime() - new Date(cycleStart).getTime();
     const daysSince = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    return { pending: daysSince >= 7, daysSinceCycleStart: daysSince };
+    // Only with real action data this cycle (water-earning check-ins on a
+    // goal), never on the date alone.
+    if (daysSince < 7) return { pending: false, daysSinceCycleStart: daysSince };
+    const since = new Date(cycleStart).getTime();
+    const actions = (await this.getEntries(userId)).filter((e) =>
+      e.goalId && e.mood === "happy" && e.createdAt && new Date(e.createdAt).getTime() >= since);
+    return { pending: actions.length > 0, daysSinceCycleStart: daysSince };
   }
 
   async getPendingWeeklyReview(userId: string): Promise<WeeklyReview | undefined> {
