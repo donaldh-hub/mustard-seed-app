@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
-import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom } from "./jaeJournal";
 // The prompt label a one-line Grounding Statement is saved under.
 const STATEMENT_PROMPT = "Your Grounding Statement";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
@@ -3759,8 +3759,9 @@ export async function registerRoutes(
       });
 
       // Anger at Jai or the app: kept as app feedback, apart from goal data.
-      if ((jaeResponse as any).appFeedback) {
-        await storage.createSupportInquiry({ userId, text: `[Journal Day ${dayNumber} ${session}] ${(jaeResponse as any).appFeedback}`.slice(0, 500), outcome: "app_feedback" }).catch(() => {});
+      const appFeedback = (jaeResponse as any).appFeedback || (safetyReflection ? "" : angerAtJaiFrom(prompts));
+      if (appFeedback) {
+        await storage.createSupportInquiry({ userId, text: `[Journal Day ${dayNumber} ${session}] ${appFeedback}`.slice(0, 500), outcome: "app_feedback" }).catch(() => {});
       }
 
       // Mirror to the entries table so Calendar/Memory Bank shows journal
