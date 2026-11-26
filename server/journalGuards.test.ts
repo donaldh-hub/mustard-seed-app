@@ -21,7 +21,7 @@ test("anger at Jai + job stake: owned, stake named, no why question", () => {
     { ...base, reflection: "It sounds like these days have been tough, and the frustration is real.", followUpQuestion: "What would being on time change for you?" },
     { ...input, answers: ["growth...i almost got fuckin fired.", "fuck you. fuck this."], angerAtJai: true, angerLine: "User pushed back on Jai or the app: fuck you. fuck this." },
   );
-  assert.match(r.reflection, /^Fair\. I may be missing something\./);
+  assert.match(r.reflection, /^You.re right, I missed something there\./);
   assert.match(r.reflection, /losing the job/);
   assert.equal(r.followUpQuestion, "What am I missing?");
   assert.ok(r.appFeedback);
@@ -29,7 +29,7 @@ test("anger at Jai + job stake: owned, stake named, no why question", () => {
 
 test("anger flagged only by the model still gets owned", () => {
   const r = enforceReflectionRules({ ...base, reflection: "Let's keep going.", followUpQuestion: "What's next?" }, { ...input, angerAtJai: true });
-  assert.match(r.reflection, /^Fair\./);
+  assert.match(r.reflection, /^You.re right/);
   assert.ok(r.appFeedback);
 });
 
@@ -119,4 +119,24 @@ test("a line from an earlier session isn't reused", () => {
   );
   assert.doesNotMatch(r.reflection, /some days/i);
   assert.match(r.reflection, /doom scrolling/);
+});
+
+test("'I'm NOT releasing the book' never becomes 'ready to release the book'", () => {
+  const r = enforceReflectionRules({ ...base, reflection: "Ok.", releasePoint: "letting go of the book", valueNamed: "finishing the book" }, { ...input, answers: ["I'm NOT releasing the book. Stop asking me to let go."] });
+  assert.equal(r.releasePoint, "");
+  assert.equal(r.valueNamed, "finishing the book");
+});
+
+test("the form's own wording is never their value", () => {
+  const r = enforceReflectionRules({ ...base, reflection: "Ok.", valueNamed: "calm" }, { ...input, answers: ["calm awareness? what is that"], formText: "How can I keep building from this place of calm awareness?" });
+  assert.equal(r.valueNamed, "");
+});
+
+test("'Yes, I did it' names the step; minutes match the set step", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Nice work keeping at it. Try 10 minutes tomorrow.", nextStep: "Tomorrow, write for 5 minutes without editing." },
+    { ...input, stepCheck: { step: "Tomorrow, write one sentence before bed.", status: "Yes, I did it" } },
+  );
+  assert.match(r.reflection, /write one sentence before bed, and you did/);
+  assert.doesNotMatch(r.reflection, /10 minutes/);
 });

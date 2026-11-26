@@ -6,13 +6,13 @@ import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from
 import { generateDepthResponse } from "./jaeCoach";
 import { readMoment, readMomentByWords, ANSWER_THE_MOMENT } from "./momentReader";
 import { buildMemoryCards, memoryContextLines } from "./memoryCards";
-import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom } from "./jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom, CORRECTS, fixNoticed } from "./jaeJournal";
 // The prompt label a one-line Grounding Statement is saved under.
 const STATEMENT_PROMPT = "Your Grounding Statement";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
 import { evaluateMessage, evaluateSafetyReply } from "./trustSafety";
 import { plantGoal } from "./goalPlanting";
-import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup, pendingSetupForChat } from "./goalSetup";
+import { handleGoalSetupTurn, shouldOfferGoalSetup, startGoalSetup, pendingSetupForChat, plantFromChat } from "./goalSetup";
 import { buildOpeningLine, buildJournalStepLine } from "./chatOpening";
 import { handleTourTurn, postJournalWelcome, postStruggleOffer } from "./tour";
 import { assessFreshness, decidePhotoWater } from "./photoProof";
@@ -727,8 +727,11 @@ export async function registerRoutes(
       // words (see afterSafety in jaeCoach), never with a template.
       const lastJaiIdx = safetyRecentMessages.map((m) => m.sender).lastIndexOf("jae");
       if (CORRECTION.test(rawText) && moment.state !== "correction") moment.state = "correction";
-      const pushback = ["correction", "app_question", "frustrated_at_jai", "hostile", "doubt"].includes(moment.state);
-      const afterSafety = pushback && /\b988\b|741741/.test(lastJai)
+      const pushback = ["correction", "app_question", "frustrated_at_jai", "hostile", "doubt"].includes(moment.state)
+        || /\b(where did (that|this) come from|why did you (say|send|ask)|what was that( about)?|what('?s| is) (that|988)|why are you asking|huh\??$|wtf)\b/i.test(rawText);
+      // Only a real safety reply counts (not Jai explaining what 988 is).
+      const lastWasSafety = /741741|heavier than what I'm built|something heavier going on|do you mean you're done with the app/.test(lastJai);
+      const afterSafety = pushback && lastWasSafety
         ? ([...safetyRecentMessages.slice(0, Math.max(0, lastJaiIdx))].reverse().find((m) => m.sender === "user")?.text ?? "")
         : "";
       const angerNearby = moment.state === "frustrated_at_jai" || moment.state === "hostile"
@@ -750,7 +753,11 @@ export async function registerRoutes(
       }
 
       // ─── Guided goal setup — while it's open, Jai's first priority ───
-      const setupReply = await handleGoalSetupTurn(userId, rawText, { localDate: clientLocalDate, userTimezone: clientTimezone }, moment);
+      // "plant the damn thing" / "now set the goal": plant it now, if no goal yet.
+      const planted = moment.intent === "finish_goal"
+        ? await plantFromChat(userId, rawText, safetyRecentMessages.filter((m) => m.sender === "user").map((m) => m.text), moment.stake, { localDate: clientLocalDate, userTimezone: clientTimezone }).catch((err) => { console.error("[GOAL] plantFromChat:", err); return null; })
+        : null;
+      const setupReply = planted ?? await handleGoalSetupTurn(userId, rawText, { localDate: clientLocalDate, userTimezone: clientTimezone }, moment);
       if (setupReply) {
         const setupMsg = await storage.createMessage({ userId, text: setupReply.text, sender: "jae", messageType: setupReply.messageType });
         // Setup done: once, offer to save the journal's main struggle.
@@ -1613,6 +1620,8 @@ export async function registerRoutes(
           recentMemory,
           moment,
           afterSafety: afterSafety || undefined,
+          currentStep: ((targetedGoal as any)?.microHabit || (untargetedGoal as any)?.microHabit
+            || [...journalEntries].filter((e: any) => e.nextStep).sort((a: any, b: any) => b.dayNumber - a.dayNumber)[0]?.nextStep || undefined) ?? undefined,
           setupPending: await pendingSetupForChat(userId, !angerNearby && !afterSafety).catch(() => undefined),
           sessionJaiTexts: safetyRecentMessages
             .filter((m) => m.sender === "jae" && m.createdAt && Date.now() - new Date(m.createdAt).getTime() < 12 * 60 * 60 * 1000)
@@ -3649,6 +3658,20 @@ export async function registerRoutes(
     });
   });
 
+  // One submission per journal session at a time: a double tap waits for
+  // the first, then gets the saved entry back (one entry, one Memory card).
+  const journalLocks = new Map<string, Promise<void>>();
+  app.post("/api/users/:userId/grounding-journal/entry", async (req, res, next) => {
+    const key = `${req.params.userId}:${req.body?.dayNumber}:${req.body?.session}`;
+    while (journalLocks.has(key)) await journalLocks.get(key);
+    let done!: () => void;
+    const lock = new Promise<void>((r) => { done = r; });
+    journalLocks.set(key, lock);
+    const release = () => { if (journalLocks.get(key) === lock) { journalLocks.delete(key); done(); } };
+    res.on("finish", release);
+    res.on("close", release);
+    next();
+  });
   app.post("/api/users/:userId/grounding-journal/entry", async (req, res) => {
     try {
       const userId = req.params.userId;
@@ -4008,7 +4031,13 @@ export async function registerRoutes(
       const missedStep = stepCheck && !/^yes/i.test(stepCheck.response)
         ? { step: stepCheck.prompt.slice(STEP_CHECK_PREFIX.length).replace(/\s*Did you get to it\?$/, "").trim(), status: stepCheck.response }
         : null;
-      if (answer) {
+      // "You got it backwards": fix the noticed line and say what changed.
+      let fixed: Record<string, string> = {};
+      if (answer && CORRECTS.test(answer) && (entry.keyTheme || entry.valueNamed || entry.releasePoint)) {
+        const f = await fixNoticed(answer, entry).catch(() => null);
+        if (f?.field) { fixed = { [f.field]: f.newValue }; reply = f.reply; }
+      }
+      if (answer && !reply) {
         const user = await storage.getUser(userId);
         reply = await generateFollowUpAck({
           userName: user?.name || "friend",
@@ -4022,6 +4051,7 @@ export async function registerRoutes(
       const updated = await storage.updateGroundingJournalEntry(entryId, {
         userFollowUpResponse: followUpResponse,
         ...(reply ? { jaeFollowUpReply: reply } : {}),
+        ...fixed,
       } as any);
       // Jai's reply goes to Memory too (once per entry; not the generic
       // fallback line, which says nothing about them). After a missed step,

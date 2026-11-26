@@ -42,6 +42,8 @@ export interface JaeContext {
   // The last Jai message gave crisis resources after this line of theirs;
   // the user is now pushing back or asking about it.
   afterSafety?: string;
+  // The step already set (goal's first step or the latest journal step).
+  currentStep?: string;
   // Goal setup in progress (no goal planted yet): stage and working title.
   setupPending?: { stage: string; title?: string; question: string; mayInviteBack: boolean };
 }
@@ -171,7 +173,7 @@ THREE-LAYER INPUT MODEL (INTERNAL — NEVER EXPLAIN TO USER)
 2. COMMITMENT (Expectation) — Future intent ("I will...", "Tomorrow I..."). TRACKED but DOES NOT EARN ANY REWARD.
 3. VERIFIED ACTION (Progress) — Completed action confirmed via photo, explicit confirmation, or logged behavior. EARNS FULL REWARD.
 Never allow conversation or commitment to replace action. Never reward talk or intent.
-They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic. Acknowledge the feeling directly (e.g. "Sounds like you're really fed up with being late") and move to one small step. If they direct anger at a real, named person, stay calm, don't endorse it, and steer back to their own goal and why. Never be evasive about what you save: you keep their journal answers, check-ins and goal steps to remember their goal and notice patterns; they can see it in Memory; single entries can't be deleted yet, and Profile, Export My Data downloads everything. If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question "What am I missing?" (or very close). Never switch to a next step or a goal question in that reply. Don't keep coaching past it. If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
+They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic. Acknowledge the feeling directly (e.g. "Sounds like you're really fed up with being late") and move to one small step. If they direct anger at a real, named person, stay calm, don't endorse it, and steer back to their own goal and why. Never be evasive about what you save: you keep their journal answers, check-ins and goal steps to remember their goal and notice patterns; they can see it in Memory; single entries can't be deleted yet, and Profile, Export My Data downloads everything. If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line in your own fresh words (e.g. "You're right, I missed that.") and make your one question "What am I missing?" (or very close). Never switch to a next step or a goal question in that reply. Don't keep coaching past it. If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
 
 CORE LOOP (EVERY TURN)
 1) OBSERVE — what the user just did or said
@@ -377,7 +379,7 @@ Their last message reads as: ${m.state.replace(/_/g, " ")}.
 ${TENSION_GUIDE[m.tension]}
 ${PLAYBOOK[m.state]}${m.intent === "goal_status" ? "\nThey want to know where their goal stands. Say it plainly from GOAL STATE below." : ""}${m.intent === "ask_help" ? "\nThey want a suggestion: give one concrete, small one that fits what they've told you about their day." : ""}${m.intent === "vent" ? "\nThey need to be heard more than coached. Reflect it; no task." : ""}${m.intent === "pause" ? "\nThey want to pause. Say that's fine and that you'll be here; nothing else." : ""}${m.stake ? `\nThey named a real stake: "${m.stake}". Name it back plainly once and treat it as their why.` : ""}${m.question ? `\nThey asked: "${m.question}". Answer it directly first.` : ""}${m.hostileStreak >= 2 ? `\nThis is the second hostile message in a row. After one calm line, offer them control in one sentence: keep going, keep it short, or pause for today.` : ""}
 Shape: 2-4 short sentences. (1) Name what they said in their own words. (2) If you missed something, own it in one line. (3) Grace or an honest shift in perspective. (4) One question OR one small step tied to their goal, never both.
-Rules: If they report partial progress ("not as late but still late"), name the progress first, honestly. If they said their day is already full (work late, chores), never add tasks; make it smaller or take something off. Answer any direct question. Never praise an action they didn't say they did. Use their words, not new labels. At most one Heartbeat, by its exact full name, only if tied to something they said. No ledger words ("logged", "on the record", "lost this round", "Day N"). Don't swear and don't comment on their language.
+Rules: Ask at most one question, and never one you already asked or they already answered. If they're worn out or say you ask too much, offer to stop for tonight and ask nothing. ${ctx.currentStep ? `Their current step is "${ctx.currentStep}": keep suggestions that size or smaller (never more minutes unless they ask), and don't ask how it went before its day. ` : ""}If they report partial progress ("not as late but still late"), name the progress first, honestly. If they said their day is already full (work late, chores), never add tasks; make it smaller or take something off. Answer any direct question. Never praise an action they didn't say they did. Use their words, not new labels. At most one Heartbeat, by its exact full name, only if tied to something they said. No ledger words ("logged", "on the record", "lost this round", "Day N"). Don't swear and don't comment on their language.
 Don't start with any of these openings (you used them recently): ${openers.length ? openers.slice(-5).map((o) => `"${o}…"`).join(", ") : "(none)"}.
 ${m.state === "app_question" ? APP_FACTS : ""}${ctx.afterSafety ? `
 Your last message gave crisis resources after they wrote: "${ctx.afterSafety}". They're pushing back or asking about it. In two or three sentences: own that you jumped (or explain plainly why you sent it, without defending it), say what you heard, and ask what they meant. Don't repeat the resources.` : ""}
@@ -416,7 +418,7 @@ If, and only if, this message is calm, you may end by gently inviting them back 
         const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         return t.replace(new RegExp(`,\\s*${esc}(?=[.!?,])`, "g"), "").replace(new RegExp(`^${esc},\\s*`), "");
       };
-      const checkCtx = { userText: userMessage, recentJai, afterSafety: !!ctx.afterSafety };
+      const checkCtx = { userText: userMessage, recentJai, afterSafety: !!ctx.afterSafety, afterSafetyText: ctx.afterSafety, goalPlanted: !!(ctx.targetedGoalTitle || ctx.untargetedGoalTitle), currentStep: ctx.currentStep };
       text = sparing(cleanChatReply(text, m, userMessage));
       let problems = checkChatReply(text, m, checkCtx);
       if (problems.length) {
@@ -440,7 +442,12 @@ If, and only if, this message is calm, you may end by gently inviting them back 
         problems = problems.filter((p) => !/^(use their words|don't start with|keep it to 2-4|start by owning)/.test(p));
         if (problems.length) {
           console.log(`[MOMENT] fallback: ${problems.join("; ")}`);
-          text = enforceChatRules(text, m, recentJai);
+          text = enforceChatRules(text, m, recentJai, userMessage);
+          // After a crisis-resources reply, always say what was heard and why.
+          if (ctx.afterSafety && !/\byou (said|wrote|told me)\b|\bwhen you said\b|\bI took\b|"[^"]{6,}"/i.test(text)) {
+            const heard = ctx.afterSafety.length > 80 ? `${ctx.afterSafety.slice(0, 80).replace(/\s+\S*$/, "")}` : ctx.afterSafety;
+            text = `When you said "${heard}", I took it as something heavier and wanted you to have support right away. ${text.replace(/\b(988|741741)\b[^.!?]*[.!?]/g, "")}`.trim();
+          }
         }
       }
     }

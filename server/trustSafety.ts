@@ -154,6 +154,13 @@ async function logClearFlag(
  * `responseText` verbatim as the reply when `triggered` is true, skipping
  * every other branch of that turn's handling.
  */
+// The question asked first for "I don't want to be here anymore".
+const HERE_CHECK_MARK = "do you mean you're done with the app";
+export const HERE_CHECK = "When you say you don't want to be here anymore, do you mean you're done with the app, or done with this goal, or is it something bigger? If it's something bigger, 988 is there anytime, or 911 in an emergency.";
+const BARE_HERE = /\b(don'?t|do not) (want|wan|wanna)( to)? be here\b/i;
+const EXPLICIT_RISK = /\b(die|dying|dead|kill|suicid\w*|end (it all|my life|things)|hurt (myself|me)|wake up|alive|exist|overdose|jump)\b/i;
+const BIGGER = /\b(bigger|yes|yeah|yep|life|living|everything|all of it|myself|both|idk|i don'?t know|not sure|maybe|kind of|kinda|heavier)\b/i;
+
 export async function evaluateMessage(
   userId: string,
   text: string,
@@ -162,6 +169,21 @@ export async function evaluateMessage(
 ): Promise<SafetyEvaluation> {
   const recentEvents = await storage.getRecentSafetyEvents(userId, new Date(Date.now() - BACKTRACK_WINDOW_MS));
   const openPrimaryFlag = recentEvents.find((e) => e.responseType === "primary" && isClearFlag(e));
+
+  // Their answer to "done with the app, this goal, or something bigger?":
+  // the app or the goal gets a normal reply; bigger, yes, unsure, or anything
+  // unclear gets the full resources message.
+  const lastJai = [...recentMessages].reverse().find((m) => m.sender !== "user")?.text ?? "";
+  if (lastJai.includes(HERE_CHECK_MARK)) {
+    const aboutApp = /\b(app|this app|the app|journal|goal|chat|you|jai|work|job|this|it)\b/i.test(text) && !BIGGER.test(text) && !EXPLICIT_RISK.test(text);
+    if (aboutApp) return NOT_TRIGGERED;
+    // Pushback on the question itself ("where did that come from?") gets a
+    // plain answer from Jai, not the full message.
+    if (/\b(where did (that|this) come from|why (are|did) you (ask|say)|what do you mean|what was that|huh|wtf)\b/i.test(text) && !BIGGER.test(text) && !EXPLICIT_RISK.test(text)) return NOT_TRIGGERED;
+    const screenedReply = await screen(text, []).catch(() => null);
+    const { eventId, responseText } = await logClearFlag(userId, screenedReply?.category ?? ("passive_ideation" as SafetyTriggerCategory), text, surface);
+    return { triggered: true, isBacktrackFollowUp: false, category: screenedReply?.category ?? ("passive_ideation" as SafetyTriggerCategory), tier: "clear", responseText, eventId };
+  }
 
   if (openPrimaryFlag && BACKTRACK_PHRASES.test(text)) {
     const event = await storage.createSafetyEvent({
@@ -189,10 +211,21 @@ export async function evaluateMessage(
   // a line flagged only because of the context before it ("hello", "where
   // did that come from?") gets a normal reply. Saying the risk words again
   // still gets the full message every time.
-  if (openPrimaryFlag) {
+  // (Also right after the ask-first question or a check-in.)
+  if (openPrimaryFlag || recentEvents.some((e) => e.responseType === "primary")) {
     const alone = await screen(text, []);
     if (!alone) return NOT_TRIGGERED;
     result = alone;
+  }
+
+  // "I don't want to be here anymore" with no other context: ask first
+  // (Donald, Nov 26). Explicit wording (die, kill myself, end my life,
+  // suicide, don't want to wake up) still gets the full message right away.
+  if (result.category === "passive_ideation" && BARE_HERE.test(text) && !EXPLICIT_RISK.test(text)) {
+    const event = await storage.createSafetyEvent({
+      userId, category: result.category, responseType: "primary", triggeringMessage: text, surface, alertSent: false, tier: "check_in",
+    });
+    return { triggered: true, isBacktrackFollowUp: false, category: result.category, tier: "check_in", responseText: HERE_CHECK, eventId: event.id };
   }
 
   if (result.tier === "check_in") {

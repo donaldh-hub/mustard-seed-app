@@ -92,7 +92,7 @@ const f = await generateJournalReflection({
 });
 const fAll = `${f.reflection} ${f.followUpQuestion}`;
 console.log(`\n(f) anger at Jai + "almost got fired"\n  Jai: ${f.reflection}\n  Question: ${f.followUpQuestion}\n  Step: ${f.nextStep}\n  appFeedback: ${f.appFeedback}`);
-check(/fair|missing|hear you|not listening|getting wrong/i.test(fAll), "acknowledges the anger at Jai");
+check(/fair|missing|missed|right|hear you|not listening|getting wrong/i.test(fAll), "acknowledges the anger at Jai");
 check(/(job|fired|work)/i.test(f.reflection), "names the real stake (the job)");
 check(!/what would being on time change|why does being on time matter/i.test(f.followUpQuestion), "doesn't ask a why it was already told");
 check(!/Clarity of Vision & Why/.test(fAll), "doesn't repeat the earlier Heartbeat diagnosis");
@@ -113,7 +113,7 @@ const g = await generateJournalReflection({
 console.log(`\n(g) non-answer Grounding Statement\n  Jai: ${g.reflection}\n  Draft: ${g.draftStatement}\n  Seed: ${g.possibleFirstSeed}\n  appFeedback: ${g.appFeedback}`);
 check(!!g.draftStatement && !/\b(journey|thrive|empower|unstoppable)\b/i.test(g.draftStatement ?? ""), "offers an honest one-line draft");
 check(!/^reflect|reflect on/i.test(g.possibleFirstSeed) && /(alarm|clock|bed|night|wake|leave|work|time)/i.test(g.possibleFirstSeed), "seed is a concrete on-goal action, matching the chosen step");
-check(/fair|missing|helpful|didn'?t help/i.test(g.reflection) && !!g.appFeedback, "acknowledges the app feedback");
+check(/fair|missing|missed|right|helpful|didn'?t help/i.test(g.reflection) && !!g.appFeedback, "acknowledges the app feedback");
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll checks passed");
 process.exit(failed ? 1 : 0);

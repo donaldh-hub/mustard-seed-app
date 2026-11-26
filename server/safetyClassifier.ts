@@ -84,6 +84,7 @@ Rules — these matter more than any single word:
 - Doubt, frustration, overwhelm, tiredness, or "idk" about the task, day, or app are null, not "unsure".
 - Complaints about you or the app ("so you just gon ignore me?", "you're not listening", "you're a robot", "is this a glitch") are null: they are about the app, not risk.
 - "Don't want to be here" tied to a place, task, day or the goal ("days I don't want to be here" next to quitting, work, this app) is "check_in" (ask what they mean). On its own or about life ("I don't want to be here anymore"), it is "clear".
+- "Kill", "die", "dead" or "killing me" about plants, a garden, a book, a project, work or a deadline ("worrying i will kill everything" about seedlings, "this deadline is killing me", "my tomatoes died") is null: it's about the task, not them.
 - Swearing or profanity is never a risk signal on its own ("this fucking sucks, I'm so tired of being late" is null). Judge the meaning, not the words. Only when the distress may be about themselves or their life and you truly can't tell, choose "check_in". When unsure between "check_in" and "clear" and there IS explicit risk language, choose "clear".
 - For "check_in" only, also give:
   "phrase": 2–6 words naming their distress in plain lowercase words, close to how they said it (e.g. "too frustrated", "done with this", "overwhelmed"). No quotation marks.
@@ -145,6 +146,9 @@ export async function screenMessage(text: string, recent: ScreenContext = []): P
   if (cat === "passive_ideation" && AMBIGUOUS_HERE.test(text) && TIED_TO_TASK.test(text) && !EXPLICIT.test(text)) cat = "ambiguous_distress" as SafetyTriggerCategory;
   // Explicit-risk categories always get the full script; ambiguous distress
   // is always a check-in; hopelessness follows the model's tier.
+  // Belt and braces for the rule above: a check-in whose own topic is the
+  // task, triggered only by "kill/die/dead", is about the task.
+  if (parsed.tier === "check_in" && TASK_DEATH_WORDS.test(text) && TASK_TOPIC.test(`${parsed.topic ?? ""} ${text}`) && !EXPLICIT.test(text.replace(TASK_DEATH_WORDS, ""))) return null;
   const tier: SafetyTier = ALWAYS_CLEAR.includes(cat)
     ? "clear"
     : cat === "ambiguous_distress"
@@ -153,6 +157,8 @@ export async function screenMessage(text: string, recent: ScreenContext = []): P
   return { category: cat, tier, phrase: cleanSlot(parsed.phrase), topic: cleanSlot(parsed.topic) };
 }
 
+const TASK_DEATH_WORDS = /\b(kill\w*|die[ds]?|dying|dead)\b/gi;
+const TASK_TOPIC = /\b(garden\w*|plants?|seeds?|seedlings?|crops?|tomato\w*|soil|beds?|book|chapter|writing|project|deadline|work|job|business|app)\b/i;
 const AMBIGUOUS_HERE = /\b(don'?t|do not) (want|wan|wanna)( to)? be here\b/i;
 const TIED_TO_TASK = /\b(quit\w*|days?|work|job|class|school|today|this app|this)\b.{0,60}\b(don'?t|do not) (want|wan|wanna)|\b(don'?t|do not) (want|wan|wanna)( to)? be here\b.{0,30}\b(at work|at my job|at school|today|in class)\b/i;
 const EXPLICIT = /\b(any ?more|die|dead|kill|suicid\w*|end (it|my life|things)|exist|go on|wake up|hurt (myself|me)|alive)\b/i;

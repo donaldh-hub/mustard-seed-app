@@ -574,7 +574,10 @@ export default function GroundingJournal() {
     }
     setFollowUpReplying(true);
     try {
-      const { reply, safetyTriggered, safetyTier, safetyThread } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim(), getLocalDateStr());
+      const { reply, safetyTriggered, safetyTier, safetyThread, entry: saved } = await api.saveJournalFollowUp(userId, currentEntryId, followUpText.trim(), getLocalDateStr()) as any;
+      // A correction ("you got it backwards") can fix "What Jai noticed".
+      const src = stepId.replace("-jae", "");
+      if (saved) setJaeData((prev) => prev[src] ? ({ ...prev, [src]: { ...prev[src], keyTheme: saved.keyTheme ?? "", valueNamed: saved.valueNamed ?? "", releasePoint: saved.releasePoint ?? "" } }) : prev);
       if (safetyTriggered && safetyThread) {
         // Jai checks in first; Continue waits for the user's reply and his answer.
         setFollowUpSafety((prev) => ({ ...prev, [stepId]: { entryId: currentEntryId, tier: safetyTier!, thread: safetyThread } }));
