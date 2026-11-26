@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { enforceReflectionRules, enforceAckRules } from "./journalGuards";
+export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -306,15 +308,16 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       { role: "system", content: systemPrompt },
       { role: "user", content: `Here are my responses:\n\n${responseBlock}` },
     ],
-    temperature: 0.7,
+    temperature: 0.4,
     max_tokens: 800,
   });
 
   const raw = completion.choices[0]?.message?.content ?? "{}";
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-    return {
-      reflection: withStake(parsed.reflection ?? "", [...ctx.prompts.map((p) => p.response ?? ""), ...(ctx.previousEntries ?? []).map((e) => e.answers ?? "")]),
+    const angerLine = angerAtJaiFrom(ctx.prompts);
+    return enforceReflectionRules({
+      reflection: parsed.reflection ?? "",
       followUpQuestion: parsed.followUpQuestion ?? "",
       keyTheme: realValue(parsed.keyTheme),
       releasePoint: realValue(parsed.releasePoint),
@@ -332,7 +335,15 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       photoInvite: ctx.session !== "grounding_statement" && typeof parsed.photoInvite === "string" ? parsed.photoInvite.trim() : "",
       appFeedback: typeof parsed.appFeedback === "string" ? parsed.appFeedback.trim() : "",
       draftStatement: ctx.session === "grounding_statement" && typeof parsed.draftStatement === "string" ? parsed.draftStatement.trim() : "",
-    };
+    }, {
+      answers: ctx.prompts.filter((p) => !p.prompt.startsWith(STEP_CHECK_PREFIX)).map((p) => p.response ?? ""),
+      priorAnswers: (ctx.previousEntries ?? []).map((e) => e.answers ?? ""),
+      namedBefore,
+      angerAtJai: parsed.angerAtJai === true || !!angerLine,
+      angerLine,
+      lockedStep: ctx.lockedStep,
+      isEvening,
+    });
   } catch {
     return {
       reflection: "I see you showing up for yourself — that matters.",
@@ -390,11 +401,11 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
         { role: "system", content: system },
         { role: "user", content: `Your question: ${ctx.question}\nMy answer: ${ctx.answer}` },
       ],
-      temperature: 0.6,
+      temperature: 0.4,
       max_tokens: 120,
     });
     const raw = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
-    const reply = withoutEffort(withoutEcho(raw, ctx.reflection));
+    const reply = enforceAckRules(raw, ctx.reflection);
     if (!reply) console.warn("[JOURNAL] follow-up ack came back empty or only echoed the reflection; using fallback");
     return reply || FOLLOW_UP_ACK_FALLBACK;
   } catch (err) {
@@ -444,24 +455,3 @@ export function angerAtJaiFrom(prompts: { prompt: string; response: string }[]):
   return hit ? `User pushed back on Jai or the app: ${hit.trim().slice(0, 200)}` : "";
 }
 
-// The model sometimes skips a stake the user named ("I almost got fired").
-// If their words name it and the reflection doesn't, name it back once.
-const JOB_STAKE = /\b((almost|nearly) (got|get|been|getting) (\w+ )?fired|(almost|nearly) lost (my|the) job|(could|might|gonna|going to) (lose|get fired from) (my|the) job)\b/i;
-export function withStake(reflection: string, answers: string[]): string {
-  if (!answers.some((a) => JOB_STAKE.test(a)) || /\b(job|fired|work)\b/i.test(reflection)) return reflection;
-  return `${reflection.trim()} You came close to losing the job. That's real.`.trim();
-}
-
-// Drops any sentence that comments on effort or coping ("you're managing to
-// get through it", "an achievement in itself"); Jai talks about what they said.
-const EFFORT = /\b(managing|manage to|get(ting)? through|push(ing)? through|keep (going|pushing)|impressive|proud of you|achievement|in itself|great job|well done|that takes (strength|courage))\b/i;
-export function withoutEffort(reply: string): string {
-  const kept = (reply.match(/[^.!?]+[.!?]*/g) ?? [reply]).map((sentence) => {
-    if (!EFFORT.test(sentence)) return sentence;
-    // Keep the part before ", and/but …" when only the tail is about effort.
-    const head = sentence.split(/,\s*(?:and|but)\s+/i)[0];
-    return head !== sentence && !EFFORT.test(head) ? `${head.replace(/\s+$/, "")}.` : "";
-  });
-  const out = kept.join("").trim();
-  return out.length < 20 ? "" : out;
-}

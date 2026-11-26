@@ -136,7 +136,13 @@ export async function screenMessage(text: string, recent: ScreenContext = []): P
   }
   const category = parsed.category;
   if (!category || !(SAFETY_TRIGGER_CATEGORIES as readonly string[]).includes(category)) return null;
-  const cat = category as SafetyTriggerCategory;
+  let cat = category as SafetyTriggerCategory;
+  // "The days I don't want to be here", tied to quitting, work or a day, with
+  // no explicit risk words, is ambiguous: a short check-in with 988/911, not
+  // the full script. Context (angry messages before it) can tip the model to
+  // "passive_ideation"; this keeps the tier steady. Explicit wording such as
+  // "I don't want to be here anymore" never matches and stays full resources.
+  if (cat === "passive_ideation" && AMBIGUOUS_HERE.test(text) && TIED_TO_TASK.test(text) && !EXPLICIT.test(text)) cat = "ambiguous_distress" as SafetyTriggerCategory;
   // Explicit-risk categories always get the full script; ambiguous distress
   // is always a check-in; hopelessness follows the model's tier.
   const tier: SafetyTier = ALWAYS_CLEAR.includes(cat)
@@ -146,6 +152,10 @@ export async function screenMessage(text: string, recent: ScreenContext = []): P
     : parsed.tier === "check_in" ? "check_in" : "clear";
   return { category: cat, tier, phrase: cleanSlot(parsed.phrase), topic: cleanSlot(parsed.topic) };
 }
+
+const AMBIGUOUS_HERE = /\b(don'?t|do not) (want|wan|wanna)( to)? be here\b/i;
+const TIED_TO_TASK = /\b(quit\w*|days?|work|job|class|school|today|this app|this)\b.{0,60}\b(don'?t|do not) (want|wan|wanna)|\b(don'?t|do not) (want|wan|wanna)( to)? be here\b.{0,30}\b(at work|at my job|at school|today|in class)\b/i;
+const EXPLICIT = /\b(any ?more|die|dead|kill|suicid\w*|end (it|my life|things)|exist|go on|wake up|hurt (myself|me)|alive)\b/i;
 
 // ─── Fixed wording ───────────────────────────────────────────────────────────
 // Only the two short slots in the check-in vary; nothing here is generated.

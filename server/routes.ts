@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { requireAuth } from "./auth";
 import { generateJaeResponse, getWeakestHeartbeat, computeHeartbeatScores } from "./heartbeat";
 import { generateDepthResponse } from "./jaeCoach";
+import { readMoment, ANSWER_THE_MOMENT } from "./momentReader";
 import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom } from "./jaeJournal";
 // The prompt label a one-line Grounding Statement is saved under.
 const STATEMENT_PROMPT = "Your Grounding Statement";
@@ -715,11 +716,21 @@ export async function registerRoutes(
         return res.json({ userMessage: userMsg, jaeMessage: safeMsg, safetyTriggered: true });
       }
 
+      // ─── Moment Reader: read the last message before any other branch ───
+      const moment = await readMoment(rawText, safetyRecentMessages.slice(-8).map((m) => ({ sender: m.sender, text: m.text })));
+      const lastJai = [...safetyRecentMessages].reverse().find((m) => m.sender === "jae")?.text ?? "";
+      console.log(`[MOMENT] state=${moment.state} streak=${moment.hostileStreak}${moment.stake ? ` stake="${moment.stake}"` : ""}`);
+
+      // ─── A correction is owned, never answered with a template ───
+      if (moment.state === "correction" && !CORRECTION.test(rawText) && !/\b988\b/.test(lastJai)) {
+        const msg = await storage.createMessage({ userId, sender: "jae", text: "You're right, I jumped. What did you mean?" });
+        return res.json({ userMessage: userMsg, jaeMessage: msg });
+      }
       // ─── Right after a safety reply, a correction is owned, not ignored ───
-      if (CORRECTION.test(rawText)) {
+      if (CORRECTION.test(rawText) || (moment.state === "correction" && /\b988\b/.test(lastJai))) {
         const recentSafety = await storage.getRecentSafetyEvents(userId, new Date(Date.now() - 30 * 60 * 1000));
-        if (recentSafety.length > 0) {
-          const msg = await storage.createMessage({ userId, sender: "jae", text: "You're right, you didn't say that, and I jumped. I'd rather understand than assume. What did you mean? (If it ever does get heavier, 988 is there anytime, or 911 in an emergency.)" });
+        if (recentSafety.length > 0 || /\b988\b/.test(lastJai)) {
+          const msg = await storage.createMessage({ userId, sender: "jae", text: "You're right, you didn't say that, and I jumped. I'd rather understand than assume. What did you mean?" });
           return res.json({ userMessage: userMsg, jaeMessage: msg });
         }
       }
@@ -1122,7 +1133,9 @@ export async function registerRoutes(
         /^i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)\b(?!n'?t)/i.test(textLower) ||
         /today i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)\b(?!n'?t)/i.test(textLower);
 
-      if (asksGoal || asksObstacle) {
+      // Canned branches step aside when the moment needs a real answer.
+      const answerMoment = ANSWER_THE_MOMENT.has(moment.state);
+      if ((asksGoal || asksObstacle) && !answerMoment) {
         let goalStatusText = "";
         if (targetedGoal && untargetedGoal) {
           const goalBothPresent = [
@@ -1373,7 +1386,7 @@ export async function registerRoutes(
         confirmLines.push(`\n${pick(saveFollowups)}`);
         jaeText = confirmLines.join("\n");
 
-      } else if (isLog) {
+      } else if (isLog && !answerMoment) {
         const logConfirms = [
           `${greeting}good. I've got that.`,
           `${greeting}thanks for telling me.`,
@@ -1606,6 +1619,10 @@ export async function registerRoutes(
             : undefined,
           groundingJournalInsights: journalInsights,
           recentMemory,
+          moment,
+          sessionJaiTexts: safetyRecentMessages
+            .filter((m) => m.sender === "jae" && m.createdAt && Date.now() - new Date(m.createdAt).getTime() < 12 * 60 * 60 * 1000)
+            .slice(-20).map((m) => m.text),
         });
 
         if (depthResult.text) {
@@ -1656,6 +1673,11 @@ export async function registerRoutes(
 
       const classifications = classifyMultipleActions(rawText);
       const agg = aggregateClassifications(classifications);
+      // Only a real reported action earns water; sarcasm, complaints and
+      // questions never do ("I can't believe I'm getting this done").
+      if ((agg.primaryCategory === "VA" || agg.primaryCategory === "AR") && moment.state !== "reported_action" && moment.state !== "engaged") {
+        agg.primaryCategory = "RW";
+      }
 
       // --- PROGRESS CREDIBILITY VALIDATION ---
       // Runs immediately after TITAN classification, before any reward logic.
@@ -1978,7 +2000,7 @@ export async function registerRoutes(
         }
         // Reflection Memory: store neutral entry for substantive RW/IO content
         // — never pleasantries ("thanks", "ok cool"). No water either way.
-        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText) && !isNotReflection(rawText)) {
+        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText) && !isNotReflection(rawText) && ["engaged", "reported_action", "stake", "frustrated_self"].includes(moment.state)) {
           reflectionSaved = true;
           await storage.createEntry({
             userId,
