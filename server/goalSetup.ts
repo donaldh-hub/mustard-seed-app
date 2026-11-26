@@ -31,6 +31,9 @@ export interface GoalSetupState {
   deadline?: string | null;
   checkIn?: string | null;
   lastOfferedAt?: string;
+  // A real stake they named in the journal ("you almost got fired"),
+  // offered back when Jai asks for the why.
+  stake?: string;
   // Set once the goal is planted (right after the why); the "step" stage
   // then fills in its first step.
   plantedGoalId?: string;
@@ -92,7 +95,12 @@ export async function suggestGoalFromMemory(userId: string): Promise<{ goal: str
   }
   for (const m of messages.filter((m) => m.sender === "user").slice(-10)) lines.push(`Chat: ${m.text}`);
   for (const e of entries.slice(0, 8)) if (e.summary) lines.push(`Memory: ${e.summary}`);
-  return suggestGoalFromLines(lines);
+  const s = await suggestGoalFromLines(lines);
+  // Never a reflection exercise as a goal: fall back to their own intention.
+  const intention = ((journal.find((e) => e.session === "intention")?.prompts as { response?: string }[] | undefined)?.[0]?.response ?? "").trim();
+  if (s && REFLECTIVE.test(s.goal) && intention) return { goal: goalFromIntention(intention), because: s.because };
+  if (!s && intention) return { goal: goalFromIntention(intention), because: lowerFirst(stripEnd(intention)) };
+  return s;
 }
 
 /** The model step of suggestGoalFromMemory, on plain record lines. */
@@ -107,7 +115,7 @@ export async function suggestGoalFromLines(lines: string[]): Promise<{ goal: str
       messages: [
         {
           role: "system",
-          content: `From this person's own records, find the ONE thing they keep coming back to that would make a good first goal. Use their words and their goal — never invent one. If nothing clearly points to a goal, return {"goal": "", "because": ""}.
+          content: `From this person's own records, find the ONE thing they keep coming back to that would make a good first goal. Use their words and their goal — never invent one. The goal must be an action they can do and show (e.g. "Get to work on time"), never a thinking task ("Reflect on…", "Explore why…", "Understand…"). Their journal intention is usually the goal. If nothing clearly points to a goal, return {"goal": "", "because": ""}.
 "goal": first person, plain, under 14 words, no quotes (e.g. "Find a name for my business"). If their journal intention names the outcome this serves (e.g. being on time for work), keep that outcome in the goal: "Build a night routine so I'm on time for work".
 "because": a short phrase completing "you kept coming back to …", in second person (e.g. "finding a name for your business").
 Respond ONLY with JSON: {"goal": "...", "because": "..."}`,
@@ -145,7 +153,15 @@ export async function startGoalSetup(userId: string, source: "chat" | "journal")
     return storage.createMessage({ userId, text: RETURN_TO[current.stage]?.(current) ?? questionFor(current.stage, current), sender: "jae" });
   }
   const suggestion = await suggestGoalFromMemory(userId);
-  await saveState(userId, { stage: "offered", source, suggestion, lastOfferedAt: new Date().toISOString() });
+  const stake = await journalStake(userId);
+  // Tapping "Plant" after the journal already said yes: go straight to the
+  // wording instead of asking again.
+  if (source === "journal" && suggestion) {
+    const next: GoalSetupState = { stage: "wording", source, suggestion, title: suggestion.goal, stake, lastOfferedAt: new Date().toISOString() };
+    await saveState(userId, next);
+    return storage.createMessage({ userId, text: QUESTIONS.wording(next), sender: "jae" });
+  }
+  await saveState(userId, { stage: "offered", source, suggestion, stake, lastOfferedAt: new Date().toISOString() });
   return storage.createMessage({
     userId,
     text: offerText(firstName(user.name), source, suggestion),
@@ -227,7 +243,7 @@ Respond ONLY with JSON: {"intent": "...", "value": "", "reply": ""}`,
 const QUESTIONS = {
   wording: (s: GoalSetupState) => `Here's how I'd word it: ${s.suggestion?.goal ?? s.title}. Does that sound like you, or how would you say it?`,
   new_goal: () => "What do you want to work toward? Say it in your own words. One goal is plenty.",
-  why: (s: GoalSetupState) => `${whyQuestion(s.title)} That's your Clarity of Vision & Why, the reason you'll come back to on the hard days.`,
+  why: (s: GoalSetupState) => `${whyQuestion(s.title)}${s.stake ? ` Earlier you said ${s.stake}. Is that part of it?` : ""} That's your Clarity of Vision & Why, the reason you'll come back to on the hard days.`,
   step: () => "What's one small first step you could take this week, something that takes 10 minutes or less? That's where Small Steps + Consistency starts.",
   date: () => "Last one, and it's optional: want a target date or a check-in day? You can say something like by November 30, or check in Sundays. Or just say skip.",
   confirm: (s: GoalSetupState) => [
@@ -260,7 +276,7 @@ export const APP_GUIDE = "Here's how it works. Home is your daily snapshot: your
 // Goals are worded as actions ("Establish a nighttime routine") or as
 // things ("Better sleep", "Writing my book"); ask "why" so either reads right.
 export function whyQuestion(title: string | undefined): string {
-  const t = stripEnd((title ?? "").replace(/^i\s+(want|need|would like|will|'?m going|am going|plan)\s+to\s+/i, ""));
+  const t = toYou(stripEnd((title ?? "").replace(/^i\s+(want|need|would like|will|'?m going|am going|plan)\s+to\s+/i, "")));
   if (!t) return "Why does this goal matter to you?";
   const first = t.split(/\s+/)[0].toLowerCase();
   const thing = /ing$/.test(first) || ["a", "an", "the", "my", "our", "more", "less", "better", "healthier", "consistent"].includes(first);
@@ -335,6 +351,9 @@ export async function handleGoalSetupTurn(
     messageType: "text",
   });
   if (r.intent === "app_help") return comeBack(APP_GUIDE);
+  if (AT_JAI.test(text)) {
+    return { text: "Fair. I may be missing something. What am I missing?", messageType: "text" };
+  }
   if (r.intent === "off_topic") {
     // At the offer, let the normal conversation answer; the offer comes back
     // at the next chat open. Mid-setup, answer briefly, then come back.
@@ -496,4 +515,30 @@ async function saveFirstStep(
     messageType: "text",
     finished: true,
   };
+}
+
+// Goals are actions, not thinking tasks.
+const REFLECTIVE = /^(reflect|explore|understand|think( about)?|figure out|learn (why|more)|consider|discover|journal about)\b/i;
+// "being on time for work" -> "Be on time for work".
+export function goalFromIntention(intention: string): string {
+  const t = stripEnd(intention).replace(/^being\b/i, "be").replace(/^getting\b/i, "get");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+// Anger aimed at Jai or the app during setup.
+const AT_JAI = /\b(fuck (you|off)|ignor(e|ing) me|you('?re| are)? not (\w+ )?(listening|helping|here)|robot(ic)?|glitch|dumb ?ass)\b/i;
+
+// A real stake named in the journal, e.g. "i almost got fuckin fired" ->
+// "you almost got fuckin fired".
+const STAKE = /\bi (almost|nearly|could have|was about to) (got |get |been |be )?(\w+ )?(fired|let go|evicted)\b|\bi (almost|nearly) lost (my|the) (job|house|place)\b/i;
+export async function journalStake(userId: string): Promise<string | undefined> {
+  const journal = await storage.getGroundingJournalEntries(userId).catch(() => []);
+  for (const e of journal) {
+    const texts = [...((e.prompts as { response?: string }[]) ?? []).map((p) => p.response ?? ""), e.userFollowUpResponse ?? ""];
+    for (const t of texts) {
+      const m = STAKE.exec(t);
+      if (m) return toYou(m[0].toLowerCase().replace(/^i\b/, "I"));
+    }
+  }
+  return undefined;
 }

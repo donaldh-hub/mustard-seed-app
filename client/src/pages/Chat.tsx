@@ -1096,7 +1096,7 @@ export default function Chat() {
                       key={label}
                       onClick={() => { setInput(""); sendMutation.mutate(label); }}
                       disabled={sendMutation.isPending}
-                      className="px-3 py-2 rounded-xl border border-primary/30 bg-white text-primary text-xs font-medium hover:bg-primary/5 disabled:opacity-50"
+                      className="px-3 py-2 rounded-xl border border-primary bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/20 disabled:opacity-50"
                       data-testid="button-goal-setup"
                     >
                       {label}
