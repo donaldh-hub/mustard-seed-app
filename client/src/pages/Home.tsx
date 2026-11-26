@@ -294,6 +294,15 @@ export default function Home() {
                   <>
                     <p className="text-sm font-semibold text-emerald-900" data-testid="text-journal-card-title">{journalCardText(journal).title}</p>
                     <p className="text-xs text-emerald-700/70 mt-0.5">{journalCardText(journal).subtitle}</p>
+                    {(journal as any)?.canSkipWait && (journal as any)?.unlocksAt && (
+                      <button
+                        className="mt-1 text-xs text-emerald-800 underline"
+                        onClick={(e) => { e.stopPropagation(); setLocation("/journal?skipWait=1"); }}
+                        data-testid="btn-home-skip-wait"
+                      >
+                        Skip the wait (tester)
+                      </button>
+                    )}
                   </>
                 )}
               </div>
