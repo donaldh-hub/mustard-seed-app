@@ -20,7 +20,7 @@ const CASES = [
   { label: "(c) negative", answers: ["Nothing. I hate my job", "the dread before work"] },
   { label: "(d) swearing", answers: ["this is some bullshit, I'm so damn tired of being late", "I don't give a shit about writing this down"] },
 ];
-const ON_GOAL = /(work|late|on time|leave|door|alarm|bed|sleep|night|clothes|bag|keys|lunch|commute|wake|get up|out the|phone)/i;
+const ON_GOAL = /(work|late|on time|leave|door|alarm|bed|sleep|night|clothes|bag|keys|lunch|commute|wake|get up|out the|phone|breakfast|morning prep|prep)/i;
 const SWEARS = /\b(fuck\w*|shit\w*|damn\w*|bullshit|hell|ass)\b/i;
 
 let failed = 0;
@@ -74,7 +74,7 @@ const ack = await generateFollowUpAck({
   reflection,
 });
 console.log(`\n(e) sarcastic follow-up reply\n  Jai: ${ack}`);
-check(!/(great|good|proud|awesome).{0,40}(push|getting|done|keep)/i.test(ack), "no praise for effort on a sarcastic line");
+check(!/(great|good|proud|awesome|impressive|amazing|well done).{0,40}(push|getting|done|keep|manag)|push(ing)? through|keep (going|pushing)/i.test(ack), "no praise for effort on a sarcastic line");
 check(!/\bchaos|chaotic\b/i.test(ack), "no new labels (e.g. chaos)");
 check(!/is a step toward/i.test(ack) && !ack.includes("Clarity of Vision & Why"), "doesn't repeat the reflection's phrasing or Heartbeat");
 
