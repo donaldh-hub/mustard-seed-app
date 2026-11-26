@@ -43,7 +43,7 @@ const FALLBACK_PATTERNS: { category: SafetyTriggerCategory; re: RegExp }[] = [
   { category: "abuse_in_progress", re: /\b(he'?s hurting me|she'?s hurting me|(is )?hitting me right now|being abused)\b/i },
   { category: "medical_emergency", re: /\b(i('m| am) overdosing|can'?t breathe|chest pain|i'?m dying)\b/i },
   { category: "hopelessness_finality", re: /\b(no point in (anything|trying|living)|nothing matters|better off dead|better off without me)\b/i },
-  { category: "passive_ideation", re: /\b(don'?t see the point (in|of) (anything|living)|wish i (wasn'?t here|could disappear|weren'?t alive)|(don'?t|do not) want to (be here|exist|wake up)( anymore)?|i can'?t go on)\b/i },
+  { category: "passive_ideation", re: /\b(don'?t see the point (in|of) (anything|living)|wish i (wasn'?t here|could disappear|weren'?t alive)|(don'?t|do not) (want|wan|wanna)( to)? (be here|exist|wake up)( anymore)?|i can'?t go on)\b/i },
   { category: "disordered_eating", re: /\b(haven'?t eaten in (days|\d+ days)|not (going to|gonna) eat|starving myself)\b/i },
 ];
 
@@ -82,6 +82,8 @@ Rules — these matter more than any single word:
 - Weigh the recent conversation, not just the last message — risk can build across several turns, and context tells you what "this" refers to.
 - Use "clear" only when there is explicit risk language. Frustration, exhaustion, or "I'm done" with a task is never "clear" on its own.
 - Doubt, frustration, overwhelm, tiredness, or "idk" about the task, day, or app are null, not "unsure".
+- Complaints about you or the app ("so you just gon ignore me?", "you're not listening", "you're a robot", "is this a glitch") are null: they are about the app, not risk.
+- "Don't want to be here" tied to a place, task, day or the goal ("days I don't want to be here" next to quitting, work, this app) is "check_in" (ask what they mean). On its own or about life ("I don't want to be here anymore"), it is "clear".
 - Swearing or profanity is never a risk signal on its own ("this fucking sucks, I'm so tired of being late" is null). Judge the meaning, not the words. Only when the distress may be about themselves or their life and you truly can't tell, choose "check_in". When unsure between "check_in" and "clear" and there IS explicit risk language, choose "clear".
 - For "check_in" only, also give:
   "phrase": 2–6 words naming their distress in plain lowercase words, close to how they said it (e.g. "too frustrated", "done with this", "overwhelmed"). No quotation marks.
@@ -151,7 +153,7 @@ export async function screenMessage(text: string, recent: ScreenContext = []): P
 export function checkInResponse(phrase: string, topic: string): string {
   const said = phrase ? `When you say ${phrase}` : "When you say that";
   const about = topic || "what you're working on";
-  return `${said}, is that about ${about}, or is something heavier going on? If it's heavier, 988 is there anytime. Either way, I'm here.`;
+  return `${said}, is that about ${about}, or is something heavier going on? If it's heavier, 988 is there anytime, or 911 in an emergency. Either way, I'm here.`;
 }
 
 // After a safety response, when the reply doesn't make it clear they're okay.

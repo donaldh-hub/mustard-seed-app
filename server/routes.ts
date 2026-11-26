@@ -82,9 +82,23 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction) {
   return next();
 }
 
+// A correction right after a safety reply ("I didn't say anything about
+// suicide"): Jai owns that he jumped and asks what they meant.
+const CORRECTION = /\b((didn'?t|didnt|did not|never) (say|said|mean|talk)|not (suicidal|what i (said|meant))|wasn'?t (talking|saying)|that'?s not what i (said|meant)|wtf (are )?(you|u) talking about|i'?m not (suicidal|going to hurt))/i;
+// What Jai saves, where to see it, and (truthfully) what can't be done yet.
+const RECORDING_QUESTION = /\b(why|what) (are|r|do|did) (you|u) (just )?(record|sav|stor|keep|track|remember|log)\w*/i;
+const RECORDING_ANSWER = "Fair question. I save what you tell me (your journal answers, check-ins, and goal steps) so I can remember your goal and notice patterns with you. You can see all of it in Memory, the calendar tab. There isn't a way to delete a single entry yet; Profile, Export My Data downloads everything I have.";
+
 // Pleasantries and acknowledgments: not reflections, never saved or shown
 // as "Reflection saved".
 const CASUAL_CHAT = /^(ok(ay)?|k|thanks?|thank (you|u)|thx|ty|cool|got it|sounds good|great|nice|awesome|perfect|lol|haha|yes|yeah|yep|no|nope|sure|alright|bye|good ?night|hi|hey|hello|appreciate (it|you)|will do)\b[\s\w,]{0,30}$/i;
+// Questions, complaints and lines aimed at Jai or the app aren't reflections:
+// never saved to Memory or shown as "Reflection saved".
+const NOT_REFLECTION = /\?\s*$|^(why|what|how|so you|are you|do you|can you|did you|where)\b|\b(fuck (you|off)|ignor(e|ing) me|you('?re| are)? not (\w+ )?(listening|helping|here)|robot(ic)?|glitch|dumb ?ass|this app)\b/i;
+function isNotReflection(text: string): boolean {
+  return NOT_REFLECTION.test(text.trim());
+}
+
 function isCasualChat(text: string): boolean {
   const t = text.trim().replace(/[!.?,🙏😊👍❤️]+/gu, "").trim();
   const words = t.split(/\s+/).length;
@@ -701,6 +715,21 @@ export async function registerRoutes(
         return res.json({ userMessage: userMsg, jaeMessage: safeMsg, safetyTriggered: true });
       }
 
+      // ─── Right after a safety reply, a correction is owned, not ignored ───
+      if (CORRECTION.test(rawText)) {
+        const recentSafety = await storage.getRecentSafetyEvents(userId, new Date(Date.now() - 30 * 60 * 1000));
+        if (recentSafety.length > 0) {
+          const msg = await storage.createMessage({ userId, sender: "jae", text: "You're right, you didn't say that, and I jumped. I'd rather understand than assume. What did you mean? (If it ever does get heavier, 988 is there anytime, or 911 in an emergency.)" });
+          return res.json({ userMessage: userMsg, jaeMessage: msg });
+        }
+      }
+
+      // ─── "Why are you recording my responses?" — a plain, true answer ───
+      if (RECORDING_QUESTION.test(rawText)) {
+        const msg = await storage.createMessage({ userId, sender: "jae", text: RECORDING_ANSWER });
+        return res.json({ userMessage: userMsg, jaeMessage: msg });
+      }
+
       // ─── App tour buttons, or asking for the tour (server/tour.ts) ───
       const tourMsgs = await handleTourTurn(userId, rawText);
       if (tourMsgs && tourMsgs.length > 0) {
@@ -723,7 +752,8 @@ export async function registerRoutes(
         return res.json({ userMessage: userMsg, jaeMessage: photoMsg, ...(photoReply.waterAwarded ? { photoWaterAwarded: true } : {}) });
       }
 
-      const name = user.name || "";
+      // First name only, and never an email typed into the Name field.
+      const name = ((user.name || "").trim().split(/\s+/)[0] || "").replace(/^.*@.*$/, "");
       const obstacle = user.struggles?.length ? user.struggles[0] : "";
       const waterLevel = user.waterLevel ?? 0;
       const treeStage = user.treeStage ?? 1;
@@ -1088,8 +1118,9 @@ export async function registerRoutes(
       const isLog =
         /^log:/i.test(textLower) ||
         /^logged:/i.test(textLower) ||
-        /^i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)/i.test(textLower) ||
-        /today i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)/i.test(textLower);
+        // Whole words only: "I didn't say…" / "i didnt" are not reported actions.
+        /^i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)\b(?!n'?t)/i.test(textLower) ||
+        /today i (did|walked|ran|worked out|trained|lifted|completed|finished|read|wrote|practiced)\b(?!n'?t)/i.test(textLower);
 
       if (asksGoal || asksObstacle) {
         let goalStatusText = "";
@@ -1344,24 +1375,14 @@ export async function registerRoutes(
 
       } else if (isLog) {
         const logConfirms = [
-          `${greeting}logged.`,
-          `${greeting}tracked.`,
-          `${greeting}on the record.`,
-          `${greeting}added to the log.`,
-          `${greeting}captured.`,
-          `${greeting}entry saved.`,
-          `${greeting}noted and logged.`,
-          `${greeting}that's in the system now.`,
-          `${greeting}done. Added to your history.`,
-          `${greeting}another one on the board.`,
-          `${greeting}saved. The record grows.`,
-          `${greeting}recorded.`,
-          `${greeting}filed. Your effort is on paper now.`,
-          `${greeting}logged and counted.`,
-          `${greeting}proof, saved.`,
+          `${greeting}good. I've got that.`,
+          `${greeting}thanks for telling me.`,
+          `${greeting}that counts.`,
+          `${greeting}noted. That's real.`,
+          `${greeting}I see it.`,
         ];
-
-        const streakRef = streak > 0 ? ` Day ${streak + 1}.` : "";
+        // No "Day N" here: the streak counter isn't the goal's day.
+        const streakRef = "";
 
         const goalLogLines = [
           `Progress toward "${goal}".`,
@@ -1400,21 +1421,9 @@ export async function registerRoutes(
         const goalRef = goal ? pick(goalLogLines) : pick(noGoalLogLines);
 
         const obstacleLogLines = [
-          ` "${obstacle}" didn't win today.`,
-          ` You showed up despite "${obstacle}".`,
-          ` "${obstacle}" tried. You went anyway.`,
-          ` "${obstacle}" lost this round.`,
-          ` Today you beat "${obstacle}".`,
-          ` "${obstacle}" had no say in this one.`,
-          ` You moved past "${obstacle}".`,
-          ` "${obstacle}" got outworked.`,
-          ` Despite "${obstacle}", you delivered.`,
-          ` You chose action over "${obstacle}".`,
-          ` "${obstacle}" didn't stop you today.`,
-          ` "${obstacle}" took a loss.`,
-          ` You put in the work regardless of "${obstacle}".`,
-          ` "${obstacle}" showed up. You showed up harder.`,
-          ` Today, "${obstacle}" wasn't in charge.`,
+          ` You did it even with "${obstacle}" in the way.`,
+          ` "${obstacle}" didn't decide this one.`,
+          ` That happened alongside "${obstacle}", and that's worth noticing.`,
         ];
         const obstacleRef = obstacle ? pick(obstacleLogLines) : "";
 
@@ -1969,7 +1978,7 @@ export async function registerRoutes(
         }
         // Reflection Memory: store neutral entry for substantive RW/IO content
         // — never pleasantries ("thanks", "ok cool"). No water either way.
-        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText)) {
+        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText) && !isNotReflection(rawText)) {
           reflectionSaved = true;
           await storage.createEntry({
             userId,

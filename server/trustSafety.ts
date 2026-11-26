@@ -191,6 +191,8 @@ export async function evaluateMessage(
     // day: asked and answered, it isn't asked again.
     const lastDay = await storage.getRecentSafetyEvents(userId, new Date(Date.now() - CHECK_IN_GAP_MS));
     if (lastDay.some((e) => e.tier === "check_in")) return NOT_TRIGGERED;
+    // Never on a complaint about Jai or the app ("so you just gon ignore me?").
+    if (/\b(ignor(e|ing) me|not listening|robot(ic)?|glitch|this app|you('?re| are) not (here|helping))\b/i.test(text)) return NOT_TRIGGERED;
     // Logged for the admin view; no founder email for a check-in.
     const event = await storage.createSafetyEvent({
       userId, category: result.category, responseType: "primary", triggeringMessage: text, surface, alertSent: false, tier: "check_in",
