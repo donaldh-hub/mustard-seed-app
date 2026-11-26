@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { ContinuityRecord } from "./continuityContext";
 import { HEARTBEAT_NAMES } from "./titan";
+import { PLAYBOOK, APP_FACTS, enforceChatRules, opener, type Moment } from "./momentReader";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -34,6 +35,10 @@ export interface JaeContext {
   // The 8 newest Memory records (journal sessions, Memory Bank entries,
   // photos), newest first.
   recentMemory?: string[];
+  // Moment Reader result for the last message (server/momentReader.ts).
+  moment?: Moment;
+  // Jai's messages from this chat session, oldest first.
+  sessionJaiTexts?: string[];
 }
 
 function buildSystemPrompt(ctx: JaeContext): string {
@@ -354,7 +359,21 @@ export async function generateDepthResponse(
   userMessage: string,
   ctx: JaeContext
 ): Promise<{ text: string; shouldWater: boolean }> {
-  const systemPrompt = buildSystemPrompt(ctx);
+  // Everything Jai said this session (no phrase reused), last five openers.
+  const recentJai = (ctx.sessionJaiTexts ?? (ctx.recentMessages ?? []).filter((m) => m.sender !== "user").map((m) => m.text));
+  // No opening reused this session (the prompt lists the last five).
+  const openers = recentJai.map((t) => opener(t)).filter(Boolean);
+  const m = ctx.moment;
+  const momentBlock = m ? `
+
+═══ READ THE MOMENT FIRST (this overrides every other instruction above) ═══
+Their last message reads as: ${m.state.replace(/_/g, " ")}.
+${PLAYBOOK[m.state]}${m.stake ? `\nThey named a real stake: "${m.stake}". Name it back plainly once and treat it as their why.` : ""}${m.question ? `\nThey asked: "${m.question}". Answer it directly first.` : ""}${m.hostileStreak >= 2 ? `\nThis is the second hostile message in a row. After one calm line, offer them control in one sentence: keep going, keep it short, or pause for today.` : ""}
+Shape: 2-4 short sentences. (1) Name what they said in their own words. (2) If you missed something, own it in one line. (3) Grace or an honest shift in perspective. (4) One question OR one small step tied to their goal, never both.
+Rules: Answer any direct question. Never praise an action they didn't say they did. Use their words, not new labels. At most one Heartbeat, by its exact full name, only if tied to something they said. No ledger words ("logged", "on the record", "lost this round", "Day N"). Don't swear and don't comment on their language.
+Don't start with any of these openings (you used them recently): ${openers.length ? openers.slice(-5).map((o) => `"${o}…"`).join(", ") : "(none)"}.
+${m.state === "app_question" ? APP_FACTS : ""}` : "";
+  const systemPrompt = buildSystemPrompt(ctx) + momentBlock;
 
   const history = ctx.recentMessages
     ? buildConversationHistory(ctx.recentMessages.slice(-8))
@@ -372,10 +391,41 @@ export async function generateDepthResponse(
         ...history,
       ],
       max_tokens: 400,
+      temperature: m ? 0.5 : undefined,
     });
 
     const choice = response.choices[0];
     let text = choice?.message?.content?.trim() || "";
+    if (m) {
+      // Frustration about their situation isn't a complaint about Jai.
+      if (m.state !== "frustrated_at_jai" && m.state !== "hostile" && /what am i missing|missing something/i.test(text)) {
+        const retry = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [{ role: "system", content: systemPrompt + "\nThey are NOT upset with you; they're frustrated with their situation. Don't apologize and don't ask what you're missing." }, ...history],
+          max_tokens: 400,
+          temperature: 0.5,
+        }).catch(() => null);
+        text = retry?.choices[0]?.message?.content?.trim() || text;
+      }
+      text = enforceChatRules(text, m, recentJai);
+      // Their name, sparingly: not if one of the last three replies used it.
+      const first = (ctx.userName || "").trim();
+      if (first.length > 1 && recentJai.slice(-3).some((t) => t.includes(first))) {
+        const esc = first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        text = text.replace(new RegExp(`,\\s*${esc}(?=[.!?,])`, "g"), "").replace(new RegExp(`^${esc},\\s*`), "");
+      }
+      // A repeated opening gets one retry with a different start.
+      if (openers.includes(opener(text))) {
+        const retry = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [{ role: "system", content: systemPrompt + `\nYour draft started like a recent reply ("${opener(text)}…"). Start differently.` }, ...history],
+          max_tokens: 400,
+          temperature: 0.7,
+        }).catch(() => null);
+        const again = enforceChatRules(retry?.choices[0]?.message?.content?.trim() || "", m, recentJai);
+        if (again && !openers.includes(opener(again))) text = again;
+      }
+    }
 
     // Post-processing guardrail: strip "check back" / "let me know" filler
     text = text.replace(/\b(check (?:in|back) (?:once|when|after) (?:it's|its|you're|you) (?:done|finished|complete|ready)[.!]?\s*)/gi, "");
@@ -385,7 +435,8 @@ export async function generateDepthResponse(
     // Goal-neutral: positive signal covers any meaningful goal action, not just fitness
     const isPositive = /done|did it|completed|finished|accomplished|walked|ran|trained|lifted|wrote|read|practiced|prepped|tracked|logged|set up|started|scheduled|bought|organized|cleaned|planted|watered|drafted|submitted|published|studied|built|created|made|sent|called|launched|shipped|fixed|recorded|posted|exercised|meditated|reviewed|paid|showed up|reached out/i.test(userMessage.toLowerCase());
 
-    return { text, shouldWater: isPositive };
+    // Only a real reported action waters; "I'm done with this" doesn't.
+    return { text, shouldWater: isPositive && (!m || m.state === "reported_action" || m.state === "engaged") };
   } catch (error) {
     console.error("Jae DEPTH AI error, falling back to heartbeat:", error);
     return { text: "", shouldWater: false };
