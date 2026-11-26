@@ -157,7 +157,17 @@ async function logClearFlag(
 // The question asked first for "I don't want to be here anymore".
 const HERE_CHECK_MARK = "do you mean you're done with the app";
 export const HERE_CHECK = "When you say you don't want to be here anymore, do you mean you're done with the app, or done with this goal, or is it something bigger? If it's something bigger, 988 is there anytime, or 911 in an emergency.";
-const BARE_HERE = /\b(don'?t|do not) (want|wan|wanna)( to)? be here\b/i;
+// "kill all three tomatoes", "this garden is killing me": about the task,
+// not explicit risk words.
+const TASK_KILL = /\bkill(ing|ed)?\s+(all\s+|every\s+|my\s+|the\s+|three\s+|\w+\s+){0,3}(tomato\w*|plants?|seedlings?|garden|crops?|everything|it)\b|\b(this|the|my)\s+\w+(\s+\w+)?\s+is\s+killing\s+me\b|\bkilling it\b/gi;
+function withoutTaskKill(t: string): string { return t.replace(TASK_KILL, " "); }
+const ABOUT_TASK = /\b(app|this app|the app|journal|goal|chat|you|jai|work|job|this|it|garden|plants?|book|writing|gym|workout|school|class)\b/i;
+function namesTopicFrom(answer: string, before: string): boolean {
+  const skip = new Set(["want", "here", "anymore", "dont", "don't", "honestly", "really", "just", "that", "this", "with", "about"]);
+  const words = (before.toLowerCase().match(/[a-z']{4,}/g) ?? []).filter((w) => !skip.has(w));
+  return words.some((w) => new RegExp(`\\b${w.slice(0, 5)}`, "i").test(answer));
+}
+const BARE_HERE = /\b(don'?t|do not|dont) (want|wan|wanna)( to)? be here\b/i;
 const EXPLICIT_RISK = /\b(die|dying|dead|kill|suicid\w*|end (it all|my life|things)|hurt (myself|me)|wake up|alive|exist|overdose|jump)\b/i;
 const BIGGER = /\b(bigger|yes|yeah|yep|life|living|everything|all of it|myself|both|idk|i don'?t know|not sure|maybe|kind of|kinda|heavier)\b/i;
 
@@ -175,7 +185,9 @@ export async function evaluateMessage(
   // unclear gets the full resources message.
   const lastJai = [...recentMessages].reverse().find((m) => m.sender !== "user")?.text ?? "";
   if (lastJai.includes(HERE_CHECK_MARK)) {
-    const aboutApp = /\b(app|this app|the app|journal|goal|chat|you|jai|work|job|this|it)\b/i.test(text) && !BIGGER.test(text) && !EXPLICIT_RISK.test(text);
+    // About the app, the goal, or whatever they named before ("the garden").
+    const before = [...recentMessages].reverse().find((m) => m.sender === "user")?.text ?? "";
+    const aboutApp = (ABOUT_TASK.test(text) || namesTopicFrom(text, before)) && !BIGGER.test(text) && !EXPLICIT_RISK.test(text);
     if (aboutApp) return NOT_TRIGGERED;
     // Pushback on the question itself ("where did that come from?") gets a
     // plain answer from Jai, not the full message.
@@ -183,6 +195,18 @@ export async function evaluateMessage(
     const screenedReply = await screen(text, []).catch(() => null);
     const { eventId, responseText } = await logClearFlag(userId, screenedReply?.category ?? ("passive_ideation" as SafetyTriggerCategory), text, surface);
     return { triggered: true, isBacktrackFollowUp: false, category: screenedReply?.category ?? ("passive_ideation" as SafetyTriggerCategory), tier: "clear", responseText, eventId };
+  }
+
+  // "I don't want to be here anymore", bare or inside a complaint, first time
+  // or repeated: ask first, every time (Donald, Nov 26). Checked by its
+  // words before any screening, so nothing can route around it. Explicit
+  // words (die, kill myself, end my life, suicide...) still get the full
+  // message right away.
+  if (BARE_HERE.test(text) && !EXPLICIT_RISK.test(withoutTaskKill(text))) {
+    const event = await storage.createSafetyEvent({
+      userId, category: "passive_ideation" as SafetyTriggerCategory, responseType: "primary", triggeringMessage: text, surface, alertSent: false, tier: "check_in",
+    });
+    return { triggered: true, isBacktrackFollowUp: false, category: "passive_ideation" as SafetyTriggerCategory, tier: "check_in", responseText: HERE_CHECK, eventId: event.id };
   }
 
   if (openPrimaryFlag && BACKTRACK_PHRASES.test(text)) {
@@ -281,6 +305,24 @@ export async function evaluateSafetyReply(
   let responseText: string;
 
   const result = await screen(ctx.reply, recent);
+  if (lastJai.includes(HERE_CHECK_MARK) && !EXPLICIT_RISK.test(ctx.reply)) {
+    // Journal answer to the ask-first question: the app or the goal is a
+    // normal answer; bigger, unsure, or unclear gets the full message.
+    const aboutApp = (ABOUT_TASK.test(ctx.reply) || namesTopicFrom(ctx.reply, ctx.triggerText)) && !BIGGER.test(ctx.reply);
+    const pushback = /\b(where did (that|this) come from|why (are|did) you (ask|say)|what do you mean|what was that|huh|wtf)\b/i.test(ctx.reply) && !BIGGER.test(ctx.reply);
+    if (aboutApp || pushback) {
+      outcome = "clarified_no_risk";
+      responseText = aboutApp
+        ? "Thank you for telling me. That's about this, not something bigger, and I hear it. We can keep it small from here."
+        : "I asked because you wrote that you don't want to be here anymore, and I'd rather check than guess. If it's about this journal or your goal, we can keep going, smaller.";
+      if (ctx.eventId) await storage.updateSafetyEvent(ctx.eventId, { outcome }).catch(() => {});
+      return { outcome, responseText };
+    }
+    outcome = "escalated";
+    responseText = (await logClearFlag(userId, result?.category ?? ("passive_ideation" as SafetyTriggerCategory), ctx.reply, ctx.surface)).responseText;
+    if (ctx.eventId) await storage.updateSafetyEvent(ctx.eventId, { outcome }).catch(() => {});
+    return { outcome, responseText };
+  }
   if (result?.tier === "clear") {
     outcome = "escalated";
     responseText = (await logClearFlag(userId, result.category, ctx.reply, ctx.surface)).responseText;

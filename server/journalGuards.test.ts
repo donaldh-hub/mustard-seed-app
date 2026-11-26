@@ -73,7 +73,9 @@ test("evening step always starts with Tomorrow/Tonight", () => {
 
 test("follow-up reply: no effort talk, no repeated Heartbeat", () => {
   const reflection = "Feeling like you can't tell left from right makes it hard to notice much, and that's okay. This is where Clarity of Vision & Why starts.";
-  assert.equal(enforceAckRules("Feeling disoriented can be overwhelming. Your focus on Clarity of Vision & Why is a starting point.", reflection), "Feeling disoriented can be overwhelming.");
+  assert.equal(enforceAckRules("Left and right feel mixed up right now. Your focus on Clarity of Vision & Why is a starting point.", reflection), "Left and right feel mixed up right now.");
+  // "overwhelming" only if they said it.
+  assert.doesNotMatch(enforceAckRules("Feeling disoriented can be overwhelming. Left and right feel mixed up right now.", reflection, "I cant tell left from right"), /overwhelm/);
   assert.equal(enforceAckRules("It sounds like everything feels upside down right now, and you're surprised you're managing to get through it. That's real.", reflection), "It sounds like everything feels upside down right now. That's real.");
   assert.doesNotMatch(enforceAckRules("Left and right feel mixed up. Getting it done anyway was an achievement in itself.", reflection), /achievement/);
 });
