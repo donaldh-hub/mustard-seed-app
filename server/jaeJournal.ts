@@ -118,7 +118,6 @@ function journalFollowUpQuestions(dayNumber: 1 | 2 | 3, morning: string[], eveni
       evening[0] ? `Ask what made that moment of peace safe enough to notice ${words(evening[0])}.` : "",
       evening[1] ? `Ask how long what they're ready to let go of has been sitting with them ${words(evening[1])}.` : "",
       "What's the difference between what deserved your energy today and what actually got it?",
-      "If you gave yourself full permission to slow down tomorrow, what would you do differently?",
       "What's one thing today that felt urgent but wasn't actually important?",
       "What would it look like to protect tomorrow's energy before the day starts, not after it's already gone?",
     ].filter(Boolean);
@@ -315,7 +314,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
   try {
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
     return {
-      reflection: parsed.reflection ?? "",
+      reflection: withStake(parsed.reflection ?? "", [...ctx.prompts.map((p) => p.response ?? ""), ...(ctx.previousEntries ?? []).map((e) => e.answers ?? "")]),
       followUpQuestion: parsed.followUpQuestion ?? "",
       keyTheme: realValue(parsed.keyTheme),
       releasePoint: realValue(parsed.releasePoint),
@@ -377,6 +376,7 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - They may speak freely, including profanity. Never comment on, correct, or shame the language; respond to the meaning and the feeling. Don't swear yourself. Swearing is a tone signal (frustration, overwhelm), never a topic.
 - If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question what you're missing or what would help. Don't keep coaching past it.
 - If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
+- Never comment on their effort or on how they are coping or getting through it (no "you're managing", "getting through it", "an achievement", "in itself"); talk about what they said, not how well they are doing.
 - If their answer may be sarcastic or exasperated, don't praise effort or call it good news (never "impressive", "proud of you", "great job", "keep pushing", "push through", "you're still managing"); reflect the overwhelm in plain words close to theirs (no new labels).${ctx.reflection ? `
 - Your reflection is already on screen right above this reply (do NOT restate, copy or reuse any of its sentences; write only new words about their answer, and don't name a Heartbeat it named): ${ctx.reflection}` : ""}
 - If they share something honest or hard about the situation around their goal (e.g. a job they don't like), acknowledge that feeling first in one calm, non-judging sentence. Never tell them to change their situation.
@@ -394,7 +394,7 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
       max_tokens: 120,
     });
     const raw = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
-    const reply = withoutEcho(raw, ctx.reflection);
+    const reply = withoutEffort(withoutEcho(raw, ctx.reflection));
     if (!reply) console.warn("[JOURNAL] follow-up ack came back empty or only echoed the reflection; using fallback");
     return reply || FOLLOW_UP_ACK_FALLBACK;
   } catch (err) {
@@ -439,4 +439,26 @@ const AT_JAI = /\b(fuck (you|off|this app)|you('?re| are)? not (\w+ )?(listening
 export function angerAtJaiFrom(prompts: { prompt: string; response: string }[]): string {
   const hit = prompts.map((p) => p.response ?? "").find((r) => AT_JAI.test(r));
   return hit ? `User pushed back on Jai or the app: ${hit.trim().slice(0, 200)}` : "";
+}
+
+// The model sometimes skips a stake the user named ("I almost got fired").
+// If their words name it and the reflection doesn't, name it back once.
+const JOB_STAKE = /\b((almost|nearly) (got|get|been|getting) (\w+ )?fired|(almost|nearly) lost (my|the) job|(could|might|gonna|going to) (lose|get fired from) (my|the) job)\b/i;
+export function withStake(reflection: string, answers: string[]): string {
+  if (!answers.some((a) => JOB_STAKE.test(a)) || /\b(job|fired|work)\b/i.test(reflection)) return reflection;
+  return `${reflection.trim()} You came close to losing the job. That's real.`.trim();
+}
+
+// Drops any sentence that comments on effort or coping ("you're managing to
+// get through it", "an achievement in itself"); Jai talks about what they said.
+const EFFORT = /\b(managing|manage to|get(ting)? through|push(ing)? through|keep (going|pushing)|impressive|proud of you|achievement|in itself|great job|well done|that takes (strength|courage))\b/i;
+export function withoutEffort(reply: string): string {
+  const kept = (reply.match(/[^.!?]+[.!?]*/g) ?? [reply]).map((sentence) => {
+    if (!EFFORT.test(sentence)) return sentence;
+    // Keep the part before ", and/but …" when only the tail is about effort.
+    const head = sentence.split(/,\s*(?:and|but)\s+/i)[0];
+    return head !== sentence && !EFFORT.test(head) ? `${head.replace(/\s+$/, "")}.` : "";
+  });
+  const out = kept.join("").trim();
+  return out.length < 20 ? "" : out;
 }

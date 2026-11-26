@@ -74,7 +74,7 @@ const ack = await generateFollowUpAck({
   reflection,
 });
 console.log(`\n(e) sarcastic follow-up reply\n  Jai: ${ack}`);
-check(!/(great|good|proud|awesome|impressive|amazing|well done).{0,40}(push|getting|done|keep|manag)|push(ing)? through|keep (going|pushing)/i.test(ack), "no praise for effort on a sarcastic line");
+check(!/(great|good|proud|awesome|impressive|amazing|well done).{0,40}(push|getting|done|keep|manag)|push(ing)? through|keep (going|pushing)|managing|get(ting)? through|achievement|in itself/i.test(ack), "no comment on effort or coping");
 check(!/\bchaos|chaotic\b/i.test(ack), "no new labels (e.g. chaos)");
 check(!/is a step toward/i.test(ack) && !ack.includes("Clarity of Vision & Why"), "doesn't repeat the reflection's phrasing or Heartbeat");
 
