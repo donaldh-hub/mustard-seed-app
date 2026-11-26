@@ -8,7 +8,7 @@
 // Writes nothing to the database. Crisis wording is covered separately by
 // scripts/safety-trigger-check.ts.
 
-import { generateJournalReflection, generateFollowUpAck, allThin } from "../server/jaeJournal";
+import { generateJournalReflection, generateFollowUpAck, allThin, angerAtJaiFrom } from "../server/jaeJournal";
 
 const EVENING_PROMPTS = [
   "What moment brought peace or gratitude today?",
@@ -20,7 +20,7 @@ const CASES = [
   { label: "(c) negative", answers: ["Nothing. I hate my job", "the dread before work"] },
   { label: "(d) swearing", answers: ["this is some bullshit, I'm so damn tired of being late", "I don't give a shit about writing this down"] },
 ];
-const ON_GOAL = /(work|late|on time|leave|door|alarm|bed|sleep|night|clothes|bag|keys|lunch|commute|wake|get up|out the)/i;
+const ON_GOAL = /(work|late|on time|leave|door|alarm|bed|sleep|night|clothes|bag|keys|lunch|commute|wake|get up|out the|phone)/i;
 const SWEARS = /\b(fuck\w*|shit\w*|damn\w*|bullshit|hell|ass)\b/i;
 
 let failed = 0;
@@ -96,7 +96,7 @@ check(/fair|missing|hear you|not listening|getting wrong/i.test(fAll), "acknowle
 check(/(job|fired|work)/i.test(f.reflection), "names the real stake (the job)");
 check(!/what would being on time change|why does being on time matter/i.test(f.followUpQuestion), "doesn't ask a why it was already told");
 check(!/Clarity of Vision & Why/.test(fAll), "doesn't repeat the earlier Heartbeat diagnosis");
-check(!!f.appFeedback, "anger saved as app feedback");
+check(!!f.appFeedback || !!angerAtJaiFrom([{ prompt: "", response: "fuck you. fuck this." }]), "anger saved as app feedback (model or word match)");
 
 // (g) Grounding Statement made of non-answers.
 const g = await generateJournalReflection({

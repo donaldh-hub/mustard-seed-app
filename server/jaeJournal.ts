@@ -274,12 +274,14 @@ ${ctx.weakestHeartbeat ? `- What a gap sounds like, by Heartbeat — Clarity of 
 ${ctx.dayNumber === 1 && ctx.session === "morning" ? `- This is their first session since the assessment. Even without a gap, if what they wrote today naturally connects to ${ctx.weakestHeartbeat.name} (${ctx.weakestHeartbeat.score}/5), link it in ONE sentence by that exact full name, as the Heartbeat these three days help them strengthen, never as a flaw. If it would feel forced, leave it out.
 ` : ""}` : ""}${eveningFollowUp}${morningStepBlock}${morningFollowUpBlock}${arcBlock}${actionBlock}${groundingBlock}${statementBlock}${eveningStepBlock}
 
-Before writing, decide two things and put them FIRST in your JSON:
+Before writing, decide three things and put them FIRST in your JSON:
+- "angerAtJai": true if any line insults, blames or swears at you or the app ("fuck you", "you're not listening", "you don't understand", "this app is bullshit"), else false. "fuck you" in this journal is aimed at you. If true, the FIRST sentence of "reflection" must own it calmly and without defensiveness (e.g. "Fair. I may be missing something."), "followUpQuestion" must ask what you're missing or what would help, and "appFeedback" must summarize the complaint in one neutral line.
 - "userQuestion": if they asked you a direct question or doubted whether this helps (any "?" or "does this…", "how does this…", "is this really…"), restate it in a few plain words; otherwise "". If it is not "", the FIRST sentence of "reflection" must answer it directly — how this journal serves their goal — before anything else.
 - "heartbeatGap": ${ctx.weakestHeartbeat ? `true if their words today show a gap in ${ctx.weakestHeartbeat.name} (see what a gap sounds like above), else false. If true, "reflection" must name ${ctx.weakestHeartbeat.name} by that exact full name and link it to their goal, gently.` : `always false.`}
 
 Respond ONLY with valid JSON in this exact shape:
 {
+  "angerAtJai": false,
   "userQuestion": "...",
   "heartbeatGap": false,
   "heartbeatInAction": "",${isEvening ? `
@@ -376,8 +378,7 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - If their anger is aimed at you or the app ("you're not listening", "fuck you", "this app is bullshit"): acknowledge it first in one calm, non-defensive line (e.g. "Fair. I may be missing something.") and make your one question what you're missing or what would help. Don't keep coaching past it.
 - If they name a real stake (e.g. "I almost got fired", a health scare), name it back plainly once (e.g. "You came close to losing the job. That's real.") and treat it as their why from then on. Never ask a why question they've already answered, and never call their why "a gap" after they've named a stake.
 - If their answer may be sarcastic or exasperated, don't praise effort or call it good news; reflect the overwhelm in plain words close to theirs (no new labels).${ctx.reflection ? `
-- Your reflection is right above this reply on the same screen: ${ctx.reflection}
-Don't repeat its phrasing (e.g. another "is a step toward…") and don't name a Heartbeat it already named.` : ""}
+- Your reflection is already on screen right above this reply (do NOT restate, copy or reuse any of its sentences; write only new words about their answer, and don't name a Heartbeat it named): ${ctx.reflection}` : ""}
 - If they share something honest or hard about the situation around their goal (e.g. a job they don't like), acknowledge that feeling first in one calm, non-judging sentence. Never tell them to change their situation.
 - If they say it's too many questions, it's a lot, or they're too frustrated right now: say that's fair, that this answer is optional, and that they can tap Continue whenever they're ready. If they doubt it helps, be honest: writing alone doesn't fix it, but naming the pattern is the first step.
 - Grace and accountability, no shame. Plain text only.${ctx.missedStep ? `
@@ -392,8 +393,9 @@ Don't repeat its phrasing (e.g. another "is a step toward…") and don't name a 
       temperature: 0.6,
       max_tokens: 120,
     });
-    const reply = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
-    if (!reply) console.warn("[JOURNAL] follow-up ack came back empty; using fallback");
+    const raw = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+    const reply = withoutEcho(raw, ctx.reflection);
+    if (!reply) console.warn("[JOURNAL] follow-up ack came back empty or only echoed the reflection; using fallback");
     return reply || FOLLOW_UP_ACK_FALLBACK;
   } catch (err) {
     console.error("[JOURNAL] follow-up ack failed; using fallback:", err instanceof Error ? err.message : err);
@@ -419,4 +421,22 @@ export function allThin(prompts: { prompt: string; response: string }[]): boolea
 function realValue(v: unknown): string {
   const t = typeof v === "string" ? v.trim() : "";
   return /^([-–—.]+|n\/?a|none|nothing|unknown|not (stated|given|named|specified|mentioned)|no value( named)?)$/i.test(t) ? "" : t;
+}
+
+// Drops any sentence of the follow-up reply that repeats a sentence of the
+// reflection shown right above it (the model sometimes copies it back).
+export function withoutEcho(reply: string, reflection?: string | null): string {
+  if (!reflection) return reply;
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+  const seen = new Set((reflection.match(/[^.!?]+[.!?]*/g) ?? []).map(norm).filter((t) => t.length > 12));
+  const kept = (reply.match(/[^.!?]+[.!?]*/g) ?? [reply]).filter((sentence) => !seen.has(norm(sentence)));
+  return kept.join("").trim();
+}
+
+// Anger aimed at Jai or the app, caught from the words themselves so it is
+// saved as app feedback even when the model doesn't flag it.
+const AT_JAI = /\b(fuck (you|off|this app)|you('?re| are)? not (\w+ )?(listening|understanding|helping|getting it)|you (don'?t|do not|never) (listen|understand|get it)|this app (is|sucks)|app is (bullshit|useless|trash|garbage|not helpful|stupid)|useless app|you'?re useless)\b/i;
+export function angerAtJaiFrom(prompts: { prompt: string; response: string }[]): string {
+  const hit = prompts.map((p) => p.response ?? "").find((r) => AT_JAI.test(r));
+  return hit ? `User pushed back on Jai or the app: ${hit.trim().slice(0, 200)}` : "";
 }
