@@ -7,6 +7,7 @@ import { generateDepthResponse } from "./jaeCoach";
 import { readMoment, readMomentByWords, ANSWER_THE_MOMENT } from "./momentReader";
 import { buildMemoryCards, memoryContextLines } from "./memoryCards";
 import { generateJournalReflection, generateFollowUpAck, FOLLOW_UP_ACK_FALLBACK, STEP_CHECK_PREFIX, allThin, angerAtJaiFrom, CORRECTS, fixNoticed, fixFeeling } from "./jaeJournal";
+import { flaggedResponses } from "./journalGuards";
 // The prompt label a one-line Grounding Statement is saved under.
 const STATEMENT_PROMPT = "Your Grounding Statement";
 import { generateRebuildReflection, type RebuildInstanceType } from "./jaeRebuild";
@@ -3602,8 +3603,12 @@ export async function registerRoutes(
   function journalReflectionContext(
     previous: GroundingJournalEntry[], dayNumber: number, session: string,
   ) {
-    const answers = (e: GroundingJournalEntry) =>
-      ((e.prompts as { prompt: string; response: string }[]) ?? []).map((p) => p.response).filter(Boolean).join(" / ");
+    // An answer that raised a safety check isn't carried into later days.
+    const answers = (e: GroundingJournalEntry) => {
+      const rs = ((e.prompts as { prompt: string; response: string }[]) ?? []).map((p) => p.response).filter(Boolean);
+      const flagged = e.safetyTier ? new Set(flaggedResponses(rs)) : new Set<string>();
+      return rs.filter((r) => !flagged.has(r)).join(" / ");
+    };
     const morning = session === "evening" ? previous.find((e) => e.dayNumber === dayNumber && e.session === "morning") : undefined;
     const latestStep = [...previous].filter((e) => e.session === "evening" && e.nextStep).sort((a, b) => b.dayNumber - a.dayNumber)[0]?.nextStep ?? null;
     return {
@@ -3977,6 +3982,7 @@ export async function registerRoutes(
           prompts,
           ...journalReflectionContext(previous, dayNumber, session),
           ...context,
+          safetyClarified: text,
         });
         updates = {
           ...updates,

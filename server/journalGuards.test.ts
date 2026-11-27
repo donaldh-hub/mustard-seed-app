@@ -169,3 +169,46 @@ test("after 'i hate being told how to feel', the question is about the action", 
   );
   assert.doesNotMatch(r.followUpQuestion, /feel/i);
 });
+
+// ── Pass 6: from the Nov 27 live retest ────────────────────────────────────
+import { isEitherOr, answerNamesChoice, withoutRepeatOf, triggerOnlyWords, mentionsAny, flaggedResponses } from "./journalGuards.ts";
+
+test("either/or question: 'Yes.' is dropped so the answer names the choice", () => {
+  const q = "do i need a whole bedtime routine or is the phone thing enough? yes or no";
+  assert.equal(isEitherOr(q), true);
+  assert.equal(
+    answerNamesChoice("Yes. The phone thing is enough for now since it's helping you get to bed earlier.", q),
+    "The phone thing is enough for now since it's helping you get to bed earlier.",
+  );
+});
+
+test("a plain yes/no question keeps its Yes", () => {
+  const q = "should i skip coffee after 2pm, yes or no?";
+  assert.equal(isEitherOr(q), false);
+  assert.equal(answerNamesChoice("Yes. It can help.", q), "Yes. It can help.");
+  assert.equal(isEitherOr("should i keep going or not?"), false);
+});
+
+test("the reflection doesn't repeat the answer", () => {
+  const answer = "The phone thing is enough for now since it's helping you get to bed earlier, and you can build on that progress.";
+  const reflection = "The phone in the kitchen is a small step that's helping you get to bed earlier, and you can build on that progress. Getting to bed at 11:20 is real growth.";
+  const out = withoutRepeatOf(reflection, answer);
+  assert.ok(!/build on that progress/.test(out), out);
+  assert.match(out, /11:20/);
+});
+
+test("after 'nothing bigger': words only the flagged line used are found", () => {
+  const responses = ["peace? lol nothing", "this garden is killing me. I don't want to be here anymore."];
+  const flagged = flaggedResponses(responses);
+  assert.deepEqual(flagged, [responses[1]]);
+  const stems = triggerOnlyWords(flagged, ["getting my sleep back on track", "no, nothing bigger. just tired of being tired"]);
+  assert.equal(mentionsAny("How long has the feeling about the garden been sitting with you?", stems), true);
+  assert.equal(mentionsAny("Feeling trapped by the garden", stems), true);
+  assert.equal(mentionsAny("Tomorrow, put your phone on the kitchen charger by 10:30.", stems), false);
+  assert.equal(mentionsAny("What would make tomorrow night a little easier for your sleep?", stems), false);
+});
+
+test("the goal's own words are never treated as trigger words", () => {
+  const stems = triggerOnlyWords(["this book is killing me, i don't want to be here"], ["finish the first chapter of my book", "nothing bigger"]);
+  assert.equal(mentionsAny("Tomorrow, write one paragraph of the book.", stems), false);
+});

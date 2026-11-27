@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings, withoutInventedReasons } from "./journalGuards";
+import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings, withoutInventedReasons, answerNamesChoice, withoutRepeatOf, isEitherOr, triggerOnlyWords, mentionsAny, flaggedResponses } from "./journalGuards";
 export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
@@ -41,6 +41,10 @@ export interface JournalSessionContext {
   intention?: string | null;
   // Morning only: the small step Jai suggested last night, if any.
   yesterdayStep?: string | null;
+  // Set when this entry raised a safety check and they then said it's
+  // nothing bigger: their reply to the check. The flagged sentence is read as
+  // frustration, never built on (see scrubClarified).
+  safetyClarified?: string | null;
 }
 
 export interface JournalJaeResponse {
@@ -155,9 +159,9 @@ export async function generateJournalReflection(
   // A direct question typed into a field is answered first, in plain words,
   // by its own small call (so it's never skipped).
   const userQ = directQuestion(ctx.prompts.map((p) => p.response ?? ""));
-  const answer = userQ ? await answerJournalQuestion(userQ, ctx).catch(() => "") : "";
-  const r = await generateJournalReflectionInner(ctx, userQ);
-  if (answer) r.reflection = `${answer} ${r.reflection}`.trim();
+  const answer = userQ ? answerNamesChoice(await answerJournalQuestion(userQ, ctx).catch(() => ""), userQ) : "";
+  const r = await generateJournalReflectionInner(ctx, userQ, answer);
+  if (answer) r.reflection = `${answer} ${withoutRepeatOf(r.reflection, answer)}`.trim();
   // First seed: their carry-forward (then nurture) answer, turned into one
   // concrete action in their words ("the membership price. i'm finding out by
   // friday" -> "Ask what the membership costs and decide by Friday").
@@ -198,7 +202,28 @@ export async function generateJournalReflection(
       }
     }
   }
+  if (ctx.safetyClarified) await scrubClarified(r, ctx);
   return r;
+}
+
+// After "nothing bigger": the question, release point and steps come from
+// their goal and their reply, never from words only the flagged sentence
+// used. A slip is redone once from the goal, else dropped.
+async function scrubClarified(r: JournalJaeResponse, ctx: JournalSessionContext): Promise<void> {
+  const responses = ctx.prompts.map((p) => p.response ?? "");
+  const stems = triggerOnlyWords(flaggedResponses(responses), [ctx.intention ?? "", ctx.safetyClarified ?? ""]);
+  if (stems.size === 0) return;
+  const bad = (t?: string | null) => !!t && mentionsAny(t, stems);
+  if (bad(r.followUpQuestion)) r.followUpQuestion = "";
+  if (bad(r.releasePoint)) r.releasePoint = "";
+  if (bad(r.keyTheme)) r.keyTheme = "";
+  r.reflection = r.reflection.split(/(?<=[.!?])\s+/).filter((x) => !bad(x)).join(" ").trim();
+  r.nextStepOptions = (r.nextStepOptions ?? []).filter((o) => !bad(o));
+  if (ctx.session === "evening" && bad(r.nextStep)) {
+    const prior = (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean);
+    const redo = await redoStep(ctx, [ctx.safetyClarified ?? ""], prior).catch(() => "");
+    r.nextStep = redo && !bad(redo) ? redo : (r.nextStepOptions.shift() ?? "");
+  }
 }
 
 const RHETORICAL = /\b(listening|understand(ing)?|fuck\w*|bullshit|wtf|kidding me)\b/i;
@@ -249,7 +274,7 @@ async function answerJournalQuestion(question: string, ctx: JournalSessionContex
     temperature: 0.4,
     max_tokens: 90,
     messages: [
-      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. If they ask yes or no, start with "Yes." or "No." and one reason; if it truly depends, start with "It depends on …" in one sentence instead. Never "No. It depends" or "Yes, but it depends". No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. ${isEitherOr(question) ? `This is an either/or question: answer by naming which one in the first words (e.g. "The phone thing is enough for now, because…"); never start with "Yes." or "No.", even if they added "yes or no".` : `If they ask yes or no, start with "Yes." or "No." and one reason;`} if it truly depends, start with "It depends on …" in one sentence instead. Never "No. It depends" or "Yes, but it depends". No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
       { role: "user", content: `Their question: ${question}\nWhat they wrote today: ${said}\nEarlier: ${earlier.slice(0, 1200)}` },
     ],
   });
@@ -262,6 +287,7 @@ async function answerJournalQuestion(question: string, ctx: JournalSessionContex
 async function generateJournalReflectionInner(
   ctx: JournalSessionContext,
   userQ: string,
+  answer = "",
 ): Promise<JournalJaeResponse> {
   const prevSummary = (ctx.previousEntries ?? [])
     .map(
@@ -277,7 +303,8 @@ async function generateJournalReflectionInner(
   // repeat the same diagnosis three times.
   const namedBefore = HEARTBEAT_FULL_NAMES.filter((h) => (ctx.previousEntries ?? []).some((e) => (e.jaeReflection ?? "").includes(h)));
 
-  const questionNote = userQ ? `\nThey asked: "${userQ}". It is answered separately, right before your reflection; don't answer or restate it.\n` : "";
+  const questionNote = (userQ ? `\nThey asked: "${userQ}". It is answered separately, right before your reflection${answer ? `, as: "${answer}"` : ""}; don't answer it again or repeat any of that answer's points.\n` : "")
+    + (ctx.safetyClarified ? `\nOne of these answers raised a safety check, and they said it's nothing bigger: "${ctx.safetyClarified}". Read that line as frustration with their goal. Never quote it, and never build your followUpQuestion, releasePoint or step on its words; build them on their goal and what they just told you.\n` : "");
   const responseBlock = ctx.prompts
     .map((p) => `Prompt: ${p.prompt}\nResponse: ${p.response}`)
     .join("\n\n");
