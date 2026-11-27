@@ -282,6 +282,7 @@ export interface ReplyCheckContext {
   afterSafetyText?: string; // what they said that led to it
   goalPlanted?: boolean; // a goal record exists
   currentStep?: string; // the step already set (its size is kept)
+  theirWords?: string; // their recent messages, joined
 }
 
 // Drops sentences that are never okay, whatever the state.
@@ -346,6 +347,8 @@ export function checkChatReply(reply: string, moment: Moment, c: ReplyCheckConte
     if (/\?$/.test(first)) problems.push("they asked you to just tell them: answer in your FIRST sentence with one clear answer; don't turn it into a question");
     if (/\byes or no\b/i.test(c.userText) && !/^(yes|no|it depends)\b/i.test(first)) problems.push('they asked yes or no: start with "Yes." or "No." (or "It depends on …")');
   }
+  if (/\bhow (do|did|does|would|might) (you|that|this|it) (feel|make you feel)|\bfeel more\b|\bhow are you feeling\b/i.test(reply) && FEEL_PUSHBACK_CHAT.test(`${c.userText} ${c.recentJai.length ? c.theirWords ?? "" : ""}`)) problems.push("they hate being told how to feel: ask about the action or the situation, never their feelings");
+  if (/^(yes|no)[.,!]?\s+it depends\b/i.test(reply)) problems.push('don\'t say "Yes/No. It depends": pick one with a reason, or start with "It depends on …"');
   if (/\bwhat do you mean\b/i.test(reply) && goalClauseFrom(c.userText)) problems.push("they stated their goal clearly; don't ask what they mean");
   if (c.goalPlanted === false && /\b(it'?s planted|is planted|planted it|is set( up)?|it'?s set|locked in|your goal is now|as your goal|goal is saved)\b/i.test(reply)) {
     problems.push("no goal is planted yet: don't say or imply it is; say it isn't set up yet and offer to plant it now");
@@ -386,3 +389,5 @@ function sameQuestion(a: string, b: string): boolean {
 // "just tell me what to buy first", "answer it", "yes or no".
 export const DIRECT_ASK = /^(do i|should i|is it|can i)\b|\b(just tell me|tell me what|answer (it|me|the question)|yes or no|what do i (buy|do|need|use|get) first|which (one|is better|first)|soil or seeds)\b/i;
 const FEELING_WORDS = /\b(overwhelm\w*|stress\w*|anxi\w*|discourag\w*|hopeless\w*|defeat\w*|depress\w*|burn(ed|t) out)\b/i;
+
+const FEEL_PUSHBACK_CHAT = /\b(hate|don'?t like|stop|quit) (being told|telling me) how (to|i) feel|\bstop asking (me )?how i feel|\bdon'?t tell me how (to|i) feel/i;

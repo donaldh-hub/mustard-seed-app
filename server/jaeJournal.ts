@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings } from "./journalGuards";
+import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings, withoutInventedReasons } from "./journalGuards";
 export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
@@ -158,6 +158,19 @@ export async function generateJournalReflection(
   const answer = userQ ? await answerJournalQuestion(userQ, ctx).catch(() => "") : "";
   const r = await generateJournalReflectionInner(ctx, userQ);
   if (answer) r.reflection = `${answer} ${r.reflection}`.trim();
+  // First seed: their carry-forward (then nurture) answer, turned into one
+  // concrete action in their words ("the membership price. i'm finding out by
+  // friday" -> "Ask what the membership costs and decide by Friday").
+  if (ctx.session === "grounding_statement") {
+    const [, nurture = "", carry = ""] = ctx.prompts.map((p) => p.response ?? "");
+    const real = (a: string) => a.trim().split(/\s+/).length >= 2 && !/\b(idk|don'?t know|if i know|not sure|nothing|no idea|whatever|dunno)\b/i.test(a);
+    const source = [carry, nurture].find(real);
+    if (source) {
+      const seed = await seedFromTheirWords(source, ctx.intention ?? "").catch(() => "");
+      const stems = new Set((source.toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.slice(0, 5)));
+      if (seed && (seed.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => stems.has(w.slice(0, 5))) && !RESEARCH.test(seed)) r.possibleFirstSeed = seed;
+    }
+  }
   // A step that still lands on an overloaded evening or repeats an earlier
   // day gets one focused redo.
   if (ctx.session === "evening" && r.nextStep) {
@@ -201,6 +214,19 @@ export function directQuestion(answers: string[]): string {
   return "";
 }
 
+async function seedFromTheirWords(answer: string, goal: string): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0.2,
+    max_tokens: 40,
+    messages: [
+      { role: "system", content: `Turn what this person said they'll carry forward into ONE concrete action, in their words as much as possible, under 14 words, starting with a verb, no "Tomorrow,". Keep their specifics (prices, days, names). Never research, planning, or reflecting unless that is literally what they said. Their goal: ${goal || "(not stated)"}. Example: "the membership price. i'm finding out by friday" -> "Ask what the membership costs and decide by Friday." Reply with the action only.` },
+      { role: "user", content: answer },
+    ],
+  });
+  return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "").replace(/^./, (c) => c.toUpperCase());
+}
+
 async function redoStep(ctx: JournalSessionContext, answers: string[], prior: string[], doing = false): Promise<string> {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
@@ -223,11 +249,13 @@ async function answerJournalQuestion(question: string, ctx: JournalSessionContex
     temperature: 0.4,
     max_tokens: 90,
     messages: [
-      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. If they ask yes or no, start with "Yes." or "No." (or, if it truly depends, "It depends on …" in one sentence). No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. If they ask yes or no, start with "Yes." or "No." and one reason; if it truly depends, start with "It depends on …" in one sentence instead. Never "No. It depends" or "Yes, but it depends". No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
       { role: "user", content: `Their question: ${question}\nWhat they wrote today: ${said}\nEarlier: ${earlier.slice(0, 1200)}` },
     ],
   });
-  const out = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+  let out = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
+  // "No. It depends…" contradicts itself: keep the "It depends on…" line.
+  out = out.replace(/^(yes|no)[.,!]?\s+(it depends\b)/i, (_m, _yn, dep) => dep.charAt(0).toUpperCase() + dep.slice(1));
   return keepStepSize(out, latest);
 }
 
@@ -410,7 +438,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       releasePoint: realValue(parsed.releasePoint),
       valueNamed: realValue(parsed.valueNamed),
       possibleFirstSeed: parsed.possibleFirstSeed ?? "",
-      focusSummary: ctx.session === "morning" && !/\b(overshadow\w*|getting in the way|struggl\w*|frustrat\w*|concerns?|worr\w*|doubt\w*|complain\w*)\b/i.test(parsed.focusSummary ?? "") ? (parsed.focusSummary ?? "") : "",
+      focusSummary: ctx.session === "morning" && withoutInventedReasons(parsed.focusSummary ?? "", [...ctx.prompts.map((p) => p.response ?? ""), ...(ctx.previousEntries ?? []).map((e) => e.answers ?? "")]) === (parsed.focusSummary ?? "").trim() && !/\b(overshadow\w*|getting in the way|struggl\w*|frustrat\w*|concerns?|worr\w*|doubt\w*|complain\w*)\b/i.test(parsed.focusSummary ?? "") ? (parsed.focusSummary ?? "") : "",
       userQuestion: typeof parsed.userQuestion === "string" ? parsed.userQuestion : "",
       heartbeatGap: parsed.heartbeatGap === true,
       nextStep: isEvening && typeof parsed.nextStep === "string" ? parsed.nextStep.trim() : "",

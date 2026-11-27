@@ -142,3 +142,30 @@ test("'Yes, I did it' names the step; minutes match the set step", () => {
   assert.match(r.reflection, /write one sentence before bed, and you did/);
   assert.doesNotMatch(r.reflection, /10 minutes/);
 });
+
+test("sarcasm isn't sincere; Release/Theme never invented", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Ok.", keyTheme: "Finding peace", releasePoint: "The need for external validation", valueNamed: "gratitude" },
+    { ...input, answers: ["peace? lol. the gym parking lot", "gratitude? lol"] },
+  );
+  assert.equal(r.keyTheme, "");
+  assert.equal(r.releasePoint, "");
+  assert.equal(r.valueNamed, "");
+});
+
+test("no invented reason; the miss is named first in their words", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "You noticed the real challenge is getting through the door. Health is the reason." },
+    { ...input, answers: ["never went. sat in the car outside, annoyed", "my doctor said so"] },
+  );
+  assert.match(r.reflection, /^You said it plainly: never went/);
+  assert.doesNotMatch(r.reflection, /Health is the reason/);
+});
+
+test("after 'i hate being told how to feel', the question is about the action", () => {
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Ok.", followUpQuestion: "What might help you feel more at ease when you approach the gym door?" },
+    { ...input, answers: ["i hate being told how to feel"] },
+  );
+  assert.doesNotMatch(r.followUpQuestion, /feel/i);
+});
