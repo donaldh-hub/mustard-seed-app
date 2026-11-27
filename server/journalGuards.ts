@@ -7,7 +7,7 @@
 export const HEARTBEATS = ["Clarity of Vision & Why", "Small Steps + Consistency", "Mindset over Method", "Feedback & Adaptation", "Courageous Action"];
 
 const SWEARS = /\b(fuck\w*|shit\w*|damn\w*|bullshit|hell|ass)\b/i;
-const TEMPLATES = /this is a sign|had some hope in it|\bthis journal (helps|is here|is about|is meant|is designed|can help)|\bnaming (the |a )?pattern|\b(language|watch your|profan\w*)\b|is a step toward|\bchao(s|tic)\b/i;
+const TEMPLATES = /this is a sign|mindset shift|key part of moving forward|how the seed grows|that'?s the discipline|had some hope in it|\bthis journal (helps|is here|is about|is meant|is designed|can help)|\bnaming (the |a )?pattern|\b(language|watch your|profan\w*)\b|is a step toward|\bchao(s|tic)\b/i;
 const PACE = /\b(quick(ly)?|fast|rushed|hurried)\b/i;
 const CHANGE_SITUATION = /\b(quit|find a new job|change jobs|new job)\b/i;
 const CANNED_QUESTION = /full permission to slow down/i;
@@ -87,11 +87,21 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
   let reflection = clean(r.reflection, paceOk);
   // Feelings only in their words: never "overwhelmed" (etc.) unless they said it.
   reflection = withoutInventedFeelings(reflection, all);
+  // No invented reasons ("Health is the reason" when they said "my doctor said so").
+  reflection = withoutInventedReasons(reflection, all);
+  // Own the miss: if they didn't do it, the first sentence says so in their words.
+  const missed = g.answers.map((a) => a.split(/(?<=[.!?])\s+/).find((x) => MISS.test(x))).find(Boolean)
+    ?? (g.stepCheck && /^(not yet|partly|no)\b/i.test(g.stepCheck.status) ? `${g.stepCheck.status.toLowerCase()} on last night's step` : "");
+  if (missed && !MISS_NAMED.test(sentences(reflection)[0] ?? "")) {
+    reflection = `You said it plainly: ${missed.trim().replace(/[.!]+$/, "").replace(/^./, (c) => c.toLowerCase())}. ${reflection}`.trim();
+  }
   const priorSentences = (g.priorReflections ?? []).flatMap((t) => sentences(t));
   const fresh = join(sentences(reflection).filter((s) => !priorSentences.some((p) => sameLine(p, s))));
   if (fresh) reflection = fresh;
   if (!g.userAsked) reflection = join(sentences(reflection).filter((s) => !/\byour question\b/i.test(s)));
   let question = CANNED_QUESTION.test(r.followUpQuestion) ? "" : clean(r.followUpQuestion, paceOk);
+  // They said they hate being told how to feel: ask about the action, never the feeling.
+  if (FEEL_PUSHBACK.test(all.join(" ")) && /\bfeel\w*|emotion/i.test(question)) question = "What's the next thing you'll actually do, even a small one?";
 
   // At most one Heartbeat across reflection + question, and none already named before.
   let kept: string | null = null;
@@ -173,7 +183,16 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
 
   // Values only from their own words (never the form's wording or Jai's pick).
   const theirWords = new Set(all.join(" ").toLowerCase().match(/[a-z]{4,}/g) ?? []);
-  const fromThem = (v: string) => !v || (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => theirWords.has(w));
+  // Theme, Value and Release only from phrases they wrote: most of the words
+  // must be theirs, and never a word they said sarcastically ("peace? lol").
+  const sarcastic = sarcasticWords(all);
+  const theirStems = new Set([...theirWords].filter((w) => !sarcastic.has(w)).map((w) => w.slice(0, 5)));
+  const fromThem = (v: string) => {
+    if (!v) return true;
+    const ws = (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !NOTICE_STOP.has(w));
+    if (!ws.length) return false;
+    return ws.filter((w) => theirStems.has(w.slice(0, 5))).length / ws.length >= 0.5;
+  };
   // Never the form's own wording as their value ("calm" from "calm awareness").
   const formWords = new Set(((g.formText ?? "").toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["what", "where", "when", "your", "today", "this", "that", "have", "with", "from", "about", "tomorrow", "small", "ways"].includes(w)));
   const fromForm = (v: string) => (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => formWords.has(w));
@@ -210,8 +229,8 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
     reflection,
     followUpQuestion: question,
     valueNamed: fromThem(r.valueNamed) && !fromForm(r.valueNamed) ? tag(r.valueNamed) : "",
-    releasePoint: contradicts(r.releasePoint) ? "" : tag(r.releasePoint),
-    keyTheme: tag(r.keyTheme),
+    releasePoint: contradicts(r.releasePoint) || !fromThem(r.releasePoint) ? "" : tag(r.releasePoint),
+    keyTheme: fromThem(r.keyTheme) ? tag(r.keyTheme) : "",
     possibleFirstSeed: seed,
     nextStep,
     // No lifted alternates ("reflect on what calm means for you").
@@ -283,3 +302,27 @@ export function withoutInventedFeelings(text: string, theirs: string[]): string 
     return said.includes(stem);
   }));
 }
+
+const NOTICE_STOP = new Set(["with", "that", "this", "from", "about", "your", "their", "into", "being", "feeling", "need", "idea", "sense", "finding"]);
+// Words said with a sarcastic marker ("peace? lol", "gratitude? lol",
+// "calm? sure", "yeah right") are never read as sincere.
+export function sarcasticWords(answers: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const a of answers) {
+    for (const m of a.matchAll(/([a-z' ]{2,40})\?+\s*(lol|lmao|haha|sure|right|ok|okay|whatever|ugh)\b/gi)) for (const w of m[1].toLowerCase().match(/[a-z]{4,}/g) ?? []) out.add(w);
+    for (const m of a.matchAll(/\b(yeah right|sure|lol)\b[^.!?]{0,30}/gi)) for (const w of m[0].toLowerCase().match(/[a-z]{4,}/g) ?? []) out.add(w);
+  }
+  return out;
+}
+const REASON_LINE = /\b(is the reason|is your reason|your reason is|the reason is|is what drives you|is your why|that'?s your why)\b/i;
+export function withoutInventedReasons(text: string, theirs: string[]): string {
+  const stems = new Set((theirs.join(" ").toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.slice(0, 5)));
+  return join(sentences(text).filter((s) => {
+    if (!REASON_LINE.test(s)) return true;
+    const ws = (s.toLowerCase().replace(REASON_LINE, "").match(/[a-z]{4,}/g) ?? []).filter((w) => !["your", "that", "this", "with"].includes(w));
+    return ws.length > 0 && ws.filter((w) => stems.has(w.slice(0, 5))).length / ws.length >= 0.5;
+  }));
+}
+export const MISS = /\b(never went|didn'?t (go|do it|do that|make it|get to it|write|walk|show|try)|skipped|sat in the car|bailed|missed it|no,? i didn'?t|not yet|blew it off|stayed home)\b/i;
+const MISS_NAMED = /\b(didn'?t|never|skipped|not yet|missed|car|bailed|stayed home|you said it plainly)\b/i;
+export const FEEL_PUSHBACK = /\b(hate|don'?t like|stop|quit) (being told|telling me) how (to|i) feel|\bstop asking (me )?how i feel|\bdon'?t tell me how (to|i) feel|\bnot (being )?lectured\b/i;

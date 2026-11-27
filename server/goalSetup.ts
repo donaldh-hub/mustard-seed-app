@@ -362,7 +362,7 @@ export async function handleGoalSetupTurn(
   if (moment?.intent === "finish_goal" && (state.title || state.suggestion?.goal) && state.stage !== "step") {
     const title = state.title || state.suggestion!.goal;
     const stake = moment.stake ? toYou(moment.stake.toLowerCase().replace(/^i\b/, "I")) : state.stake;
-    const why = state.why || (stake ? stripSwears(stake) : "");
+    const why = state.why || (stake ? asTheySaidIt(stripSwears(stake)) : "");
     return plantAfterWhy(userId, user.name, { ...state, title, why, whyFromStake: !state.why && !!why }, opts);
   }
   // A later line isn't the answer to a question asked a while ago.
@@ -417,7 +417,7 @@ export async function handleGoalSetupTurn(
       const stake = moment?.stake ? toYou(moment.stake.toLowerCase().replace(/^i\b/, "I")) : state.stake;
       // An angry line or "finish my goal" isn't a why: use the stake they
       // already named (no extra question), or leave it for later.
-      const why = said || (stake ? stripSwears(stake) : "");
+      const why = said || (stake ? asTheySaidIt(stripSwears(stake)) : "");
       return plantAfterWhy(userId, user.name, { ...state, why, whyFromStake: !said && !!why }, opts);
     }
     case "why_after": {
@@ -426,7 +426,7 @@ export async function handleGoalSetupTurn(
         return { text: "I didn't catch the reason yet. In a few words, why does it matter to you?", messageType: "text" };
       }
       if (w) await storage.updateGoal(state.plantedGoalId!, { emotionalWhy: w } as any).catch(() => {});
-      const saved = w ? `Saved. Your why: ${toYou(stripEnd(w))}.` : "No problem. You can add it anytime on Growth.";
+      const saved = w ? `Saved. Your why: "${w}".` : "No problem. You can add it anytime on Growth.";
       if (state.step) {
         await saveState(userId, { ...state, stage: "done", why: w });
         return { text: saved, messageType: "text", finished: true };
@@ -532,7 +532,7 @@ async function plantAfterWhy(
   const planted = await plant(userId, name, { ...state, step }, opts);
   if (!planted.plantedGoalId) return planted;
   const why = state.why
-    ? `\n\nWhy it matters: ${toYou(stripEnd(state.why))}${state.whyFromStake ? " (from what you told me earlier; you can change it in Refine Goal)" : ""}`
+    ? `\n\nWhy it matters: "${stripEnd(state.why)}"${state.whyFromStake ? " (from what you told me earlier; you can change it on Growth)" : ""}`
     : "";
   if (!state.why) {
     // Ask once; their next line is saved as the why (see "why_after").
@@ -660,7 +660,11 @@ export async function plantFromChat(
   const state = getState(user);
   // A goal named in this message ("plant the damn thing. finish the book").
   // The clearest goal clause: this message first, then their recent lines.
-  const stated = goalClauseFrom(text) || recentUserTexts.slice(-6).reverse().map(goalClauseFrom).find(Boolean) || "";
+  const named = (text.match(/\b(?:my (?:real |actual )?goal is|goal:|the goal is)\s+(?:to\s+)?([^.!?\n]+)/i)?.[1] ?? "").trim();
+  // The wording Jai just proposed wins over anything else in a plant
+  // instruction ("plant the damn goal. stop asking me if it sounds like me").
+  const proposed = state && ["wording", "why", "new_goal", "confirm"].includes(state.stage) ? (state.title || state.suggestion?.goal || "") : "";
+  const stated = (named ? goalClauseFrom(text) : "") || proposed || goalClauseFrom(text) || recentUserTexts.slice(-6).reverse().map(goalClauseFrom).find(Boolean) || "";
   let title = stated || (state?.title && isGoalClause(state.title) ? state.title : "");
   if (!title) {
     // Their own goal field (the journal intention) is the title when it reads
@@ -680,11 +684,11 @@ export async function plantFromChat(
     await saveState(userId, { ...base, stage: "wording", title: proposal, suggestion: { goal: proposal, because: "" }, awaiting: true });
     return { text: `Here's how I'd word it: ${proposal}. Plant it like that? Say yes, or tell me how you'd say it.`, messageType: "text" };
   }
-  title = goalFromIntention(title);
+  title = goalFromIntention(title.replace(/\s+(because|cause|cuz|since|so that)\b.*$/i, ""));
   if (!title) return null;
   const said = state?.why || recentUserTexts.slice(-6).reverse().map((t) => (WHY_MARKER.test(t) ? cleanWhy(t) : "")).find(Boolean) || "";
   const stake = stakeFromMoment ? toYou(stakeFromMoment.toLowerCase().replace(/^i\b/, "I")) : (state?.stake ?? (await journalStake(userId)));
-  const why = said || (stake ? stripSwears(stake) : "");
+  const why = said || (stake ? asTheySaidIt(stripSwears(stake)) : "");
   const base: GoalSetupState = state ?? { stage: "why", source: "chat", suggestion: null, lastOfferedAt: new Date().toISOString() };
   return plantAfterWhy(userId, user.name, { ...base, stage: "why", title, why, whyFromStake: !said && !!why }, opts);
 }
@@ -695,6 +699,7 @@ const GOAL_VERB = /\b(grow|keep|plant|finish|write|start|be|get|lose|run|walk|sa
 export function isGoalClause(x: string): boolean {
   const t = (x ?? "").trim();
   if (!t || /\?\s*$/.test(t) || META.test(t)) return false;
+  if (/\b(asking me|ask me|sounds like|tell me|told me|you|jai|this app)\b/i.test(t)) return false;
   if (/\b(plant|set|lock|save)\b.{0,25}\b(goal|it|this|that|thing)\b/i.test(t)) return false;
   const words = t.split(/\s+/);
   // "finish my (damn) goal" is a request, not a goal.
@@ -716,9 +721,10 @@ export function goalClauseFrom(text: string): string {
 // The reason in their words ("why: money. I'm tired of paying $5 a pound"),
 // never the goal said again.
 export function whyFrom(text: string, title?: string): string {
-  const raw = (text ?? "").replace(/^\s*(why( it matters)?|because|cuz|cause)\s*[:,-]?\s*/i, "");
-  const w = cleanWhy(raw);
-  if (!w) return "";
+  const raw = (text ?? "").replace(/^\s*(why( it matters)?|because|cuz|cause)\s*[:,-]?\s*/i, "").trim().replace(/[.!\s]+$/, "");
+  // Validated by cleanWhy (not anger, not "idk"), but kept exactly as typed.
+  if (!cleanWhy(raw)) return "";
+  const w = raw;
   const tw = new Set((title ?? "").toLowerCase().match(/[a-z]{4,}/g) ?? []);
   const ww = w.toLowerCase().match(/[a-z]{4,}/g) ?? [];
   if (tw.size && ww.length && ww.filter((x) => tw.has(x)).length / ww.length >= 0.6) return "";
@@ -746,7 +752,7 @@ export async function fixGoalFromChat(userId: string, text: string, recentUserTe
       if (chip) await storage.updateEntry(chip.id, { summary: `Goal planted: ${title}` }).catch(() => {});
     }
     if (state?.pendingFix) await saveState(userId, { ...state, pendingFix: undefined });
-    return [title ? `Your goal is now: ${title}.` : "", why ? `Your why: ${toYou(stripEnd(why))}.` : ""].filter(Boolean).join(" ");
+    return [title ? `Your goal is now: ${title}.` : "", why ? `Your why: "${stripEnd(why)}".` : ""].filter(Boolean).join(" ");
   };
   // "yes" to a proposed fix.
   if (state?.pendingFix && /^\s*(yes|yeah|yep|yup|do it|sure|ok(ay)?|fix it|please)\b/i.test(text)) {
@@ -767,6 +773,12 @@ export async function fixGoalFromChat(userId: string, text: string, recentUserTe
   }
   if (state) await saveState(userId, { ...state, pendingFix: { title: pTitle, why: pWhy } });
   else await saveState(userId, { stage: "done", source: "chat", suggestion: null, pendingFix: { title: pTitle, why: pWhy } } as GoalSetupState);
-  const parts = [pTitle ? `change your goal to "${pTitle}"` : "", pWhy ? `save your why as "${toYou(stripEnd(pWhy))}"` : ""].filter(Boolean).join(" and ");
+  const parts = [pTitle ? `change your goal to "${pTitle}"` : "", pWhy ? `save your why as "${stripEnd(pWhy)}"` : ""].filter(Boolean).join(" and ");
   return `You're right. Want me to ${parts}? Say yes and I'll fix it.`;
+}
+
+// A stake kept for the question in second person ("you need the hours") is
+// saved as a why the way they said it ("I need the hours"), every word.
+function asTheySaidIt(t: string): string {
+  return t.replace(/\byou're\b/gi, "I'm").replace(/\byou are\b/gi, "I am").replace(/\byourself\b/gi, "myself").replace(/\byour\b/gi, "my").replace(/\byou\b/gi, "I");
 }

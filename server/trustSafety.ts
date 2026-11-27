@@ -169,7 +169,21 @@ function namesTopicFrom(answer: string, before: string): boolean {
 }
 const BARE_HERE = /\b(don'?t|do not|dont) (want|wan|wanna)( to)? be here\b/i;
 const EXPLICIT_RISK = /\b(die|dying|dead|kill|suicid\w*|end (it all|my life|things)|hurt (myself|me)|wake up|alive|exist|overdose|jump)\b/i;
-const BIGGER = /\b(bigger|yes|yeah|yep|life|living|everything|all of it|myself|both|idk|i don'?t know|not sure|maybe|kind of|kinda|heavier)\b/i;
+const BIGGER = /\b(bigger|yes|yeah|yep|yup|life|living|everything|all of it|myself|both|idk|i don'?t know|not sure|maybe|kind of|kinda|heavier|something else)\b/i;
+// "nothing bigger", "not bigger", "not that", "isn't something else"…
+const NEGATED_BIGGER = /\b(nothing|not|no|isn'?t|never|n'?t)\s+(anything\s+|something\s+|that\s+|any\s+)?(bigger|heavier|serious|else|more|like that)\b|\bnot (my )?life\b/gi;
+// True when their answer to the ask-first question should get the full
+// message: an affirmative "bigger/yes/idk", a near-silent answer, or explicit
+// risk words. Negated words ("nothing bigger") don't count.
+export function escalatesHere(answer: string): boolean {
+  const t = (answer ?? "").trim();
+  if (EXPLICIT_RISK.test(withoutTaskKill(t))) return true;
+  if (!t || /^[.\s…?!-]*$/.test(t) || /^(\.\.\.|hm+|uh+|um+)$/i.test(t)) return true;
+  const unNegated = t.replace(NEGATED_BIGGER, " ");
+  // "no, just the gym" / "nah" / "not that": a no to "bigger".
+  if (/^\s*(no|nah|nope|not that)\b/i.test(t) && !/\b(bigger|yes|yeah|everything|life)\b/i.test(unNegated)) return false;
+  return BIGGER.test(unNegated);
+}
 
 export async function evaluateMessage(
   userId: string,
@@ -185,13 +199,10 @@ export async function evaluateMessage(
   // unclear gets the full resources message.
   const lastJai = [...recentMessages].reverse().find((m) => m.sender !== "user")?.text ?? "";
   if (lastJai.includes(HERE_CHECK_MARK)) {
-    // About the app, the goal, or whatever they named before ("the garden").
-    const before = [...recentMessages].reverse().find((m) => m.sender === "user")?.text ?? "";
-    const aboutApp = (ABOUT_TASK.test(text) || namesTopicFrom(text, before)) && !BIGGER.test(text) && !EXPLICIT_RISK.test(text);
-    if (aboutApp) return NOT_TRIGGERED;
-    // Pushback on the question itself ("where did that come from?") gets a
-    // plain answer from Jai, not the full message.
-    if (/\b(where did (that|this) come from|why (are|did) you (ask|say)|what do you mean|what was that|huh|wtf)\b/i.test(text) && !BIGGER.test(text) && !EXPLICIT_RISK.test(text)) return NOT_TRIGGERED;
+    // Escalate only on an affirmative "bigger"/"yes"/"idk"/"something else",
+    // a silence-type answer, or explicit words. "the gym", "nothing bigger",
+    // "not that", "no, just the app", or pushback get a normal reply.
+    if (!escalatesHere(text)) return NOT_TRIGGERED;
     const screenedReply = await screen(text, []).catch(() => null);
     const { eventId, responseText } = await logClearFlag(userId, screenedReply?.category ?? ("passive_ideation" as SafetyTriggerCategory), text, surface);
     return { triggered: true, isBacktrackFollowUp: false, category: screenedReply?.category ?? ("passive_ideation" as SafetyTriggerCategory), tier: "clear", responseText, eventId };
@@ -305,16 +316,14 @@ export async function evaluateSafetyReply(
   let responseText: string;
 
   const result = await screen(ctx.reply, recent);
-  if (lastJai.includes(HERE_CHECK_MARK) && !EXPLICIT_RISK.test(ctx.reply)) {
-    // Journal answer to the ask-first question: the app or the goal is a
-    // normal answer; bigger, unsure, or unclear gets the full message.
-    const aboutApp = (ABOUT_TASK.test(ctx.reply) || namesTopicFrom(ctx.reply, ctx.triggerText)) && !BIGGER.test(ctx.reply);
-    const pushback = /\b(where did (that|this) come from|why (are|did) you (ask|say)|what do you mean|what was that|huh|wtf)\b/i.test(ctx.reply) && !BIGGER.test(ctx.reply);
-    if (aboutApp || pushback) {
+  if (lastJai.includes(HERE_CHECK_MARK)) {
+    // Journal answer to the ask-first question (same rule as chat).
+    if (!escalatesHere(ctx.reply)) {
+      const pushback = /\b(where did (that|this) come from|why (are|did) you (ask|say)|what do you mean|what was that|huh|wtf)\b/i.test(ctx.reply);
       outcome = "clarified_no_risk";
-      responseText = aboutApp
-        ? "Thank you for telling me. That's about this, not something bigger, and I hear it. We can keep it small from here."
-        : "I asked because you wrote that you don't want to be here anymore, and I'd rather check than guess. If it's about this journal or your goal, we can keep going, smaller.";
+      responseText = pushback
+        ? "I asked because you wrote that you don't want to be here anymore, and I'd rather check than guess. If it's about this journal or your goal, we can keep going, smaller."
+        : "Thank you for telling me. That's about this, not something bigger, and I hear it. We can keep it small from here.";
       if (ctx.eventId) await storage.updateSafetyEvent(ctx.eventId, { outcome }).catch(() => {});
       return { outcome, responseText };
     }

@@ -169,6 +169,23 @@ function answerTo(entries: any[], day: number, session: string, prompt: string, 
   return ((prompts.find((p) => p.prompt === prompt) ?? prompts[index])?.response ?? "").trim();
 }
 
+// A long answer shows its first 140 characters with "See full"; the stored
+// text stays exact.
+function RecapQuote({ text, testId }: { text: string; testId?: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 140;
+  return (
+    <p className="text-sm text-foreground leading-relaxed" data-testid={testId}>
+      {long && !open ? `${text.slice(0, 140).replace(/\s+\S*$/, "")}…` : text}
+      {long && (
+        <button type="button" onClick={() => setOpen(!open)} className="ml-1 text-xs text-primary underline underline-offset-2">
+          {open ? "Show less" : "See full"}
+        </button>
+      )}
+    </p>
+  );
+}
+
 function JourneySummary({ entries }: { entries: any[] }) {
   const statement = entries.find((e) => e.session === "grounding_statement");
   const statementAnswers: { prompt: string; response: string }[] = Array.isArray(statement?.prompts) ? statement.prompts : [];
@@ -189,7 +206,7 @@ function JourneySummary({ entries }: { entries: any[] }) {
       {rows.map((r) => (
         <div key={r.label} className="space-y-0.5">
           <p className="text-xs text-muted-foreground font-medium">{r.label}</p>
-          <p className="text-sm text-foreground leading-relaxed">{r.value}</p>
+          <RecapQuote text={r.value} />
         </div>
       ))}
       {statementAnswers.length > 0 && (
@@ -200,7 +217,7 @@ function JourneySummary({ entries }: { entries: any[] }) {
           {statementAnswers.filter((p) => p.prompt !== "Your Grounding Statement" && p.response?.trim()).map((p, i) => (
             <div key={i} className="space-y-0.5" data-testid={`recap-statement-field-${i}`}>
               <p className="text-[11px] text-muted-foreground">{p.prompt.replace(/:$/, "")}</p>
-              <p className="text-sm text-foreground leading-relaxed">{p.response}</p>
+              <RecapQuote text={p.response} />
             </div>
           ))}
         </div>
@@ -780,7 +797,7 @@ export default function GroundingJournal() {
                 3-Day Grounding Journal · Day {locked.day}
               </p>
               <h1 className="font-serif text-xl font-bold text-foreground" data-testid="text-journal-locked-title">
-                {isEvening ? "Now go live it." : "Rest well. Tomorrow is ready for you."}
+                {isEvening ? "See you this evening." : "Rest well. Tomorrow is ready for you."}
               </h1>
             </div>
           </div>
@@ -793,10 +810,6 @@ export default function GroundingJournal() {
                   <p className="text-sm text-foreground leading-relaxed" data-testid="text-morning-focus">{morningFocus}</p>
                 </div>
               )}
-              <p className="text-sm text-foreground leading-relaxed">
-                You named it. Now give it your day. It doesn't have to go perfectly. It just needs your honest effort,
-                one small step at a time. That's the discipline, and it's how the seed grows.
-              </p>
               <p className="text-sm text-foreground leading-relaxed">
                 {timeText
                   ? <>Your evening reflection opens at <strong>{timeText}</strong>. Come back then and tell Jai how it went. Whatever happened, showing up to reflect counts.</>
