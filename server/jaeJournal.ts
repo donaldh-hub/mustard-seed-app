@@ -218,12 +218,31 @@ async function scrubClarified(r: JournalJaeResponse, ctx: JournalSessionContext)
   if (bad(r.releasePoint)) r.releasePoint = "";
   if (bad(r.keyTheme)) r.keyTheme = "";
   r.reflection = r.reflection.split(/(?<=[.!?])\s+/).filter((x) => !bad(x)).join(" ").trim();
+  // Every sentence leaned on the flagged line: one short redo from their
+  // goal and their reply, so the card isn't left blank.
+  if (!r.reflection) {
+    const redo = await clarifiedReflection(ctx).catch(() => "");
+    if (redo && !bad(redo)) r.reflection = redo;
+  }
   r.nextStepOptions = (r.nextStepOptions ?? []).filter((o) => !bad(o));
   if (ctx.session === "evening" && bad(r.nextStep)) {
     const prior = (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean);
     const redo = await redoStep(ctx, [ctx.safetyClarified ?? ""], prior).catch(() => "");
     r.nextStep = redo && !bad(redo) ? redo : (r.nextStepOptions.shift() ?? "");
   }
+}
+
+async function clarifiedReflection(ctx: JournalSessionContext): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0.4,
+    max_tokens: 70,
+    messages: [
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Write ONE or two short sentences reflecting back what this person told you, tied to their goal: "${ctx.intention ?? ""}". They just said a hard line was "nothing bigger". Don't mention that line, safety, or feelings they didn't name; no praise, no question, no Heartbeat names.` },
+      { role: "user", content: `What they told you: ${ctx.safetyClarified ?? ""}` },
+    ],
+  });
+  return (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
 }
 
 const RHETORICAL = /\b(listening|understand(ing)?|fuck\w*|bullshit|wtf|kidding me)\b/i;
