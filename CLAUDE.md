@@ -1,3 +1,5 @@
+@core.md
+
 # Mustard Seed — Agent Instructions
 
 ## Role
