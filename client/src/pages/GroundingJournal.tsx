@@ -163,8 +163,11 @@ const SESSION_LABELS: Record<string, string> = {
 
 // ── Completion summary ───────────────────────────────────────────────────────
 // The user's own three days, from their saved entries (never placeholders).
+// An entry that raised a safety check stays out of the recap: the recap
+// celebrates their three days, and must never quote that answer back.
 function answerTo(entries: any[], day: number, session: string, prompt: string, index: number): string {
   const e = entries.find((x) => x.dayNumber === day && x.session === session);
+  if (e?.safetyTier) return "";
   const prompts: { prompt: string; response: string }[] = Array.isArray(e?.prompts) ? e.prompts : [];
   return ((prompts.find((p) => p.prompt === prompt) ?? prompts[index])?.response ?? "").trim();
 }
@@ -188,7 +191,7 @@ function RecapQuote({ text, testId }: { text: string; testId?: string }) {
 
 function JourneySummary({ entries }: { entries: any[] }) {
   const statement = entries.find((e) => e.session === "grounding_statement");
-  const statementAnswers: { prompt: string; response: string }[] = Array.isArray(statement?.prompts) ? statement.prompts : [];
+  const statementAnswers: { prompt: string; response: string }[] = Array.isArray(statement?.prompts) && !statement?.safetyTier ? statement.prompts : [];
   const rows: { label: string; value: string }[] = [
     { label: "Your gentle intention", value: answerTo(entries, 1, "intention", "", 0) },
     { label: "Day 1 — where you gave your attention", value: answerTo(entries, 1, "morning", MORNING_PROMPTS[1][0], 0) },

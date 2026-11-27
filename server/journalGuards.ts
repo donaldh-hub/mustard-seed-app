@@ -326,3 +326,57 @@ export function withoutInventedReasons(text: string, theirs: string[]): string {
 export const MISS = /\b(never went|didn'?t (go|do it|do that|make it|get to it|write|walk|show|try)|skipped|sat in the car|bailed|missed it|no,? i didn'?t|not yet|blew it off|stayed home)\b/i;
 const MISS_NAMED = /\b(didn'?t|never|skipped|not yet|missed|car|bailed|stayed home|you said it plainly)\b/i;
 export const FEEL_PUSHBACK = /\b(hate|don'?t like|stop|quit) (being told|telling me) how (to|i) feel|\bstop asking (me )?how i feel|\bdon'?t tell me how (to|i) feel|\bnot (being )?lectured\b/i;
+
+// ── Pass 6 (live retest, Nov 27) ────────────────────────────────────────────
+
+// "do i need a whole routine or is the phone thing enough? yes or no" is an
+// either/or question: "Yes." doesn't answer it, even with "yes or no" tacked
+// on. Two choices joined by "or" (not "or not", not the "yes or no" tag).
+export function isEitherOr(question: string): boolean {
+  const q = (question ?? "").toLowerCase().replace(/[,;]?\s*\b(yes or no|y\/n)\b\??/g, " ").replace(/\bor not\b/g, " ");
+  const m = q.match(/^(.*\S)\s+or\s+(\S.*)$/);
+  if (!m) return false;
+  const words = (t: string) => (t.match(/[a-z']+/g) ?? []).length;
+  return words(m[1]) >= 2 && words(m[2]) >= 2;
+}
+
+// An either/or answer names its choice: a leading "Yes."/"No." goes.
+export function answerNamesChoice(answer: string, question: string): string {
+  if (!isEitherOr(question)) return answer;
+  const out = (answer ?? "").replace(/^\s*(yes|no)\s*[.,!:]\s*/i, "");
+  return out.replace(/^./, (c) => c.toUpperCase());
+}
+
+// The reflection that follows a direct answer doesn't say the answer again
+// ("…helping you get to bed earlier" twice).
+export function withoutRepeatOf(reflection: string, answer: string): string {
+  if (!answer) return reflection;
+  const said = sentences(answer);
+  return join(sentences(reflection).filter((s) => !said.some((a) => sameLine(s, a) || sameLine(a, s))));
+}
+
+const COMMON = new Set(["that", "this", "with", "from", "have", "just", "like", "want", "here", "there", "anymore", "about", "really", "being", "today", "tonight", "nothing", "done", "tired", "feel", "feeling", "know", "dont", "don't", "it's", "i'm"]);
+// Words only the sentence that raised a safety check used: not in their goal,
+// not in their reply to the check. After they say it's nothing bigger, Jai's
+// question, release point and step are built on their goal, never on those
+// words ("How long has the feeling about the garden…").
+export function triggerOnlyWords(flagged: string[], keep: string[]): Set<string> {
+  const stem = (w: string) => w.slice(0, 5);
+  const kept = new Set((keep.join(" ").toLowerCase().match(/[a-z']{4,}/g) ?? []).map(stem));
+  const out = new Set<string>();
+  for (const w of flagged.join(" ").toLowerCase().match(/[a-z']{4,}/g) ?? []) {
+    if (!COMMON.has(w) && !kept.has(stem(w))) out.add(stem(w));
+  }
+  return out;
+}
+export function mentionsAny(text: string, stems: Set<string>): boolean {
+  return ((text ?? "").toLowerCase().match(/[a-z']{4,}/g) ?? []).some((w) => stems.has(w.slice(0, 5)));
+}
+
+// Which of an entry's answers raised the check (the rest are ordinary
+// journal answers). Falls back to all of them when none matches.
+const FLAG_LIKE = /\b(don'?t|do not|dont) (want|wan|wanna)( to)? be here\b|\b(kill|killing|die|dying|dead|suicid\w*|end (it all|my life|things)|hurt (myself|me)|overdose)\b/i;
+export function flaggedResponses(responses: string[]): string[] {
+  const hits = responses.filter((r) => FLAG_LIKE.test(r ?? ""));
+  return hits.length ? hits : responses;
+}
