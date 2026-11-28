@@ -349,10 +349,23 @@ export function answerNamesChoice(answer: string, question: string): string {
 
 // The reflection that follows a direct answer doesn't say the answer again
 // ("…helping you get to bed earlier" twice).
+// A sentence repeats the answer if it matches most words, or if it reuses
+// three of the answer's key words ("The phone change is already helping you…"
+// after "The phone thing is enough… already helping you get to bed").
+const ECHO_STOP = new Set(["that", "this", "with", "from", "have", "your", "you're", "it's", "will", "just", "they", "them", "than", "then", "when", "what", "into", "about", "toward", "towards", "because", "really", "more", "some"]);
+function keyWords(t: string): Set<string> {
+  return new Set((t.toLowerCase().match(/[a-z']{4,}/g) ?? []).filter((w) => !ECHO_STOP.has(w)).map((w) => w.slice(0, 5)));
+}
+export function echoesAnswer(sentence: string, answer: string): boolean {
+  const S = keyWords(sentence), A = keyWords(answer);
+  let shared = 0;
+  for (const w of S) if (A.has(w)) shared++;
+  return shared >= 3 && shared / Math.max(1, Math.min(S.size, A.size)) >= 0.4;
+}
 export function withoutRepeatOf(reflection: string, answer: string): string {
   if (!answer) return reflection;
   const said = sentences(answer);
-  return join(sentences(reflection).filter((s) => !said.some((a) => sameLine(s, a) || sameLine(a, s))));
+  return join(sentences(reflection).filter((s) => !said.some((a) => sameLine(s, a) || sameLine(a, s) || echoesAnswer(s, a))));
 }
 
 const COMMON = new Set(["that", "this", "with", "from", "have", "just", "like", "want", "here", "there", "anymore", "about", "really", "being", "today", "tonight", "nothing", "done", "tired", "feel", "feeling", "know", "dont", "don't", "it's", "i'm"]);
