@@ -511,6 +511,10 @@ async function plant(
 // used as the goal's first step so it stays in their own words.
 async function journalStep(userId: string): Promise<string> {
   const journal = await storage.getGroundingJournalEntries(userId).catch(() => []);
+  // Their first seed (from the Grounding Statement) is the first step; else
+  // the newest step they set.
+  const seed = (journal.find((e) => e.session === "grounding_statement")?.possibleFirstSeed ?? "").trim();
+  if (seed) return stripEnd(seed.replace(/^(tomorrow|tonight),?\s*/i, "")).replace(/^./, (c) => c.toUpperCase());
   const last = journal.filter((e) => e.session === "evening" && e.nextStep)
     .sort((a, b) => b.dayNumber - a.dayNumber)[0]?.nextStep ?? "";
   const rest = stripEnd(last.replace(/^(tomorrow|tonight),?\s*/i, ""));
