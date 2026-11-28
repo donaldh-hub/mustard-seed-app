@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings, withoutInventedReasons, answerNamesChoice, withoutRepeatOf, isEitherOr, triggerOnlyWords, mentionsAny, flaggedResponses } from "./journalGuards";
+import { enforceReflectionRules, enforceAckRules, addsEveningTask, isOverloaded, similarStep, keepStepSize, RESEARCH, withoutInventedFeelings, withoutInventedReasons, withoutStockLines, AVOIDING, MISS, answerNamesChoice, withoutRepeatOf, isEitherOr, triggerOnlyWords, mentionsAny, flaggedResponses } from "./journalGuards";
 export { withStake, withoutEffort } from "./journalGuards";
 
 const openai = new OpenAI({
@@ -158,10 +158,22 @@ export async function generateJournalReflection(
 ): Promise<JournalJaeResponse> {
   // A direct question typed into a field is answered first, in plain words,
   // by its own small call (so it's never skipped).
-  const userQ = directQuestion(ctx.prompts.map((p) => p.response ?? ""));
-  const answer = userQ ? answerNamesChoice(await answerJournalQuestion(userQ, ctx).catch(() => ""), userQ) : "";
+  const questions = directQuestions(ctx.prompts.map((p) => p.response ?? ""));
+  const userQ = questions.join(" / ");
+  const theirs = [...ctx.prompts.map((p) => p.response ?? ""), ...(ctx.previousEntries ?? []).map((e) => e.answers ?? "")];
+  const answers: string[] = [];
+  for (const q of questions) {
+    const a = answerNamesChoice(await answerJournalQuestion(q, ctx).catch(() => ""), q);
+    // The answer gets the same checks as the reflection (no invented feelings, no stock lines).
+    const checked = withoutStockLines(withoutInventedFeelings(a, theirs));
+    if (checked) answers.push(checked);
+  }
+  const answer = answers.join(" ");
   const r = await generateJournalReflectionInner(ctx, userQ, answer);
   if (answer) r.reflection = `${answer} ${withoutRepeatOf(r.reflection, answer)}`.trim();
+  // A missed step is said first, before any answer ("never did the quote…").
+  const missLine = (r.reflection.match(/You said it plainly:[^.!?]*[.!?]/) ?? [])[0];
+  if (missLine && !r.reflection.startsWith(missLine)) r.reflection = `${missLine} ${r.reflection.replace(missLine, "").replace(/\s{2,}/g, " ")}`.trim();
   // First seed: their carry-forward (then nurture) answer, turned into one
   // concrete action in their words ("the membership price. i'm finding out by
   // friday" -> "Ask what the membership costs and decide by Friday").
@@ -185,7 +197,7 @@ export async function generateJournalReflection(
     // action, the next step is a doing step.
     const researchRun = prior.slice(-2).length === 2 && prior.slice(-2).every((p) => RESEARCH.test(p));
     const actedToday = /\bi (planted|drilled|wrote|did|bought|ran|walked|made|built|cleaned|cooked|finished|started|watered|dug|lifted|trained)\b|\b(planted|drilled|wrote|bought|watered)\b/i.test(answers.join(" "));
-    const needsDoing = researchRun || actedToday;
+    const needsDoing = researchRun || actedToday || AVOIDING.test(answers.join(" ")) || MISS.test(answers.join(" "));
     const fits = (x: string) => !!x && /^(tomorrow|tonight),/i.test(x) && !(overloaded && addsEveningTask(x)) && !prior.some((p) => similarStep(p, x)) && !(needsDoing && RESEARCH.test(x));
     // The other options follow the same rules.
     r.nextStepOptions = (r.nextStepOptions ?? []).filter(fits);
@@ -247,6 +259,10 @@ async function clarifiedReflection(ctx: JournalSessionContext): Promise<string> 
 
 const RHETORICAL = /\b(listening|understand(ing)?|fuck\w*|bullshit|wtf|kidding me)\b/i;
 const ASKS = /\?\s*$|^(why|what|how|do you|do i|does|can you|can i|should i|is this|is it|are you|which|when)\b|\b(just tell me|tell me what|answer (it|me|the question)|yes or no|what do i (buy|do|need|use|get) first)\b/i;
+// Every direct question typed this submit, one per box, in order.
+export function directQuestions(answers: string[]): string[] {
+  return answers.map((a) => directQuestion([a])).filter(Boolean).slice(0, 2);
+}
 export function directQuestion(answers: string[]): string {
   for (const a of answers) {
     const parts = (a ?? "").split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
@@ -291,9 +307,9 @@ async function answerJournalQuestion(question: string, ctx: JournalSessionContex
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
     temperature: 0.4,
-    max_tokens: 90,
+    max_tokens: 130,
     messages: [
-      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. ${isEitherOr(question) ? `This is an either/or question: answer by naming which one in the first words (e.g. "The phone thing is enough for now, because…"); never start with "Yes." or "No.", even if they added "yes or no".` : `If they ask yes or no, start with "Yes." or "No." and one reason;`} if it truly depends, start with "It depends on …" in one sentence instead. Never "No. It depends" or "Yes, but it depends". No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
+      { role: "system", content: `You are Jai, a calm, plain-spoken coach. Someone typed a direct question into their journal. Answer it in one or two short sentences, first, in plain words, from what they've told you. Answer THIS question only, not anything else they wrote. If they ask why they're doing this, answer from their own goal and reasons (never invent reasons). If it needs local or expert knowledge you can't have (a local price, medical, legal), say so plainly in the first sentence and give one concrete method (e.g. for a cleaning price: hours it takes × your hourly rate, plus supplies). If they ask what to say, give a short script in quotes. If they ask what you suggest, give ONE small, concrete suggestion that fits what they said about their day (never add to an overloaded evening)${latest ? `, no bigger than their current step ("${latest}"): same number of minutes or fewer` : ""}. Answer in the FIRST sentence with one clear answer; never turn it back into a question. ${isEitherOr(question) ? `This is an either/or question: answer by naming which one in the first words (e.g. "The phone thing is enough for now, because…"); never start with "Yes." or "No.", even if they added "yes or no".` : `If they ask yes or no, start with "Yes." or "No." and one reason;`} if it truly depends, start with "It depends on …" in one sentence instead. Never "No. It depends" or "Yes, but it depends". No praise, no Heartbeat names, no question back. Their goal: ${ctx.intention ?? "(not stated)"}.` },
       { role: "user", content: `Their question: ${question}\nWhat they wrote today: ${said}\nEarlier: ${earlier.slice(0, 1200)}` },
     ],
   });
@@ -506,6 +522,7 @@ ${ctx.session === "morning" ? `"focusSummary": one short sentence (max 15 words)
       isEvening,
       priorSteps: (ctx.previousEntries ?? []).map((e) => e.nextStep ?? "").filter(Boolean),
       priorReflections: (ctx.previousEntries ?? []).map((e) => e.jaeReflection ?? "").filter(Boolean),
+      intention: ctx.intention ?? "",
       formText: ctx.prompts.map((p) => p.prompt ?? "").join(" "),
       stepCheck: (() => {
         const sc = ctx.prompts.find((p) => p.prompt.startsWith(STEP_CHECK_PREFIX));
@@ -562,7 +579,8 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
 - If their answer may be sarcastic or exasperated, don't praise effort or call it good news (never "impressive", "proud of you", "great job", "keep pushing", "push through", "you're still managing"); reflect the overwhelm in plain words close to theirs (no new labels).${ctx.reflection ? `
 - Your reflection is already on screen right above this reply (do NOT restate, copy or reuse any of its sentences; write only new words about their answer, and don't name a Heartbeat it named): ${ctx.reflection}` : ""}
 - If they share something honest or hard about the situation around their goal (e.g. a job they don't like), acknowledge that feeling first in one calm, non-judging sentence. Never tell them to change their situation.
-- If they say it's too many questions, it's a lot, or they're too frustrated right now: say that's fair, that this answer is optional, and that they can tap Continue whenever they're ready. If they doubt it helps, be honest: writing alone doesn't fix it, but naming the pattern is the first step.
+- If they say they're missing something to act (no template, no script, don't know what to say or how to start), GIVE it in one or two sentences: a fill-in template, a short script in quotes, or a method (e.g. a cleaning quote: "3 bedrooms, about 4 hours × $35 = $140, plus $15 supplies"). Never just say naming it is important.
+- If they say it's too many questions, it's a lot, or they're too frustrated right now: say that's fair, that this answer is optional, and that they can tap Continue whenever they're ready. If they doubt it helps, be honest: writing alone doesn't fix it.
 - Grace and accountability, no shame. Plain text only.${ctx.missedStep ? `
 - Their answer is about what got in the way of last night's step (${ctx.missedStep.step}; they said: ${ctx.missedStep.status}). Acknowledge it with grace, then in ONE sentence either keep that step or make it smaller so it fits what got in the way. That adjusting is Feedback & Adaptation; you may name it by that exact name.` : ""}`;
   try {
@@ -576,7 +594,23 @@ Reply in 1–2 short sentences that acknowledge what they said and affirm the st
       max_tokens: 120,
     });
     const raw = (completion.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, "");
-    const reply = enforceAckRules(raw, ctx.reflection, `${ctx.answer} ${ctx.question}`);
+    let reply = enforceAckRules(raw, ctx.reflection, `${ctx.answer} ${ctx.question}`);
+    // "tap Continue" only when they said it's too much.
+    if (!/too many|a lot|too much|frustrat|tired|exhaust/i.test(ctx.answer)) reply = reply.split(/(?<=[.!?])\s+/).filter((x) => !/tap Continue/i.test(x)).join(" ").trim();
+    // They said what's missing ("no template, i hate guessing"): the reply must give it.
+    if (NEEDS_TOOL.test(ctx.answer) && !/\d|"|:|template|script|method|×|\bx\b/i.test(reply)) {
+      const again = await openai.chat.completions.create({
+        model: "gpt-4o",
+        temperature: 0.4,
+        max_tokens: 120,
+        messages: [
+          { role: "system", content: `You are Jai, a calm, plain-spoken coach. They said they're missing something to act. Give it in one or two sentences: a fill-in template, a short script in quotes, or a simple method with numbers they can change. Their goal: ${ctx.intention ?? "(not stated)"}. No praise, no question.` },
+          { role: "user", content: ctx.answer },
+        ],
+      }).catch(() => null);
+      const given = enforceAckRules((again?.choices[0]?.message?.content ?? "").trim().replace(/^"|"$/g, ""), ctx.reflection, ctx.answer);
+      if (given) reply = given;
+    }
     if (!reply) console.warn("[JOURNAL] follow-up ack came back empty or only echoed the reflection; using fallback");
     return reply || FOLLOW_UP_ACK_FALLBACK;
   } catch (err) {
@@ -669,3 +703,5 @@ export function fixFeeling(answer: string, reflection: string): { reflection: st
     .replace(new RegExp(`\\b${wrong}\\w*`, "gi"), theirs);
   return { reflection: fixed, reply: `You said you were ${theirs}, not ${m[1].toLowerCase().replace(/\?$/, "")}. I had that wrong, and I've fixed it.` };
 }
+
+const NEEDS_TOOL = /\b(don'?t|do not|no) (have )?(a |any )?(template|script|plan|idea how|clue how)\b|\bdon'?t know (how|what to say|where to start|what to charge)\b|\bhate guessing\b/i;

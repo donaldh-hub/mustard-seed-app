@@ -7,7 +7,7 @@
 export const HEARTBEATS = ["Clarity of Vision & Why", "Small Steps + Consistency", "Mindset over Method", "Feedback & Adaptation", "Courageous Action"];
 
 const SWEARS = /\b(fuck\w*|shit\w*|damn\w*|bullshit|hell|ass)\b/i;
-const TEMPLATES = /this is a sign|mindset shift|key part of moving forward|how the seed grows|that'?s the discipline|had some hope in it|\bthis journal (helps|is here|is about|is meant|is designed|can help)|\bnaming (the |a )?pattern|\b(language|watch your|profan\w*)\b|is a step toward|\bchao(s|tic)\b/i;
+const TEMPLATES = /this is a sign|mindset (shift|change)|powerful (shift|change)|willingness to move forward|shift from .{0,40} to embracing|key part of moving forward|how the seed grows|that'?s the discipline|had some hope in it|\bthis journal (helps|is here|is about|is meant|is designed|can help)|\bnaming (the |a )?pattern|\b(language|watch your|profan\w*)\b|is a step toward|\bchao(s|tic)\b/i;
 const PACE = /\b(quick(ly)?|fast|rushed|hurried)\b/i;
 const CHANGE_SITUATION = /\b(quit|find a new job|change jobs|new job)\b/i;
 const CANNED_QUESTION = /full permission to slow down/i;
@@ -74,6 +74,7 @@ export interface GuardInput {
   userAsked?: boolean; // they typed a direct question (answered separately)
   isStatement?: boolean; // Grounding Statement session
   priorReflections?: string[]; // Jai's reflections from earlier sessions
+  intention?: string; // their goal for the 3 days (a theme isn't just the goal)
   formText?: string; // the journal's own question wording
   stepCheck?: { step: string; status: string } | null; // "Last night's step" answer
   latestStep?: string; // the step already set (its size is kept)
@@ -187,6 +188,18 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
   // must be theirs, and never a word they said sarcastically ("peace? lol").
   const sarcastic = sarcasticWords(all);
   const theirStems = new Set([...theirWords].filter((w) => !sarcastic.has(w)).map((w) => w.slice(0, 5)));
+  // Release comes from tonight's answers, not an earlier day's.
+  const tonightStems = new Set((g.answers.join(" ").toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !sarcastic.has(w)).map((w) => w.slice(0, 5)));
+  const fromTonight = (v: string) => {
+    if (!v) return true;
+    const ws = (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !NOTICE_STOP.has(w));
+    return ws.length > 0 && ws.filter((w) => tonightStems.has(w.slice(0, 5))).length / ws.length >= 0.5;
+  };
+  const goalStems = new Set(((g.intention ?? "").toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.slice(0, 5)));
+  const justTheGoal = (v: string) => {
+    const ws = (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !NOTICE_STOP.has(w));
+    return goalStems.size > 0 && ws.length > 0 && ws.filter((w) => goalStems.has(w.slice(0, 5))).length / ws.length >= 0.6;
+  };
   const fromThem = (v: string) => {
     if (!v) return true;
     const ws = (v.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !NOTICE_STOP.has(w));
@@ -229,8 +242,8 @@ export function enforceReflectionRules<T extends ReflectionFields>(r: T, g: Guar
     reflection,
     followUpQuestion: question,
     valueNamed: fromThem(r.valueNamed) && !fromForm(r.valueNamed) ? tag(r.valueNamed) : "",
-    releasePoint: contradicts(r.releasePoint) || !fromThem(r.releasePoint) ? "" : tag(r.releasePoint),
-    keyTheme: fromThem(r.keyTheme) ? tag(r.keyTheme) : "",
+    releasePoint: contradicts(r.releasePoint) || !fromTonight(r.releasePoint) ? "" : tag(r.releasePoint),
+    keyTheme: fromThem(r.keyTheme) && !justTheGoal(r.keyTheme) ? tag(r.keyTheme) : "",
     possibleFirstSeed: seed,
     nextStep,
     // No lifted alternates ("reflect on what calm means for you").
@@ -290,7 +303,7 @@ export function keepStepSize(text: string, step: string): string {
   return (text ?? "").replace(/(\d+)(\s*-?\s*min(ute)?s?)/gi, (all, n, rest) => (Number(n) > m ? `${m}${rest}` : all));
 }
 
-export const RESEARCH = /\b(research|plan|planning|look up|read (up )?about|list|explore|find out|learn about|think about|sketch|look into|brainstorm|reflect)\b/i;
+export const RESEARCH = /\bwatch\w* (a |one |some |another )?(\w+ )?(videos?|tutorials?)\b|\b(research|plan|planning|look up|read (up )?about|list|explore|find out|learn about|think about|sketch|look into|brainstorm|reflect)\b/i;
 // Feeling words Jai may only use if they used them first.
 const FEELINGS = /\b(overwhelm\w*|stress\w*|anxi\w*|discourag\w*|hopeless\w*|defeat\w*|sad(ness)?|depress\w*|frustrat\w*|burn(ed|t) out)\b/i;
 export function withoutInventedFeelings(text: string, theirs: string[]): string {
@@ -323,7 +336,7 @@ export function withoutInventedReasons(text: string, theirs: string[]): string {
     return ws.length > 0 && ws.filter((w) => stems.has(w.slice(0, 5))).length / ws.length >= 0.5;
   }));
 }
-export const MISS = /\b(never went|didn'?t (go|do it|do that|make it|get to it|write|walk|show|try)|skipped|sat in the car|bailed|missed it|no,? i didn'?t|not yet|blew it off|stayed home)\b/i;
+export const MISS = /\b(never did|didn'?t do|never (started|sent|called|wrote)|never went|didn'?t (go|do it|do that|make it|get to it|write|walk|show|try)|skipped|sat in the car|bailed|missed it|no,? i didn'?t|not yet|blew it off|stayed home)\b/i;
 const MISS_NAMED = /\b(didn'?t|never|skipped|not yet|missed|car|bailed|stayed home|you said it plainly)\b/i;
 export const FEEL_PUSHBACK = /\b(hate|don'?t like|stop|quit) (being told|telling me) how (to|i) feel|\bstop asking (me )?how i feel|\bdon'?t tell me how (to|i) feel|\bnot (being )?lectured\b/i;
 
@@ -392,4 +405,12 @@ const FLAG_LIKE = /\b(don'?t|do not|dont) (want|wan|wanna)( to)? be here\b|\b(ki
 export function flaggedResponses(responses: string[]): string[] {
   const hits = responses.filter((r) => FLAG_LIKE.test(r ?? ""));
   return hits.length ? hits : responses;
+}
+
+// "watched three videos instead": avoiding by researching. The next step (and
+// its alternates) must be an action, never more research.
+export const AVOIDING = /\b(watched|researched|read about|looked up|googled|scrolled)\b[^.!?]{0,40}\binstead\b|\binstead of (doing|starting|sending|calling)\b|\bresearch when\b/i;
+
+export function withoutStockLines(text: string): string {
+  return join(sentences(text).filter((s) => !TEMPLATES.test(s)));
 }

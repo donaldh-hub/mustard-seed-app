@@ -232,3 +232,16 @@ test("recap line leaves out a question they asked Jai", () => {
   assert.equal(withoutQuestions("do i need a routine or is the phone enough? yes or no"), "do i need a routine or is the phone enough? yes or no");
   assert.equal(withoutQuestions("honesty. i did it and slept by 11:45"), "honesty. i did it and slept by 11:45");
 });
+
+test("cleaning run: release from tonight, theme isn't just the goal, stock lines go", async () => {
+  const { withoutStockLines, AVOIDING, MISS } = await import("./journalGuards.ts");
+  const r = enforceReflectionRules(
+    { ...base, reflection: "Ok.", keyTheme: "Starting a new business", releasePoint: "wanting to quit before starting" },
+    { ...input, answers: ["never did the quote. watched three videos instead", "i hate guessing"], priorAnswers: ["is it normal to want to quit, yes or no"], intention: "starting a cleaning business because my job is eating me alive" },
+  );
+  assert.equal(r.keyTheme, "");
+  assert.equal(r.releasePoint, "");
+  assert.equal(withoutStockLines("This shift from seeking perfection to embracing progress is a powerful mindset change. Send it Tuesday."), "Send it Tuesday.");
+  assert.ok(AVOIDING.test("never did the quote. watched three videos instead"));
+  assert.ok(MISS.test("never did the quote"));
+});

@@ -2010,7 +2010,9 @@ export async function registerRoutes(
         }
         // Reflection Memory: store neutral entry for substantive RW/IO content
         // — never pleasantries ("thanks", "ok cool"). No water either way.
-        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText) && !isNotReflection(rawText) && ["engaged", "reported_action", "stake", "frustrated_self"].includes(moment.state)) {
+        if (entryQualification === "reflectionEntry" && rawText.length >= 20 && !isCasualChat(rawText) && !isNotReflection(rawText) && ["engaged", "reported_action", "stake", "frustrated_self"].includes(moment.state)
+          // An answer to the ask-first safety question is a clarifier, not a memory.
+          && !/do you mean you're done with the app|something heavier going on/.test(lastJai)) {
           reflectionSaved = true;
           await storage.createEntry({
             userId,
