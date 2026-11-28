@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { withoutQuestions } from "@shared/recapText";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -169,7 +170,7 @@ function answerTo(entries: any[], day: number, session: string, prompt: string, 
   const e = entries.find((x) => x.dayNumber === day && x.session === session);
   if (e?.safetyTier) return "";
   const prompts: { prompt: string; response: string }[] = Array.isArray(e?.prompts) ? e.prompts : [];
-  return ((prompts.find((p) => p.prompt === prompt) ?? prompts[index])?.response ?? "").trim();
+  return withoutQuestions((prompts.find((p) => p.prompt === prompt) ?? prompts[index])?.response ?? "");
 }
 
 // A long answer shows its first 140 characters with "See full"; the stored

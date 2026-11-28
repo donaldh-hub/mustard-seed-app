@@ -212,3 +212,23 @@ test("the goal's own words are never treated as trigger words", () => {
   const stems = triggerOnlyWords(["this book is killing me, i don't want to be here"], ["finish the first chapter of my book", "nothing bigger"]);
   assert.equal(mentionsAny("Tomorrow, write one paragraph of the book.", stems), false);
 });
+
+import { withoutQuestions } from "../shared/recapText.ts";
+
+test("reflection drops a reworded repeat of the direct answer", () => {
+  const answer = "The phone thing is enough for now, because it's already helping you get to bed earlier.";
+  const r = "The phone change is already helping you move toward your goal. Being in bed by 11:20 is real growth.";
+  assert.equal(withoutRepeatOf(r, answer), "Being in bed by 11:20 is real growth.");
+});
+
+test("reflection keeps a sentence that only mentions the same topic", () => {
+  const answer = "Skipping coffee after 2 PM can help you fall asleep earlier.";
+  const r = "You haven't yet moved your phone by 11:30 PM, and that's okay.";
+  assert.equal(withoutRepeatOf(r, answer), r);
+});
+
+test("recap line leaves out a question they asked Jai", () => {
+  assert.equal(withoutQuestions("not being a zombie at work. should i skip coffee after 2pm, yes or no?"), "not being a zombie at work.");
+  assert.equal(withoutQuestions("do i need a routine or is the phone enough? yes or no"), "do i need a routine or is the phone enough? yes or no");
+  assert.equal(withoutQuestions("honesty. i did it and slept by 11:45"), "honesty. i did it and slept by 11:45");
+});
